@@ -1,0 +1,62 @@
+# .github/workflows/daily_earnings_check.yml
+#
+# Runs the earnings agent once daily at 6:00 AM ET (11:00 UTC)
+# Also supports manual triggers from the GitHub Actions UI.
+
+name: Daily Earnings Check
+
+on:
+  schedule:
+    # 6:00 AM ET = 11:00 UTC (handles EST; during EDT this runs at 7 AM ET)
+    - cron: "0 11 * * *"
+  workflow_dispatch: # Manual trigger
+
+jobs:
+  check-earnings:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # The SQLite DB is stored as a repo artifact so it persists between runs.
+      - name: Restore earnings database
+        uses: actions/download-artifact@v4
+        with:
+          name: earnings-db
+          path: .
+        continue-on-error: true # First run won't have an artifact yet
+
+      # Write the Google service account credentials from a GitHub secret
+      - name: Write Google credentials
+        run: echo '${{ secrets.GOOGLE_CREDENTIALS_JSON }}' > credentials.json
+
+      - name: Run earnings agent
+        env:
+          FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
+          GOOGLE_CALENDAR_ID: ${{ secrets.GOOGLE_CALENDAR_ID }}
+          GOOGLE_CREDENTIALS_PATH: credentials.json
+          TICKERS: ${{ vars.TICKERS }}  # Stored as a GitHub Actions variable (not secret)
+        run: python earnings_agent.py
+
+      # Persist the SQLite DB for next run
+      - name: Save earnings database
+        uses: actions/upload-artifact@v4
+        with:
+          name: earnings-db
+          path: earnings_events.db
+          retention-days: 90
+          overwrite: true
+
+      - name: Cleanup credentials
+        if: always()
+        run: rm -f credentials.json
