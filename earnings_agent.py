@@ -13,6 +13,8 @@ Usage:
     python earnings_agent.py              # Run once (normal mode)
     python earnings_agent.py --dry-run    # Preview without creating calendar events
     python earnings_agent.py --backfill   # Also look back 30 days for any missed earnings
+    python earnings_agent.py --cleanup    # Delete duplicate events from Google Calendar
+    python earnings_agent.py --cleanup --dry-run  # Preview which duplicates would be deleted
 """
 
 import os
@@ -368,6 +370,37 @@ def get_calendar_service():
     return build("calendar", "v3", credentials=creds)
 
 
+def find_calendar_event(service, calendar_id: str, ticker: str, quarter: str, earnings_date: str):
+    """
+    Search Google Calendar for an existing earnings event matching ticker+quarter.
+
+    Uses extendedProperties to filter. Returns the event dict if found, None otherwise.
+    """
+    dt = date.fromisoformat(earnings_date)
+    time_min = (dt - timedelta(days=90)).isoformat() + "T00:00:00Z"
+    time_max = (dt + timedelta(days=90)).isoformat() + "T00:00:00Z"
+
+    try:
+        result = service.events().list(
+            calendarId=calendar_id,
+            privateExtendedProperty=f"ticker={ticker}",
+            timeMin=time_min,
+            timeMax=time_max,
+            singleEvents=True,
+            maxResults=50,
+        ).execute()
+
+        for event in result.get("items", []):
+            props = event.get("extendedProperties", {}).get("private", {})
+            if props.get("quarter") == quarter:
+                logger.info(f"🔍 Found existing calendar event for {ticker} {quarter} via API")
+                return event
+    except Exception as exc:
+        logger.warning(f"⚠️  Calendar API lookup failed for {ticker} {quarter}: {exc}")
+
+    return None
+
+
 def delete_calendar_event(service, calendar_id: str, gcal_id: str):
     """Delete an event from Google Calendar."""
     service.events().delete(calendarId=calendar_id, eventId=gcal_id).execute()
@@ -376,11 +409,23 @@ def delete_calendar_event(service, calendar_id: str, gcal_id: str):
 def update_calendar_event_description(
     service, calendar_id: str, gcal_id: str,
     new_summary: str, new_description: str,
+    ticker: str | None = None, quarter: str | None = None,
 ):
-    """Update an existing calendar event's summary and description."""
+    """Update an existing calendar event's summary, description, and extended properties."""
     event = service.events().get(calendarId=calendar_id, eventId=gcal_id).execute()
     event["summary"] = new_summary
     event["description"] = new_description
+
+    # Ensure extendedProperties are present (backfill for pre-existing events)
+    if ticker and quarter:
+        event["extendedProperties"] = {
+            "private": {
+                "earningsAgent": "true",
+                "ticker": ticker,
+                "quarter": quarter,
+            }
+        }
+
     service.events().update(
         calendarId=calendar_id, eventId=gcal_id, body=event
     ).execute()
@@ -390,6 +435,7 @@ def create_calendar_event(
     service,
     calendar_id: str,
     ticker: str,
+    quarter: str,
     earnings_date: str,
     hour: str | None,
     eps_estimate: float | None = None,
@@ -407,6 +453,14 @@ def create_calendar_event(
         ticker, hour, eps_estimate, eps_actual, revenue_estimate, revenue_actual
     )
 
+    extended_props = {
+        "private": {
+            "earningsAgent": "true",
+            "ticker": ticker,
+            "quarter": quarter,
+        }
+    }
+
     if hour == "bmo":
         event_body = {
             "summary": summary,
@@ -414,6 +468,7 @@ def create_calendar_event(
             "start": {"dateTime": f"{earnings_date}T07:00:00", "timeZone": "America/New_York"},
             "end": {"dateTime": f"{earnings_date}T07:15:00", "timeZone": "America/New_York"},
             "reminders": {"useDefault": False, "overrides": [{"method": "popup", "minutes": 60}]},
+            "extendedProperties": extended_props,
         }
     elif hour == "amc":
         event_body = {
@@ -422,6 +477,7 @@ def create_calendar_event(
             "start": {"dateTime": f"{earnings_date}T16:30:00", "timeZone": "America/New_York"},
             "end": {"dateTime": f"{earnings_date}T16:45:00", "timeZone": "America/New_York"},
             "reminders": {"useDefault": False, "overrides": [{"method": "popup", "minutes": 60}]},
+            "extendedProperties": extended_props,
         }
     else:
         event_body = {
@@ -430,6 +486,7 @@ def create_calendar_event(
             "start": {"date": earnings_date},
             "end": {"date": earnings_date},
             "reminders": {"useDefault": False, "overrides": [{"method": "popup", "minutes": 720}]},
+            "extendedProperties": extended_props,
         }
 
     created = service.events().insert(calendarId=calendar_id, body=event_body).execute()
@@ -440,6 +497,177 @@ def create_calendar_event(
 # ---------------------------------------------------------------------------
 # Main orchestrator
 # ---------------------------------------------------------------------------
+
+
+def _parse_ticker_from_summary(summary: str) -> str | None:
+    """
+    Extract ticker from event summaries like '📊 AAPL Earnings Release'
+    or '✅ AAPL Earnings Release'.
+    """
+    import re
+    m = re.match(r"^[^\w]*(\w+)\s+Earnings\s+Release", summary)
+    return m.group(1).upper() if m else None
+
+
+def _dedup_group(
+    events: list[dict],
+    label: str,
+    cal_service,
+    conn,
+    dry_run: bool,
+) -> int:
+    """
+    Given a list of duplicate events for the same label, keep the newest
+    and delete the rest. Returns number of events deleted.
+    """
+    if len(events) <= 1:
+        return 0
+
+    # Sort by created time (newest first) — keep the first, delete the rest
+    events.sort(key=lambda e: e.get("created", ""), reverse=True)
+    keep = events[0]
+    dupes = events[1:]
+
+    logger.info(
+        f"  {label}: {len(events)} events found, "
+        f"keeping {keep['id']}, deleting {len(dupes)} duplicate(s)"
+    )
+
+    deleted = 0
+    for dupe in dupes:
+        if dry_run:
+            logger.info(f"    [dry-run] Would delete {dupe['id']} ({dupe.get('summary', '')})")
+        else:
+            try:
+                delete_calendar_event(cal_service, GOOGLE_CALENDAR_ID, dupe["id"])
+                logger.info(f"    Deleted {dupe['id']}")
+            except Exception as exc:
+                logger.error(f"    Failed to delete {dupe['id']}: {exc}")
+                continue
+        deleted += 1
+
+    # Sync local DB to the kept event
+    if not dry_run:
+        start = keep.get("start", {})
+        event_date = start.get("date") or start.get("dateTime", "")[:10]
+        if event_date:
+            props = keep.get("extendedProperties", {}).get("private", {})
+            ticker = props.get("ticker") or _parse_ticker_from_summary(keep.get("summary", ""))
+            quarter = props.get("quarter") or (date_to_quarter(event_date) if event_date else None)
+            if ticker and quarter:
+                upsert_event(conn, ticker, quarter, event_date, None, keep["id"])
+
+    return deleted
+
+
+def cleanup_duplicates(dry_run: bool = False):
+    """
+    Scan Google Calendar for duplicate earnings events and delete extras.
+
+    Pass 1: Events with extendedProperties (earningsAgent=true) — groups by ticker+quarter.
+    Pass 2: Legacy events without extendedProperties — matched by summary pattern
+            ("TICKER Earnings Release") and event date.
+    """
+    if not GOOGLE_CALENDAR_ID:
+        logger.error("Missing GOOGLE_CALENDAR_ID")
+        sys.exit(1)
+
+    cal_service = get_calendar_service()
+    conn = init_db()
+
+    today = date.today()
+    time_min = (today - timedelta(days=365)).isoformat() + "T00:00:00Z"
+    time_max = (today + timedelta(days=365)).isoformat() + "T00:00:00Z"
+
+    deleted_count = 0
+
+    # ── Pass 1: events with extendedProperties ────────────────────────────
+    logger.info("Pass 1: Scanning events with extendedProperties...")
+    tagged_events = []
+    tagged_ids = set()
+    page_token = None
+
+    while True:
+        result = cal_service.events().list(
+            calendarId=GOOGLE_CALENDAR_ID,
+            privateExtendedProperty="earningsAgent=true",
+            timeMin=time_min,
+            timeMax=time_max,
+            singleEvents=True,
+            maxResults=250,
+            pageToken=page_token,
+        ).execute()
+
+        tagged_events.extend(result.get("items", []))
+        page_token = result.get("nextPageToken")
+        if not page_token:
+            break
+
+    logger.info(f"  Found {len(tagged_events)} tagged events")
+
+    groups: dict[str, list[dict]] = {}
+    for event in tagged_events:
+        tagged_ids.add(event["id"])
+        props = event.get("extendedProperties", {}).get("private", {})
+        ticker = props.get("ticker")
+        quarter = props.get("quarter")
+        if not ticker or not quarter:
+            continue
+        key = f"{ticker}|{quarter}"
+        groups.setdefault(key, []).append(event)
+
+    for key, events in groups.items():
+        deleted_count += _dedup_group(events, key.replace("|", " "), cal_service, conn, dry_run)
+
+    # ── Pass 2: legacy events (no extendedProperties) ─────────────────────
+    logger.info("Pass 2: Scanning legacy events by summary pattern...")
+    legacy_events = []
+    page_token = None
+
+    while True:
+        result = cal_service.events().list(
+            calendarId=GOOGLE_CALENDAR_ID,
+            q="Earnings Release",
+            timeMin=time_min,
+            timeMax=time_max,
+            singleEvents=True,
+            maxResults=250,
+            pageToken=page_token,
+        ).execute()
+
+        legacy_events.extend(result.get("items", []))
+        page_token = result.get("nextPageToken")
+        if not page_token:
+            break
+
+    # Filter out events already handled in pass 1
+    legacy_events = [e for e in legacy_events if e["id"] not in tagged_ids]
+    logger.info(f"  Found {len(legacy_events)} legacy events (without extendedProperties)")
+
+    # Group by ticker + event date (best we can do without quarter metadata)
+    legacy_groups: dict[str, list[dict]] = {}
+    for event in legacy_events:
+        ticker = _parse_ticker_from_summary(event.get("summary", ""))
+        if not ticker:
+            continue
+        start = event.get("start", {})
+        event_date = start.get("date") or start.get("dateTime", "")[:10]
+        if not event_date:
+            continue
+        key = f"{ticker}|{event_date}"
+        legacy_groups.setdefault(key, []).append(event)
+
+    for key, events in legacy_groups.items():
+        deleted_count += _dedup_group(events, key.replace("|", " "), cal_service, conn, dry_run)
+
+    logger.info("=" * 50)
+    if dry_run:
+        logger.info(f"Cleanup dry run: would delete {deleted_count} duplicate(s)")
+    else:
+        logger.info(f"Cleanup complete: deleted {deleted_count} duplicate(s)")
+    logger.info("=" * 50)
+
+    conn.close()
 
 
 def run(dry_run: bool = False, backfill: bool = False):
@@ -518,6 +746,7 @@ def run(dry_run: bool = False, backfill: bool = False):
                         update_calendar_event_description(
                             cal_service, GOOGLE_CALENDAR_ID,
                             gcal_id, new_summary, new_description,
+                            ticker=ticker, quarter=quarter,
                         )
                         logger.info(f"📝 Updated calendar event with actuals for {ticker}")
                     except Exception as exc:
@@ -563,7 +792,7 @@ def run(dry_run: bool = False, backfill: bool = False):
             if not dry_run:
                 try:
                     gcal_id = create_calendar_event(
-                        cal_service, GOOGLE_CALENDAR_ID, ticker,
+                        cal_service, GOOGLE_CALENDAR_ID, ticker, quarter,
                         earnings_date, hour, eps_est, eps_act, rev_est, rev_act,
                     )
                 except Exception as exc:
@@ -577,14 +806,30 @@ def run(dry_run: bool = False, backfill: bool = False):
             updated_count += 1
 
         else:
-            # --- Brand new event ---
+            # --- Brand new event (not in local DB) ---
+            # Check Google Calendar API to prevent duplicates when DB is lost
+            if not dry_run:
+                cal_event = find_calendar_event(
+                    cal_service, GOOGLE_CALENDAR_ID, ticker, quarter, earnings_date,
+                )
+                if cal_event:
+                    # Event already exists on calendar — backfill local DB and skip
+                    gcal_id = cal_event.get("id")
+                    upsert_event(
+                        conn, ticker, quarter, earnings_date, hour, gcal_id,
+                        eps_est, eps_act, rev_est, rev_act, reported=has_actuals,
+                    )
+                    logger.info(f"♻️  Backfilled DB from calendar for {ticker} {quarter}")
+                    skip_count += 1
+                    continue
+
             logger.info(f"🆕 New earnings: {ticker} {quarter} on {earnings_date} ({hour or 'time TBD'})")
 
             gcal_id = None
             if not dry_run:
                 try:
                     gcal_id = create_calendar_event(
-                        cal_service, GOOGLE_CALENDAR_ID, ticker,
+                        cal_service, GOOGLE_CALENDAR_ID, ticker, quarter,
                         earnings_date, hour, eps_est, eps_act, rev_est, rev_act,
                     )
                 except Exception as exc:
@@ -626,5 +871,14 @@ if __name__ == "__main__":
         action="store_true",
         help="Also check the past 30 days for any missed earnings",
     )
+    parser.add_argument(
+        "--cleanup",
+        action="store_true",
+        help="Scan calendar for duplicate events and delete extras",
+    )
     args = parser.parse_args()
-    run(dry_run=args.dry_run, backfill=args.backfill)
+
+    if args.cleanup:
+        cleanup_duplicates(dry_run=args.dry_run)
+    else:
+        run(dry_run=args.dry_run, backfill=args.backfill)
