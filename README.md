@@ -62,7 +62,7 @@ This is the recommended way to run the agent automatically.
 
 ```bash
 git init && git add . && git commit -m "Initial commit"
-gh repo create earnings-agent --private --push
+gh repo create earnings-agent --public --push
 ```
 
 ### 2. Add Secrets & Variables
