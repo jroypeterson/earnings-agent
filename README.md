@@ -1,73 +1,90 @@
-# Earnings Call Calendar Agent
+# Earnings Intelligence System
 
-Automatically monitors upcoming earnings calls for your watchlist and adds them to Google Calendar. Powered by Finnhub's free API.
+An earnings review execution system that monitors upcoming earnings, syncs to Google Calendar, creates review tasks in TickTick, and tracks your coverage workflow. Powered by Finnhub, Coverage Manager, and the TickTick API.
 
 ## What It Does
 
-- Queries Finnhub daily for upcoming earnings dates across your ticker watchlist
-- Creates Google Calendar events with timing info (before market open / after market close)
-- Includes consensus EPS and revenue estimates in the event description
-- Deduplicates via SQLite — won't create duplicate events on reruns
-- Supports dry-run mode for testing
+- Reads your ticker universe and tiers from **Coverage Manager** (Core Watchlist / HC Services & MedTech / Other)
+- Queries Finnhub daily for upcoming earnings dates, timing (BMO/AMC), and consensus estimates
+- Creates **Google Calendar** events for Tier 1 + Tier 2 names (with deduplication)
+- Creates **TickTick** review tasks in quarterly lists (e.g. "1Q26 Earnings - Core Watchlist")
+- Stores consensus estimate snapshots for building revision trends over time
+- Tracks actuals (beat/miss) after earnings are reported and updates calendar events
+- Supports dry-run, backfill, and cleanup modes
 
-## Quick Start (Local)
+## Architecture
 
-### 1. Get API Keys
+```
+Coverage Manager (tickers + tiers)
+        ↓
+Earnings Agent (collect, enrich, sync)
+        ↓ outputs to:
+        ├── Google Calendar (Tier 1+2 events)
+        ├── TickTick (quarterly review task lists)
+        └── SQLite (workflow state + historical memory)
+```
 
-**Finnhub** (free):
-1. Register at https://finnhub.io/register
-2. Copy your API key from the dashboard
+**Three systems of record:**
+- **Coverage Manager** — source of truth for universe and tier classifications
+- **Google Calendar** — durable source of truth for published event state
+- **SQLite** — source of truth for workflow state, estimate history, and predictions
 
-**Google Calendar API** (free):
-1. Go to [Google Cloud Console](https://console.cloud.google.com/)
-2. Create a project (or use an existing one)
-3. Enable the **Google Calendar API**
-4. Create a **Service Account** (IAM & Admin → Service Accounts)
-5. Create a key for the service account → download the JSON file as `credentials.json`
-6. In Google Calendar, go to your "Public Investing" calendar → Settings → Share with specific people
-7. Add the service account email (looks like `name@project.iam.gserviceaccount.com`) with **Make changes to events** permission
-8. Copy the **Calendar ID** from the calendar settings (looks like `abc123@group.calendar.google.com`)
+## Service Tiers
 
-### 2. Configure
+| Tier | Source | Calendar | TickTick | Notifications |
+|------|--------|----------|----------|---------------|
+| **Tier 1** (Core Watchlist) | `watchlist.csv` Core=Y | Yes | Yes (with model update checklist) | Full (planned) |
+| **Tier 2** (HC Svcs + MedTech) | `universe_metadata.json` sector filter | Yes | Yes | Standard (planned) |
+| **Tier 3** (Other) | Remainder | No | No | Digest mention only (planned) |
+
+## Quick Start
+
+### 1. Configure
 
 ```bash
 cp .env.example .env
-# Edit .env with your values:
-#   FINNHUB_API_KEY=...
-#   GOOGLE_CALENDAR_ID=...
-#   GOOGLE_CREDENTIALS_PATH=credentials.json
-#   TICKERS=UNH,CI,HUM,ELV,CNC,MOH,CVS,HCA,THC,UHS
+# Edit .env with your values (see .env.example for all options)
 ```
 
-### 3. Install & Run
+Required:
+- `FINNHUB_API_KEY` — free at https://finnhub.io/register
+- `GOOGLE_CALENDAR_ID` — your calendar ID
+- `GOOGLE_CREDENTIALS_PATH` — path to service account JSON
+- `COVERAGE_MANAGER_PATH` — path to Coverage Manager project (for tickers + tiers)
+
+Optional:
+- `TICKTICK_ACCESS_TOKEN` — enables TickTick task creation
+- `TIMEZONE` — defaults to America/New_York
+
+### 2. Install & Run
 
 ```bash
 pip install -r requirements.txt
 
-# Preview what would be added (no calendar changes)
-python earnings_agent.py --dry-run
+# Preview what would happen (no side effects)
+python main.py --dry-run
 
-# Actually create the events
-python earnings_agent.py
+# Full sync: calendar events + TickTick tasks + estimate snapshots
+python main.py
 
-# Also check past 30 days for anything missed
-python earnings_agent.py --backfill
+# Check past 30 days for missed earnings
+python main.py --backfill
+
+# Skip TickTick task creation
+python main.py --no-ticktick
+
+# View your TickTick earnings review queue
+python main.py --ticktick-status
+
+# Clean up duplicate calendar events
+python main.py --cleanup
 ```
 
 ## Deploy on GitHub Actions (Free Daily Runs)
 
 This is the recommended way to run the agent automatically.
 
-### 1. Push to GitHub
-
-```bash
-git init && git add . && git commit -m "Initial commit"
-gh repo create earnings-agent --public --push
-```
-
-### 2. Add Secrets & Variables
-
-In your repo → Settings → Secrets and variables → Actions:
+In your repo → Settings → Secrets and variables → Actions, add:
 
 **Secrets** (encrypted):
 | Name | Value |
@@ -75,49 +92,46 @@ In your repo → Settings → Secrets and variables → Actions:
 | `FINNHUB_API_KEY` | Your Finnhub API key |
 | `GOOGLE_CALENDAR_ID` | Your calendar ID |
 | `GOOGLE_CREDENTIALS_JSON` | Entire contents of your `credentials.json` file |
+| `TICKTICK_ACCESS_TOKEN` | TickTick OAuth token (optional) |
 
-**Variables** (visible, easy to edit):
-| Name | Value |
-|------|-------|
-| `TICKERS` | `UNH,CI,HUM,ELV,CNC,MOH,CVS,HCA,THC,UHS` |
-
-### 3. Enable the Workflow
-
-Go to repo → Actions tab → enable workflows. The agent will run daily at ~6 AM ET. You can also trigger it manually via the "Run workflow" button.
-
+Go to repo → Actions tab → enable workflows. The agent will run daily at ~6 AM ET.
 ## Project Structure
 
 ```
-earnings-agent/
-├── earnings_agent.py              # Main script
-├── requirements.txt               # Python dependencies
-├── .env.example                   # Config template
-├── .gitignore
-├── .github/
-│   └── workflows/
-│       └── daily_earnings_check.yml   # GitHub Actions daily schedule
-└── README.md
+earnings_agent/
+├── main.py              # CLI entry point and orchestrator
+├── config.py            # Environment, paths, constants
+├── coverage.py          # Coverage Manager integration, tier resolution
+├── storage.py           # SQLite schema, non-destructive migrations
+├── finnhub_client.py    # Finnhub API with retry + exponential backoff
+├── calendar_sync.py     # Google Calendar operations with pagination
+├── ticktick.py          # TickTick list/task management
+├── earnings_agent.py    # Legacy entry point (delegates to main.py)
+├── test_dedup.py        # Test suite (13 tests)
+├── requirements.txt
+├── .env.example
+├── PLAN.md              # Detailed implementation plan (7 phases)
+└── .github/workflows/
+    └── daily_earnings_check.yml
 ```
 
-## Customization
+## TickTick Integration
 
-**Add/remove tickers**: Edit the `TICKERS` variable in `.env` or GitHub Actions variables.
+Tasks are organized by **reporting quarter** and **tier**:
+- `1Q26 Earnings - Core Watchlist` (Tier 1 names)
+- `1Q26 Earnings - HC Svcs & MedTech` (Tier 2 names)
 
-**Change the look-ahead window**: In `earnings_agent.py`, adjust the `timedelta(days=90)` in the `run()` function.
+Each task includes consensus estimates, timing, and a review checklist (transcript, company docs, sell-side take, update model). Tasks are auto-created in the "Earnings / Analysis" folder.
 
-**Change reminder timing**: Modify the `reminders` dict in `create_calendar_event()`. The defaults are 1 hour before for timed events, 12 hours before for all-day events.
+The TickTick access token expires ~every 180 days. When it expires, the system detects the 401 and logs instructions to re-authenticate.
 
-**Event colors**: Add `"colorId": "11"` (tomato red) or other color IDs to the event body in `create_calendar_event()`. See [Google Calendar color IDs](https://lukeboyle.com/blog/posts/google-calendar-api-color-id).
+## Planned Features
 
-## Finnhub Free Tier Limits
-
-- 60 API calls/minute
-- The earnings calendar endpoint returns all earnings in a date range, so one call covers your entire watchlist
-- More than sufficient for daily runs
-
-## Future Enhancements
-
-- [ ] Add conference attendance tracking via EDGAR 8-K filings
-- [ ] Slack/email notifications when new earnings are detected
-- [ ] Track estimate revisions and update calendar descriptions
-- [ ] Add actual vs. estimate results after earnings are reported
+See `PLAN.md` for the full 7-phase roadmap. Completed:
+- [x] Phase 1: Foundation (modularize, Coverage Manager sync, retry logic)
+- [x] Phase 2: TickTick integration (quarterly lists, review tasks)
+- [ ] Phase 3: Weekly digest (Slack + email)
+- [ ] Phase 4: Post-earnings alerts (T+0 beat/miss, T+1 close-loop)
+- [ ] Phase 5: Pre-earnings briefs (T-1 enriched context)
+- [ ] Phase 6: Prediction tracking + accuracy analysis
+- [ ] Phase 7: Reconcile mode + hardening

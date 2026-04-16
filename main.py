@@ -1,0 +1,375 @@
+"""
+Earnings Intelligence System — CLI entry point and orchestrator.
+
+Usage:
+    python main.py                     # Daily sync (normal mode)
+    python main.py --dry-run           # Preview without creating calendar events
+    python main.py --backfill          # Also look back 30 days for missed earnings
+    python main.py --cleanup           # Delete duplicate events from Google Calendar
+    python main.py --cleanup --dry-run # Preview which duplicates would be deleted
+"""
+
+import sys
+import argparse
+import logging
+from datetime import date, timedelta
+
+from config import GOOGLE_CALENDAR_ID, FINNHUB_API_KEY
+from coverage import load_coverage, get_tickers_by_tier, get_ticker_info, TickerInfo
+from storage import (
+    init_db,
+    find_existing_event,
+    find_event_for_ticker_near_date,
+    upsert_event,
+    record_estimate_snapshot,
+    date_to_quarter,
+)
+from finnhub_client import get_client as get_finnhub_client, fetch_earnings, FinnhubError
+from calendar_sync import (
+    get_calendar_service,
+    find_calendar_event,
+    create_calendar_event,
+    update_calendar_event_description,
+    delete_calendar_event,
+    build_description,
+    cleanup_duplicates,
+    CalendarError,
+)
+from ticktick import sync_ticktick_tasks, get_ticktick_config, show_ticktick_status
+
+logger = logging.getLogger("earnings_agent")
+
+
+def run(dry_run: bool = False, backfill: bool = False, skip_ticktick: bool = False):
+    """Main sync: collect earnings data, sync to calendar, store estimate snapshots."""
+
+    # --- Load coverage ---
+    coverage = load_coverage()
+    if not coverage:
+        logger.error("No tickers loaded. Check Coverage Manager exports or tickers.txt.")
+        sys.exit(1)
+
+    # For Finnhub queries, include all tiers (we filter on output, not input)
+    all_tickers = [t.ticker for t in coverage]
+    # Build lookup for tier info
+    coverage_map = {t.ticker: t for t in coverage}
+
+    # --- Validate config ---
+    missing = []
+    if not FINNHUB_API_KEY:
+        missing.append("FINNHUB_API_KEY")
+    if not GOOGLE_CALENDAR_ID:
+        missing.append("GOOGLE_CALENDAR_ID")
+    if missing:
+        logger.error(f"Missing required config: {', '.join(missing)}")
+        logger.error("Copy .env.example to .env and fill in your values.")
+        sys.exit(1)
+
+    # --- Set up clients ---
+    try:
+        fh_client = get_finnhub_client()
+    except FinnhubError as exc:
+        logger.error(f"Failed to initialize Finnhub client: {exc}")
+        sys.exit(1)
+
+    conn = init_db()
+
+    cal_service = None
+    if not dry_run:
+        try:
+            cal_service = get_calendar_service()
+        except Exception as exc:
+            logger.error(f"Failed to initialize Google Calendar service: {exc}")
+            sys.exit(1)
+
+    # --- Determine date range ---
+    today = date.today()
+    if backfill:
+        from_date = (today - timedelta(days=30)).isoformat()
+    else:
+        from_date = (today - timedelta(days=14)).isoformat()
+    to_date = (today + timedelta(days=90)).isoformat()
+
+    # --- Fetch earnings ---
+    earnings = fetch_earnings(fh_client, all_tickers, from_date, to_date)
+
+    new_count = 0
+    updated_count = 0
+    actuals_count = 0
+    skip_count = 0
+    snapshot_date = today.isoformat()
+
+    for e in earnings:
+        ticker = e["symbol"].upper()
+        earnings_date = e["date"]
+        hour = e.get("hour")
+        eps_est = e.get("epsEstimate")
+        eps_act = e.get("epsActual")
+        rev_est = e.get("revenueEstimate")
+        rev_act = e.get("revenueActual")
+        quarter = date_to_quarter(earnings_date)
+
+        # Resolve tier
+        info = coverage_map.get(ticker)
+        tier = info.tier if info else 3
+        company_name = info.company_name if info else None
+        source_fingerprint = f"{ticker}:{earnings_date}"
+
+        has_actuals = eps_act is not None or rev_act is not None
+
+        # Record estimate snapshot for revision tracking
+        if eps_est is not None or rev_est is not None:
+            record_estimate_snapshot(
+                conn, ticker, earnings_date, snapshot_date, eps_est, rev_est
+            )
+
+        # Look up existing event (by exact date first, then nearby)
+        existing = find_existing_event(conn, ticker, earnings_date)
+        if not existing:
+            existing = find_event_for_ticker_near_date(conn, ticker, earnings_date)
+
+        if existing:
+            # --- Check if actuals just came in ---
+            if has_actuals and not existing["reported"]:
+                logger.info(
+                    f"Actuals in: {ticker} {quarter} — "
+                    f"EPS: ${eps_act:.2f} vs ${eps_est:.2f} est"
+                    if eps_act is not None and eps_est is not None
+                    else f"Actuals in: {ticker} {quarter}"
+                )
+
+                gcal_id = existing["gcal_id"]
+
+                if not dry_run and gcal_id and cal_service:
+                    try:
+                        new_summary = f"[REPORTED] {ticker} Earnings Release"
+                        new_description = build_description(
+                            ticker, hour, eps_est, eps_act, rev_est, rev_act
+                        )
+                        update_calendar_event_description(
+                            cal_service, GOOGLE_CALENDAR_ID,
+                            gcal_id, new_summary, new_description,
+                            ticker=ticker, quarter=quarter,
+                            source_fingerprint=source_fingerprint,
+                            tier=tier,
+                        )
+                        logger.info(f"Updated calendar event with actuals for {ticker}")
+                    except CalendarError as exc:
+                        logger.error(f"Failed to update event for {ticker}: {exc}")
+
+                upsert_event(
+                    conn, ticker, earnings_date, hour, existing["gcal_id"],
+                    quarter=quarter, eps_estimate=eps_est, eps_actual=eps_act,
+                    rev_estimate=rev_est, rev_actual=rev_act, reported=True,
+                    tier=tier, company_name=company_name,
+                    source_fingerprint=source_fingerprint,
+                )
+                actuals_count += 1
+                continue
+
+            # --- Check if date or timing changed ---
+            date_changed = existing["event_date"] != earnings_date
+            hour_changed = existing.get("event_hour") != hour
+
+            if not date_changed and not hour_changed:
+                skip_count += 1
+                continue
+
+            old_date = existing["event_date"]
+            old_gcal_id = existing["gcal_id"]
+
+            if date_changed:
+                logger.info(
+                    f"Date changed: {ticker} {quarter} moved from "
+                    f"{old_date} -> {earnings_date}"
+                )
+            if hour_changed:
+                logger.info(
+                    f"Timing changed: {ticker} {quarter} on {earnings_date} "
+                    f"({existing.get('event_hour') or 'TBD'} -> {hour or 'TBD'})"
+                )
+
+            # Only manage calendar events for Tier 1 and Tier 2
+            if tier <= 2:
+                if not dry_run and old_gcal_id and cal_service:
+                    try:
+                        delete_calendar_event(cal_service, GOOGLE_CALENDAR_ID, old_gcal_id)
+                        logger.info(f"Deleted old calendar event for {ticker} on {old_date}")
+                    except CalendarError as exc:
+                        logger.warning(f"Could not delete old event for {ticker}: {exc}")
+
+                gcal_id = None
+                if not dry_run and cal_service:
+                    try:
+                        gcal_id = create_calendar_event(
+                            cal_service, GOOGLE_CALENDAR_ID, ticker,
+                            earnings_date, hour,
+                            quarter=quarter, eps_estimate=eps_est,
+                            eps_actual=eps_act, revenue_estimate=rev_est,
+                            revenue_actual=rev_act, tier=tier,
+                            source_fingerprint=source_fingerprint,
+                        )
+                    except CalendarError as exc:
+                        logger.error(f"Failed to create updated event for {ticker}: {exc}")
+                        continue
+            else:
+                gcal_id = existing.get("gcal_id")
+
+            upsert_event(
+                conn, ticker, earnings_date, hour,
+                gcal_id if tier <= 2 else existing.get("gcal_id"),
+                quarter=quarter, eps_estimate=eps_est, eps_actual=eps_act,
+                rev_estimate=rev_est, rev_actual=rev_act, reported=has_actuals,
+                tier=tier, company_name=company_name,
+                source_fingerprint=source_fingerprint,
+            )
+            updated_count += 1
+
+        else:
+            # --- Brand new event ---
+            # Only create calendar events for Tier 1 and Tier 2
+            gcal_id = None
+
+            if tier <= 2:
+                # Check Google Calendar API to prevent duplicates when DB is lost
+                if not dry_run and cal_service:
+                    cal_event = find_calendar_event(
+                        cal_service, GOOGLE_CALENDAR_ID, ticker, earnings_date,
+                        source_fingerprint=source_fingerprint,
+                    )
+                    if cal_event:
+                        gcal_id = cal_event.get("id")
+                        upsert_event(
+                            conn, ticker, earnings_date, hour, gcal_id,
+                            quarter=quarter, eps_estimate=eps_est,
+                            eps_actual=eps_act, rev_estimate=rev_est,
+                            rev_actual=rev_act, reported=has_actuals,
+                            tier=tier, company_name=company_name,
+                            source_fingerprint=source_fingerprint,
+                        )
+                        logger.info(f"Backfilled DB from calendar for {ticker} {quarter}")
+                        skip_count += 1
+                        continue
+
+                logger.info(f"New earnings: {ticker} {quarter} on {earnings_date} ({hour or 'time TBD'}) [Tier {tier}]")
+
+                if not dry_run and cal_service:
+                    try:
+                        gcal_id = create_calendar_event(
+                            cal_service, GOOGLE_CALENDAR_ID, ticker,
+                            earnings_date, hour,
+                            quarter=quarter, eps_estimate=eps_est,
+                            eps_actual=eps_act, revenue_estimate=rev_est,
+                            revenue_actual=rev_act, tier=tier,
+                            source_fingerprint=source_fingerprint,
+                        )
+                    except CalendarError as exc:
+                        logger.error(f"Failed to create calendar event for {ticker}: {exc}")
+                        continue
+            else:
+                logger.debug(f"New earnings (Tier 3, no calendar): {ticker} {quarter} on {earnings_date}")
+
+            upsert_event(
+                conn, ticker, earnings_date, hour, gcal_id,
+                quarter=quarter, eps_estimate=eps_est, eps_actual=eps_act,
+                rev_estimate=rev_est, rev_actual=rev_act, reported=has_actuals,
+                tier=tier, company_name=company_name,
+                source_fingerprint=source_fingerprint,
+            )
+            new_count += 1
+
+    # --- Summary ---
+    logger.info("=" * 50)
+    logger.info(
+        f"Done! {new_count} new, {updated_count} updated, "
+        f"{actuals_count} actuals added, {skip_count} unchanged."
+    )
+    if dry_run:
+        logger.info("(Dry run — no calendar events were actually created, updated, or deleted)")
+    logger.info("=" * 50)
+
+    # --- TickTick task sync (Tier 1 + Tier 2 only) ---
+    if not skip_ticktick:
+        # Gather all Tier 1+2 events that need TickTick tasks
+        cur = conn.execute(
+            "SELECT ticker, event_date, event_hour, eps_estimate, rev_estimate, "
+            "tier, company_name, ticktick_task_id "
+            "FROM events WHERE tier <= 2 AND event_date >= ? "
+            "ORDER BY event_date, ticker",
+            (today.isoformat(),)
+        )
+        ticktick_events = []
+        for row in cur.fetchall():
+            ticktick_events.append({
+                "ticker": row[0],
+                "event_date": row[1],
+                "event_hour": row[2],
+                "eps_estimate": row[3],
+                "rev_estimate": row[4],
+                "tier": row[5],
+                "company_name": row[6],
+                "ticktick_task_id": row[7],
+            })
+
+        if ticktick_events:
+            tt_stats = sync_ticktick_tasks(conn, ticktick_events, dry_run=dry_run)
+        else:
+            logger.info("No Tier 1/2 future events for TickTick")
+    else:
+        logger.info("TickTick sync skipped (--no-ticktick)")
+
+    conn.close()
+
+
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Earnings Intelligence System — earnings calendar sync and workflow"
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Preview earnings without creating calendar events",
+    )
+    parser.add_argument(
+        "--backfill",
+        action="store_true",
+        help="Also check the past 30 days for any missed earnings",
+    )
+    parser.add_argument(
+        "--cleanup",
+        action="store_true",
+        help="Scan calendar for duplicate events and delete extras",
+    )
+    parser.add_argument(
+        "--no-ticktick",
+        action="store_true",
+        help="Skip TickTick task creation",
+    )
+    parser.add_argument(
+        "--ticktick-status",
+        action="store_true",
+        help="Show TickTick earnings review queue status",
+    )
+    args = parser.parse_args()
+
+    if args.ticktick_status:
+        config = get_ticktick_config()
+        if not config:
+            logger.error("TickTick not configured. Set TICKTICK_ACCESS_TOKEN in .env")
+            sys.exit(1)
+        show_ticktick_status(config["token"])
+    elif args.cleanup:
+        conn = init_db()
+        cleanup_duplicates(conn, dry_run=args.dry_run)
+        conn.close()
+    else:
+        run(dry_run=args.dry_run, backfill=args.backfill, skip_ticktick=args.no_ticktick)
+
+
+if __name__ == "__main__":
+    main()
