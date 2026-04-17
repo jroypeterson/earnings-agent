@@ -96,19 +96,26 @@ def _underline(text: str) -> str:
 def _fmt_ytd(pct: float | None) -> str:
     if pct is None:
         return "YTD –"
-    return f"YTD {pct:+.1f}%"
+    if pct < 0:
+        return f"YTD ({abs(pct):.1f}%)"
+    return f"YTD +{pct:.1f}%"
+
+
+_BUCKET_SORT = {"bmo": 0, "dmh": 1, "amc": 2, "tbd": 3}
+_BUCKET_LABEL = {"bmo": "bmo", "dmh": "dmh", "amc": "amc", "tbd": "tbd"}
 
 
 def _row_line(r: EventRow, show_company: bool) -> str:
-    """Render a single event as '`TICKER` Company — YTD ±X.X%'."""
+    """Render a single event as '`TICKER` Company — YTD ±X.X% · BMO'."""
     name = f" {r.company_name}" if show_company and r.company_name else ""
-    return f"  `{r.ticker}`{name} — {_fmt_ytd(r.ytd_pct)}"
+    timing = _BUCKET_LABEL[_timing_bucket(r.event_hour)]
+    return f"  `{r.ticker}`{name} — {_fmt_ytd(r.ytd_pct)} · {timing}"
 
 
 def _slack_tier_block(
     label: str, rows: list[EventRow], show_company: bool = True
 ) -> dict | None:
-    """Render a tier: day (underlined) → timing sub-groups (BMO/AMC) → tickers with YTD."""
+    """Render a tier: day (underlined) → tickers with YTD + timing at end of each row."""
     if not rows:
         return None
 
@@ -118,17 +125,13 @@ def _slack_tier_block(
 
     lines = [f"*{label} ({len(rows)})*"]
     for iso_date in sorted(by_date.keys()):
-        day_rows = by_date[iso_date]
-        # Underlined day header
+        day_rows = sorted(
+            by_date[iso_date],
+            key=lambda r: (_BUCKET_SORT[_timing_bucket(r.event_hour)], r.ticker),
+        )
         lines.append(f"*{_underline(_fmt_date_safe(iso_date))}*")
-        # Sub-bucket by timing in chronological order, skip empty buckets
-        for bucket_key, bucket_label in _TIMING_BUCKETS:
-            bucket_rows = [r for r in day_rows if _timing_bucket(r.event_hour) == bucket_key]
-            if not bucket_rows:
-                continue
-            lines.append(f" _{bucket_label}_")
-            for r in sorted(bucket_rows, key=lambda x: x.ticker):
-                lines.append(_row_line(r, show_company=show_company))
+        for r in day_rows:
+            lines.append(_row_line(r, show_company=show_company))
 
     return {
         "type": "section",
