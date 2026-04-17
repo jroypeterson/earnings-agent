@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from datetime import date, timedelta
 
 from coverage import TickerInfo
+from market_data import fetch_ytd_performance
 
 logger = logging.getLogger("earnings_agent")
 
@@ -33,6 +34,7 @@ class EventRow:
     tier: int
     sector: str
     subsector: str
+    ytd_pct: float | None = None
 
 
 @dataclass
@@ -164,6 +166,11 @@ def build_weekly_digest(
     digest.peak_week_start, digest.peak_week_count = _detect_peak_week(
         tracked_month, today
     )
+
+    # YTD performance — only for week rows, since that's what Slack renders.
+    ytd_map = fetch_ytd_performance([r.ticker for r in week_rows])
+    for r in week_rows:
+        r.ytd_pct = ytd_map.get(r.ticker.upper())
 
     logger.info(
         f"Digest built: {digest.week_count} names in next 7d, "

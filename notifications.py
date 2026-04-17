@@ -72,49 +72,63 @@ def _fmt_estimate_rev(rev: float | None) -> str:
 # ---------------------------------------------------------------------------
 
 
-# Order timing buckets chronologically within a trading day.
-_TIMING_ORDER = {"bmo": 0, "dmh": 1, "amc": 2}
+# Timing buckets in chronological order for sub-segmenting within a day.
+_TIMING_BUCKETS = [
+    ("bmo", "BMO"),
+    ("dmh", "DMH"),
+    ("amc", "AMC"),
+    ("tbd", "TBD"),
+]
 
 
-def _timing_sort_key(hour: str | None) -> int:
+def _timing_bucket(hour: str | None) -> str:
     if not hour:
-        return 99  # TBD / unknown last
-    return _TIMING_ORDER.get(hour.lower(), 50)
+        return "tbd"
+    h = hour.lower()
+    return h if h in {"bmo", "dmh", "amc"} else "tbd"
+
+
+def _underline(text: str) -> str:
+    """Apply Unicode combining low line (U+0332) after each char — renders as underline in Slack."""
+    return "".join(c + "\u0332" for c in text)
+
+
+def _fmt_ytd(pct: float | None) -> str:
+    if pct is None:
+        return "YTD –"
+    return f"YTD {pct:+.1f}%"
 
 
 def _row_line(r: EventRow, show_company: bool) -> str:
-    """Render a single event as '{timing}: {ticker} ({company}) — EPS X, Rev Y'."""
-    est_parts = []
-    if r.eps_estimate is not None:
-        est_parts.append(f"EPS {_fmt_estimate_eps(r.eps_estimate)}")
-    if r.rev_estimate is not None:
-        est_parts.append(f"Rev {_fmt_estimate_rev(r.rev_estimate)}")
-    est_str = f" — {', '.join(est_parts)}" if est_parts else ""
-    name = f" ({r.company_name})" if show_company and r.company_name else ""
-    return f"  {_timing_short(r.event_hour)}: `{r.ticker}`{name}{est_str}"
+    """Render a single event as '`TICKER` Company — YTD ±X.X%'."""
+    name = f" {r.company_name}" if show_company and r.company_name else ""
+    return f"  `{r.ticker}`{name} — {_fmt_ytd(r.ytd_pct)}"
 
 
 def _slack_tier_block(
     label: str, rows: list[EventRow], show_company: bool = True
 ) -> dict | None:
-    """Render a tier section grouped by day, timing-ordered within each day."""
+    """Render a tier: day (underlined) → timing sub-groups (BMO/AMC) → tickers with YTD."""
     if not rows:
         return None
 
-    # Bucket by event_date
     by_date: dict[str, list[EventRow]] = {}
     for r in rows:
         by_date.setdefault(r.event_date, []).append(r)
 
     lines = [f"*{label} ({len(rows)})*"]
     for iso_date in sorted(by_date.keys()):
-        day_rows = sorted(
-            by_date[iso_date],
-            key=lambda r: (_timing_sort_key(r.event_hour), r.ticker),
-        )
-        lines.append(f"_{_fmt_date_safe(iso_date)}_")
-        for r in day_rows:
-            lines.append(_row_line(r, show_company=show_company))
+        day_rows = by_date[iso_date]
+        # Underlined day header
+        lines.append(f"*{_underline(_fmt_date_safe(iso_date))}*")
+        # Sub-bucket by timing in chronological order, skip empty buckets
+        for bucket_key, bucket_label in _TIMING_BUCKETS:
+            bucket_rows = [r for r in day_rows if _timing_bucket(r.event_hour) == bucket_key]
+            if not bucket_rows:
+                continue
+            lines.append(f" _{bucket_label}_")
+            for r in sorted(bucket_rows, key=lambda x: x.ticker):
+                lines.append(_row_line(r, show_company=show_company))
 
     return {
         "type": "section",
