@@ -380,10 +380,9 @@ def _fmt_beat_miss(actual: float | None, estimate: float | None) -> str:
     pct = _beat_miss_pct(actual, estimate)
     if pct is None:
         return "–"
-    label = "beat" if pct >= 0 else "miss"
     if pct < 0:
-        return f"({abs(pct):.1f}%) {label}"
-    return f"+{pct:.1f}% {label}"
+        return f"({abs(pct):.1f}%) miss 🟥"
+    return f"+{pct:.1f}% beat 🟩"
 
 
 def _fmt_actual_vs_estimate_eps(actual: float | None, estimate: float | None) -> str:
