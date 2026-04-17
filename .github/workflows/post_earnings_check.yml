@@ -1,0 +1,108 @@
+# Post-earnings Results Check
+#
+# Runs weekday evenings to catch beat/miss for names that reported today.
+# Checks both today's events (BMO reported this morning, AMC just now) and
+# yesterday's events (in case AMC actuals came in overnight).
+#
+# 22:00 UTC ≈ 5 PM ET (EST) / 6 PM ET (EDT). Picked to fall after most
+# BMO and AMC reports are posted but before the overnight refresh cycle.
+
+name: Post-Earnings Results Check
+
+on:
+  schedule:
+    - cron: "0 22 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      date:
+        description: "Target date (YYYY-MM-DD). Defaults to today."
+        required: false
+        type: string
+
+jobs:
+  check-results:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout earnings-agent
+        uses: actions/checkout@v4
+
+      - name: Checkout Coverage Manager exports
+        uses: actions/checkout@v4
+        with:
+          repository: jroypeterson/Coverage-Manager
+          path: coverage-manager
+          sparse-checkout: |
+            exports
+          sparse-checkout-cone-mode: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Restore earnings database
+        uses: actions/download-artifact@v4
+        with:
+          name: earnings-db
+          path: .
+        continue-on-error: true
+
+      - name: Write Google credentials
+        run: echo '${{ secrets.GOOGLE_CREDENTIALS_JSON }}' > credentials.json
+        continue-on-error: true  # calendar updates are best-effort
+
+      # Ensure the events table has entries with estimates for today's date
+      # so check-results can compute beat/miss deltas against our consensus.
+      - name: Populate events from Finnhub
+        env:
+          FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
+          GOOGLE_CALENDAR_ID: ${{ secrets.GOOGLE_CALENDAR_ID }}
+          COVERAGE_MANAGER_PATH: ${{ github.workspace }}/coverage-manager
+        run: python main.py --dry-run --no-ticktick
+
+      - name: Check today's results
+        env:
+          FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
+          GOOGLE_CALENDAR_ID: ${{ secrets.GOOGLE_CALENDAR_ID }}
+          GOOGLE_CREDENTIALS_PATH: credentials.json
+          COVERAGE_MANAGER_PATH: ${{ github.workspace }}/coverage-manager
+          SLACK_WEBHOOK_EARNINGS: ${{ secrets.SLACK_WEBHOOK_EARNINGS }}
+          TICKTICK_ACCESS_TOKEN: ${{ secrets.TICKTICK_ACCESS_TOKEN }}
+        run: |
+          if [ -n "${{ inputs.date }}" ]; then
+            python main.py --check-results --date "${{ inputs.date }}"
+          else
+            python main.py --check-results
+          fi
+
+      # Also sweep yesterday to catch AMC reports whose actuals posted overnight.
+      - name: Check yesterday's results (AMC overnight catch-up)
+        if: inputs.date == ''
+        env:
+          FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
+          GOOGLE_CALENDAR_ID: ${{ secrets.GOOGLE_CALENDAR_ID }}
+          GOOGLE_CREDENTIALS_PATH: credentials.json
+          COVERAGE_MANAGER_PATH: ${{ github.workspace }}/coverage-manager
+          SLACK_WEBHOOK_EARNINGS: ${{ secrets.SLACK_WEBHOOK_EARNINGS }}
+          TICKTICK_ACCESS_TOKEN: ${{ secrets.TICKTICK_ACCESS_TOKEN }}
+        run: |
+          YESTERDAY=$(date -u -d 'yesterday' +%Y-%m-%d)
+          python main.py --check-results --date "$YESTERDAY"
+
+      - name: Save earnings database
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: earnings-db
+          path: earnings_events.db
+          retention-days: 90
+          overwrite: true
+
+      - name: Cleanup credentials
+        if: always()
+        run: rm -f credentials.json

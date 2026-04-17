@@ -40,7 +40,13 @@ from calendar_sync import (
     cleanup_duplicates,
     CalendarError,
 )
-from ticktick import sync_ticktick_tasks, get_ticktick_config, show_ticktick_status
+from ticktick import (
+    sync_ticktick_tasks,
+    get_ticktick_config,
+    show_ticktick_status,
+    mark_task_reported,
+    TickTickTokenExpired,
+)
 from digest import build_weekly_digest
 from notifications import (
     build_slack_blocks,
@@ -116,6 +122,8 @@ def run(dry_run: bool = False, backfill: bool = False, skip_ticktick: bool = Fal
     actuals_count = 0
     skip_count = 0
     snapshot_date = today.isoformat()
+    # Actuals collected during this sync for Slack + TickTick downstream
+    sync_results: list[ResultRow] = []
 
     for e in earnings:
         ticker = e["symbol"].upper()
@@ -183,6 +191,24 @@ def run(dry_run: bool = False, backfill: bool = False, skip_ticktick: bool = Fal
                     source_fingerprint=source_fingerprint,
                 )
                 actuals_count += 1
+
+                # Collect for Slack + TickTick post-loop notification
+                if not dry_run:
+                    move = fetch_post_earnings_move(ticker, earnings_date, hour)
+                    sync_results.append(
+                        ResultRow(
+                            ticker=ticker,
+                            company_name=company_name or "",
+                            event_date=earnings_date,
+                            event_hour=hour,
+                            eps_actual=eps_act,
+                            eps_estimate=eps_est,
+                            rev_actual=rev_act,
+                            rev_estimate=rev_est,
+                            tier=tier,
+                            move=move,
+                        )
+                    )
                 continue
 
             # --- Check if date or timing changed ---
@@ -306,6 +332,11 @@ def run(dry_run: bool = False, backfill: bool = False, skip_ticktick: bool = Fal
         logger.info("(Dry run — no calendar events were actually created, updated, or deleted)")
     logger.info("=" * 50)
 
+    # --- Notify on any newly-reported actuals detected during this sync ---
+    if sync_results and not dry_run:
+        logger.info(f"Notifying on {len(sync_results)} actuals detected during sync")
+        notify_results(conn, sync_results, today)
+
     # --- TickTick task sync (Tier 1 + Tier 2 only) ---
     if not skip_ticktick:
         # Gather all Tier 1+2 events that need TickTick tasks
@@ -395,6 +426,80 @@ def run_weekly_digest(dry_run: bool = False):
 
     logger.info("Weekly digest complete. Run Gmail MCP draft creation "
                 f"using content from {DIGEST_HTML_PATH}")
+
+
+# ---------------------------------------------------------------------------
+# Shared results notification (Slack + TickTick)
+# ---------------------------------------------------------------------------
+
+
+def notify_results(
+    conn, results: list[ResultRow], as_of: date
+) -> bool:
+    """
+    Post results to Slack and update TickTick tasks for Tier 1+2 rows.
+    Returns True if Slack posted successfully (or no webhook configured).
+
+    The caller is responsible for DB updates (reported=1). This function
+    only handles the outbound notification surfaces.
+    """
+    if not results:
+        return True
+
+    blocks = build_results_slack_blocks(results, as_of)
+    fallback = build_results_fallback_text(results, as_of)
+
+    posted = False
+    if SLACK_WEBHOOK_EARNINGS:
+        try:
+            post_slack(SLACK_WEBHOOK_EARNINGS, blocks, fallback)
+            posted = True
+        except NotificationError as exc:
+            logger.error(f"Slack results post failed: {exc}")
+    else:
+        logger.warning("SLACK_WEBHOOK_EARNINGS not set — skipping Slack post.")
+        posted = True  # treat as "handled" — no retry target
+
+    # TickTick task updates (best-effort, don't block on failures)
+    tt_config = get_ticktick_config()
+    if tt_config:
+        tt_token: str | None = tt_config["token"]
+        for r in results:
+            if r.tier > 2:
+                continue
+            existing = find_existing_event(conn, r.ticker, r.event_date)
+            task_id = existing.get("ticktick_task_id") if existing else None
+            if not task_id:
+                continue
+            try:
+                ok = mark_task_reported(
+                    tt_token,
+                    task_id,
+                    ticker=r.ticker,
+                    event_date=r.event_date,
+                    hour=r.event_hour,
+                    tier=r.tier,
+                    company_name=r.company_name,
+                    eps_estimate=r.eps_estimate,
+                    eps_actual=r.eps_actual,
+                    revenue_estimate=r.rev_estimate,
+                    revenue_actual=r.rev_actual,
+                    move_pct=r.move.move_pct if r.move else None,
+                    move_label=r.move.window_label if r.move else None,
+                )
+                if ok:
+                    logger.info(f"  TickTick task marked reported for {r.ticker}")
+            except TickTickTokenExpired:
+                logger.error(
+                    "TickTick access token expired. Re-run the OAuth flow at "
+                    "developer.ticktick.com and update TICKTICK_ACCESS_TOKEN."
+                )
+                tt_token = None
+                break
+            except Exception as exc:
+                logger.warning(f"  TickTick update failed for {r.ticker}: {exc}")
+
+    return posted
 
 
 # ---------------------------------------------------------------------------
@@ -553,39 +658,34 @@ def run_check_results(target_date: str | None = None, dry_run: bool = False):
         conn.close()
         return
 
-    posted = False
-    if SLACK_WEBHOOK_EARNINGS:
-        try:
-            post_slack(SLACK_WEBHOOK_EARNINGS, blocks, fallback)
-            posted = True
-        except NotificationError as exc:
-            logger.error(f"Slack results post failed: {exc}")
-    else:
-        logger.warning("SLACK_WEBHOOK_EARNINGS not set — skipping Slack post.")
+    posted = notify_results(conn, new_results, target)
 
-    # Only mark reported=True after Slack has been handled (or skipped explicitly
-    # because the webhook isn't configured). If the post raises, we keep the
-    # records unmarked so the next run retries.
-    if posted or not SLACK_WEBHOOK_EARNINGS:
-        for r in new_results:
-            existing = find_existing_event(conn, r.ticker, r.event_date)
-            upsert_event(
-                conn,
-                r.ticker,
-                r.event_date,
-                r.event_hour,
-                existing.get("gcal_id") if existing else None,
-                quarter=existing.get("quarter") if existing else date_to_quarter(r.event_date),
-                eps_estimate=r.eps_estimate,
-                eps_actual=r.eps_actual,
-                rev_estimate=r.rev_estimate,
-                rev_actual=r.rev_actual,
-                reported=True,
-                tier=r.tier,
-                company_name=r.company_name,
-            )
-        logger.info(f"Marked {len(new_results)} results as reported in DB")
+    # Only mark reported=True after Slack has been handled. If the post failed
+    # and we have a webhook configured, leave records unmarked so the next
+    # run retries.
+    if not posted:
+        conn.close()
+        return
 
+    for r in new_results:
+        existing = find_existing_event(conn, r.ticker, r.event_date)
+        upsert_event(
+            conn,
+            r.ticker,
+            r.event_date,
+            r.event_hour,
+            existing.get("gcal_id") if existing else None,
+            quarter=existing.get("quarter") if existing else date_to_quarter(r.event_date),
+            eps_estimate=r.eps_estimate,
+            eps_actual=r.eps_actual,
+            rev_estimate=r.rev_estimate,
+            rev_actual=r.rev_actual,
+            reported=True,
+            tier=r.tier,
+            company_name=r.company_name,
+        )
+
+    logger.info(f"Marked {len(new_results)} results as reported in DB")
     conn.close()
 
 

@@ -432,8 +432,9 @@ def update_task_content(
     list_id: str,
     task_id: str,
     new_content: str,
+    new_title: str | None = None,
 ) -> bool:
-    """Update a task's content (e.g., to add results post-earnings). Returns success."""
+    """Update a task's content (and optionally title). Returns success."""
     try:
         # First get the existing task
         resp = requests.get(
@@ -449,6 +450,8 @@ def update_task_content(
 
         task_data = resp.json()
         task_data["content"] = new_content
+        if new_title is not None:
+            task_data["title"] = new_title
 
         # Update the task
         resp = requests.post(
@@ -470,6 +473,59 @@ def update_task_content(
     except requests.RequestException as exc:
         logger.warning(f"  Failed to update task {task_id}: {exc}")
         return False
+
+
+def mark_task_reported(
+    token: str,
+    task_id: str,
+    *,
+    ticker: str,
+    event_date: str,
+    hour: str | None,
+    tier: int,
+    company_name: str | None,
+    eps_estimate: float | None,
+    eps_actual: float | None,
+    revenue_estimate: float | None,
+    revenue_actual: float | None,
+    move_pct: float | None = None,
+    move_label: str | None = None,
+) -> bool:
+    """
+    Mark a TickTick task as reported: prepend "[REPORTED]" to the title and
+    embed actuals (beat/miss) in the content.
+
+    The task lives in the quarterly list keyed on (event_date, tier), so we
+    look up the list ID by name rather than tracking it in the DB.
+    """
+    list_name = _quarter_list_name(event_date, tier)
+    try:
+        list_id = find_or_create_list(token, list_name)
+    except TickTickTokenExpired:
+        raise
+    if not list_id:
+        logger.warning(f"  Could not resolve TickTick list '{list_name}' — task {task_id} not updated")
+        return False
+
+    new_title = "[REPORTED] " + build_task_title(ticker, event_date, hour)
+    new_content = build_task_content(
+        ticker=ticker,
+        hour=hour,
+        eps_estimate=eps_estimate,
+        revenue_estimate=revenue_estimate,
+        eps_actual=eps_actual,
+        revenue_actual=revenue_actual,
+        company_name=company_name,
+        tier=tier,
+    )
+    if move_pct is not None:
+        sign = "+" if move_pct >= 0 else ""
+        suffix = f"\nStock reaction: {sign}{move_pct:.1f}%"
+        if move_label:
+            suffix += f" ({move_label})"
+        new_content += suffix
+
+    return update_task_content(token, list_id, task_id, new_content, new_title=new_title)
 
 
 # ---------------------------------------------------------------------------
