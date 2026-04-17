@@ -36,8 +36,15 @@ COVERAGE_MANAGER_PATH = os.getenv(
 # Timezone
 TIMEZONE = os.getenv("TIMEZONE", "America/New_York")
 
+# Notifications
+SLACK_WEBHOOK_EARNINGS = os.getenv("SLACK_WEBHOOK_EARNINGS")
+EMAIL_TO = os.getenv("EMAIL_TO")
+
 # Database
 DB_PATH = Path(__file__).parent / "earnings_events.db"
+
+# Where --weekly-digest writes rendered HTML for Gmail MCP drafting
+DIGEST_HTML_PATH = Path(__file__).parent / "last_digest.html"
 
 # Legacy tickers file (fallback only — Coverage Manager is preferred)
 TICKERS_FILE = Path(__file__).parent / "tickers.txt"

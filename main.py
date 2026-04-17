@@ -14,7 +14,12 @@ import argparse
 import logging
 from datetime import date, timedelta
 
-from config import GOOGLE_CALENDAR_ID, FINNHUB_API_KEY
+from config import (
+    GOOGLE_CALENDAR_ID,
+    FINNHUB_API_KEY,
+    SLACK_WEBHOOK_EARNINGS,
+    DIGEST_HTML_PATH,
+)
 from coverage import load_coverage, get_tickers_by_tier, get_ticker_info, TickerInfo
 from storage import (
     init_db,
@@ -36,6 +41,15 @@ from calendar_sync import (
     CalendarError,
 )
 from ticktick import sync_ticktick_tasks, get_ticktick_config, show_ticktick_status
+from digest import build_weekly_digest
+from notifications import (
+    build_slack_blocks,
+    build_slack_fallback_text,
+    build_email_html,
+    build_email_text,
+    post_slack,
+    NotificationError,
+)
 
 logger = logging.getLogger("earnings_agent")
 
@@ -322,6 +336,64 @@ def run(dry_run: bool = False, backfill: bool = False, skip_ticktick: bool = Fal
 
 
 # ---------------------------------------------------------------------------
+# Weekly digest
+# ---------------------------------------------------------------------------
+
+
+def run_weekly_digest(dry_run: bool = False):
+    """Assemble the weekly digest, post to Slack, and write HTML for email drafting."""
+    coverage = load_coverage()
+    if not coverage:
+        logger.error("No tickers loaded. Cannot build digest.")
+        sys.exit(1)
+
+    conn = init_db()
+    digest = build_weekly_digest(conn, coverage)
+    conn.close()
+
+    blocks = build_slack_blocks(digest)
+    fallback = build_slack_fallback_text(digest)
+    html_body = build_email_html(digest)
+    text_body = build_email_text(digest)
+
+    # Write HTML + plaintext for Gmail MCP drafting
+    DIGEST_HTML_PATH.write_text(html_body, encoding="utf-8")
+    text_path = DIGEST_HTML_PATH.with_suffix(".txt")
+    text_path.write_text(text_body, encoding="utf-8")
+    logger.info(f"Digest HTML written to {DIGEST_HTML_PATH}")
+    logger.info(f"Digest plaintext written to {text_path}")
+
+    if dry_run:
+        logger.info("=" * 50)
+        logger.info("DRY RUN — Slack payload preview:")
+        logger.info(fallback)
+        for block in blocks:
+            if block.get("type") == "section":
+                logger.info(f"  [section] {block['text']['text'][:200]}")
+            elif block.get("type") == "header":
+                logger.info(f"  [header] {block['text']['text']}")
+            elif block.get("type") == "context":
+                for el in block.get("elements", []):
+                    logger.info(f"  [context] {el.get('text', '')[:200]}")
+            elif block.get("type") == "divider":
+                logger.info("  [divider]")
+        logger.info("=" * 50)
+        logger.info("(Dry run — no Slack post, no email draft created)")
+        return
+
+    if not SLACK_WEBHOOK_EARNINGS:
+        logger.warning("SLACK_WEBHOOK_EARNINGS not set — skipping Slack post.")
+    else:
+        try:
+            post_slack(SLACK_WEBHOOK_EARNINGS, blocks, fallback)
+        except NotificationError as exc:
+            logger.error(f"Slack digest post failed: {exc}")
+
+    logger.info("Weekly digest complete. Run Gmail MCP draft creation "
+                f"using content from {DIGEST_HTML_PATH}")
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
@@ -355,6 +427,11 @@ def main():
         action="store_true",
         help="Show TickTick earnings review queue status",
     )
+    parser.add_argument(
+        "--weekly-digest",
+        action="store_true",
+        help="Build and send the weekly earnings digest (Slack + email HTML for MCP draft)",
+    )
     args = parser.parse_args()
 
     if args.ticktick_status:
@@ -363,6 +440,8 @@ def main():
             logger.error("TickTick not configured. Set TICKTICK_ACCESS_TOKEN in .env")
             sys.exit(1)
         show_ticktick_status(config["token"])
+    elif args.weekly_digest:
+        run_weekly_digest(dry_run=args.dry_run)
     elif args.cleanup:
         conn = init_db()
         cleanup_duplicates(conn, dry_run=args.dry_run)

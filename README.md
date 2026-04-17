@@ -80,21 +80,39 @@ python main.py --ticktick-status
 python main.py --cleanup
 ```
 
-## Deploy on GitHub Actions (Free Daily Runs)
+## Deploy on GitHub Actions
 
-This is the recommended way to run the agent automatically.
+Two workflows ship in `.github/workflows/`:
+
+- **`daily_earnings_check.yml`** — daily calendar sync at ~6 AM ET
+- **`weekly_digest.yml`** — Sunday ~noon ET Slack digest post
+
+Both workflows clone the public [Coverage-Manager](https://github.com/jroypeterson/Coverage-Manager) repo (sparse checkout of `exports/`) so the agent gets full tier and sector data in CI.
 
 In your repo → Settings → Secrets and variables → Actions, add:
 
 **Secrets** (encrypted):
-| Name | Value |
-|------|-------|
-| `FINNHUB_API_KEY` | Your Finnhub API key |
-| `GOOGLE_CALENDAR_ID` | Your calendar ID |
-| `GOOGLE_CREDENTIALS_JSON` | Entire contents of your `credentials.json` file |
-| `TICKTICK_ACCESS_TOKEN` | TickTick OAuth token (optional) |
+| Name | Used by | Value |
+|------|---------|-------|
+| `FINNHUB_API_KEY` | both | Your Finnhub API key |
+| `GOOGLE_CALENDAR_ID` | both | Your calendar ID |
+| `GOOGLE_CREDENTIALS_JSON` | daily | Entire contents of `credentials.json` |
+| `TICKTICK_ACCESS_TOKEN` | daily | TickTick OAuth token (optional) |
+| `SLACK_WEBHOOK_EARNINGS` | weekly | Slack incoming webhook for `#earnings` |
 
-Go to repo → Actions tab → enable workflows. The agent will run daily at ~6 AM ET.
+Then go to repo → Actions tab → enable workflows.
+
+> **Email drafts** are not created in CI (they need Gmail MCP, which runs locally). The weekly workflow uploads `last_digest.html` as an artifact so you can paste-to-email if you want. For a Gmail draft, run `python main.py --weekly-digest` locally and use the Gmail MCP draft flow.
+
+## Local scheduling (alternative)
+
+If you'd rather run the weekly digest from your local machine, `weekly_digest.bat` wraps `python main.py --weekly-digest` for Windows Task Scheduler. Setup:
+
+1. Task Scheduler → **Create Basic Task**
+2. Trigger: Weekly, Sundays at 12:00 PM
+3. Action: Start a program → `weekly_digest.bat` in this directory
+
+Logs land in `logs\weekly_digest_YYYYMMDD.log`.
 ## Project Structure
 
 ```
@@ -106,6 +124,9 @@ earnings_agent/
 ├── finnhub_client.py    # Finnhub API with retry + exponential backoff
 ├── calendar_sync.py     # Google Calendar operations with pagination
 ├── ticktick.py          # TickTick list/task management
+├── digest.py            # Weekly digest query + grouping + clustering
+├── notifications.py     # Slack webhook + email HTML/plaintext rendering
+├── weekly_digest.bat    # Windows Task Scheduler wrapper for the weekly digest
 ├── earnings_agent.py    # Legacy entry point (delegates to main.py)
 ├── test_dedup.py        # Test suite (13 tests)
 ├── requirements.txt
@@ -130,7 +151,7 @@ The TickTick access token expires ~every 180 days. When it expires, the system d
 See `PLAN.md` for the full 7-phase roadmap. Completed:
 - [x] Phase 1: Foundation (modularize, Coverage Manager sync, retry logic)
 - [x] Phase 2: TickTick integration (quarterly lists, review tasks)
-- [ ] Phase 3: Weekly digest (Slack + email)
+- [x] Phase 3: Weekly digest (Slack + Gmail MCP draft)
 - [ ] Phase 4: Post-earnings alerts (T+0 beat/miss, T+1 close-loop)
 - [ ] Phase 5: Pre-earnings briefs (T-1 enriched context)
 - [ ] Phase 6: Prediction tracking + accuracy analysis

@@ -4,3 +4,7 @@ credentials.json
 __pycache__/
 *.pyc
 .DS_Store
+.claude/
+logs/
+last_digest.html
+last_digest.txt

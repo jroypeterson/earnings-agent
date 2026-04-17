@@ -1,0 +1,66 @@
+# Weekly Earnings Digest
+#
+# Runs every Sunday at 12:00 PM ET (16:00 UTC in EST, 17:00 UTC in EDT).
+# We pick 16:00 UTC so the digest fires at noon ET during standard time and
+# 1 PM ET during daylight time — close enough for a weekly cadence.
+#
+# Posts the week-ahead digest to Slack. The email draft is produced locally
+# via Gmail MCP; CI writes last_digest.html as an artifact for reference.
+
+name: Weekly Earnings Digest
+
+on:
+  schedule:
+    - cron: "0 16 * * 0"
+  workflow_dispatch:
+
+jobs:
+  weekly-digest:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout earnings-agent
+        uses: actions/checkout@v4
+
+      - name: Checkout Coverage Manager exports
+        uses: actions/checkout@v4
+        with:
+          repository: jroypeterson/Coverage-Manager
+          path: coverage-manager
+          sparse-checkout: |
+            exports
+          sparse-checkout-cone-mode: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Restore earnings database
+        uses: actions/download-artifact@v4
+        with:
+          name: earnings-db
+          path: .
+        continue-on-error: true
+
+      - name: Run weekly digest
+        env:
+          FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
+          GOOGLE_CALENDAR_ID: ${{ secrets.GOOGLE_CALENDAR_ID }}
+          COVERAGE_MANAGER_PATH: ${{ github.workspace }}/coverage-manager
+          SLACK_WEBHOOK_EARNINGS: ${{ secrets.SLACK_WEBHOOK_EARNINGS }}
+        run: python main.py --weekly-digest
+
+      - name: Upload digest HTML artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: weekly-digest-html
+          path: |
+            last_digest.html
+            last_digest.txt
+          retention-days: 30

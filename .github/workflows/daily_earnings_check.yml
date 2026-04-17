@@ -16,8 +16,19 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repo
+      - name: Checkout earnings-agent
         uses: actions/checkout@v4
+
+      # Coverage Manager is public — clone its exports so the agent gets
+      # tier and sector data instead of falling back to legacy mode.
+      - name: Checkout Coverage Manager exports
+        uses: actions/checkout@v4
+        with:
+          repository: jroypeterson/Coverage-Manager
+          path: coverage-manager
+          sparse-checkout: |
+            exports
+          sparse-checkout-cone-mode: false
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -45,8 +56,10 @@ jobs:
           FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
           GOOGLE_CALENDAR_ID: ${{ secrets.GOOGLE_CALENDAR_ID }}
           GOOGLE_CREDENTIALS_PATH: credentials.json
-          TICKERS: ${{ vars.TICKERS }}  # Stored as a GitHub Actions variable (not secret)
-        run: python earnings_agent.py
+          COVERAGE_MANAGER_PATH: ${{ github.workspace }}/coverage-manager
+          TICKTICK_ACCESS_TOKEN: ${{ secrets.TICKTICK_ACCESS_TOKEN }}
+          TICKERS: ${{ vars.TICKERS }}  # Legacy fallback
+        run: python main.py
 
       # Persist the SQLite DB for next run
       - name: Save earnings database
