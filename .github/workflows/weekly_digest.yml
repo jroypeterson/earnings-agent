@@ -40,12 +40,15 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Restore earnings database
-        uses: actions/download-artifact@v4
-        with:
-          name: earnings-db
-          path: .
-        continue-on-error: true
+      # Populate a fresh SQLite DB from Finnhub before the digest runs.
+      # --dry-run skips calendar writes, --no-ticktick skips task creation —
+      # we only need the events table populated for the digest query.
+      - name: Populate events from Finnhub
+        env:
+          FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
+          GOOGLE_CALENDAR_ID: ${{ secrets.GOOGLE_CALENDAR_ID }}
+          COVERAGE_MANAGER_PATH: ${{ github.workspace }}/coverage-manager
+        run: python main.py --dry-run --no-ticktick
 
       - name: Run weekly digest
         env:
