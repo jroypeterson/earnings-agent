@@ -72,54 +72,53 @@ def _fmt_estimate_rev(rev: float | None) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _slack_tier1_block(rows: list[EventRow]) -> dict | None:
+# Order timing buckets chronologically within a trading day.
+_TIMING_ORDER = {"bmo": 0, "dmh": 1, "amc": 2}
+
+
+def _timing_sort_key(hour: str | None) -> int:
+    if not hour:
+        return 99  # TBD / unknown last
+    return _TIMING_ORDER.get(hour.lower(), 50)
+
+
+def _row_line(r: EventRow, show_company: bool) -> str:
+    """Render a single event as '{timing}: {ticker} ({company}) — EPS X, Rev Y'."""
+    est_parts = []
+    if r.eps_estimate is not None:
+        est_parts.append(f"EPS {_fmt_estimate_eps(r.eps_estimate)}")
+    if r.rev_estimate is not None:
+        est_parts.append(f"Rev {_fmt_estimate_rev(r.rev_estimate)}")
+    est_str = f" — {', '.join(est_parts)}" if est_parts else ""
+    name = f" ({r.company_name})" if show_company and r.company_name else ""
+    return f"  {_timing_short(r.event_hour)}: `{r.ticker}`{name}{est_str}"
+
+
+def _slack_tier_block(
+    label: str, rows: list[EventRow], show_company: bool = True
+) -> dict | None:
+    """Render a tier section grouped by day, timing-ordered within each day."""
     if not rows:
         return None
-    lines = [f"*Core Watchlist ({len(rows)})*"]
+
+    # Bucket by event_date
+    by_date: dict[str, list[EventRow]] = {}
     for r in rows:
-        est_parts = []
-        if r.eps_estimate is not None:
-            est_parts.append(f"EPS {_fmt_estimate_eps(r.eps_estimate)}")
-        if r.rev_estimate is not None:
-            est_parts.append(f"Rev {_fmt_estimate_rev(r.rev_estimate)}")
-        est_str = f" — {', '.join(est_parts)}" if est_parts else ""
-        name = f" ({r.company_name})" if r.company_name else ""
-        lines.append(
-            f"• `{r.ticker}`{name} · {_fmt_date_safe(r.event_date)} "
-            f"{_timing_short(r.event_hour)}{est_str}"
+        by_date.setdefault(r.event_date, []).append(r)
+
+    lines = [f"*{label} ({len(rows)})*"]
+    for iso_date in sorted(by_date.keys()):
+        day_rows = sorted(
+            by_date[iso_date],
+            key=lambda r: (_timing_sort_key(r.event_hour), r.ticker),
         )
+        lines.append(f"_{_fmt_date_safe(iso_date)}_")
+        for r in day_rows:
+            lines.append(_row_line(r, show_company=show_company))
+
     return {
         "type": "section",
         "text": {"type": "mrkdwn", "text": "\n".join(lines)[:3000]},
-    }
-
-
-def _slack_tier2_block(rows: list[EventRow]) -> dict | None:
-    if not rows:
-        return None
-    lines = [f"*HC Services + MedTech ({len(rows)})*"]
-    for r in rows:
-        est = ""
-        if r.eps_estimate is not None:
-            est = f" · EPS {_fmt_estimate_eps(r.eps_estimate)}"
-        lines.append(
-            f"• `{r.ticker}` · {_fmt_date_safe(r.event_date)} "
-            f"{_timing_short(r.event_hour)}{est}"
-        )
-    return {
-        "type": "section",
-        "text": {"type": "mrkdwn", "text": "\n".join(lines)[:3000]},
-    }
-
-
-def _slack_tier3_block(rows: list[EventRow]) -> dict | None:
-    if not rows:
-        return None
-    tickers = ", ".join(f"`{r.ticker}`" for r in rows)
-    text = f"*Other ({len(rows)})* — {tickers}"
-    return {
-        "type": "section",
-        "text": {"type": "mrkdwn", "text": text[:3000]},
     }
 
 
@@ -168,9 +167,9 @@ def build_slack_blocks(digest: DigestData) -> list[dict]:
     ]
 
     for block in (
-        _slack_tier1_block(digest.tier1_week),
-        _slack_tier2_block(digest.tier2_week),
-        _slack_tier3_block(digest.tier3_week),
+        _slack_tier_block("Core Watchlist", digest.tier1_week, show_company=True),
+        _slack_tier_block("HC Services + MedTech", digest.tier2_week, show_company=True),
+        _slack_tier_block("Other", digest.tier3_week, show_company=True),
     ):
         if block:
             blocks.append(block)
