@@ -152,7 +152,7 @@ See `PLAN.md` for the full 7-phase roadmap. Completed:
 - [x] Phase 1: Foundation (modularize, Coverage Manager sync, retry logic)
 - [x] Phase 2: TickTick integration (quarterly lists, review tasks)
 - [x] Phase 3: Weekly digest (Slack + Gmail MCP draft)
-- [ ] Phase 4: Post-earnings alerts (T+0 beat/miss, T+1 close-loop)
+- [x] Phase 4: Post-earnings alerts (T+0 Slack + TickTick close-loop)
 - [ ] Phase 5: Pre-earnings briefs (T-1 enriched context)
 - [ ] Phase 6: Prediction tracking + accuracy analysis
 - [ ] Phase 7: Reconcile mode + hardening
