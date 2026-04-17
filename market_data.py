@@ -11,10 +11,20 @@ from __future__ import annotations
 import io
 import logging
 from contextlib import redirect_stderr, redirect_stdout
+from dataclasses import dataclass
+from datetime import date, timedelta
 
 import yfinance as yf
 
 logger = logging.getLogger("earnings_agent")
+
+
+@dataclass
+class PostEarningsMove:
+    move_pct: float
+    # Short human-readable label describing what the move represents, e.g.
+    # "close vs prior close" or "next-day close vs earnings-day close".
+    window_label: str
 
 
 def fetch_ytd_performance(tickers: list[str]) -> dict[str, float | None]:
@@ -74,3 +84,87 @@ def fetch_ytd_performance(tickers: list[str]) -> dict[str, float | None]:
         logger.info(f"YTD missing for {len(missing)} tickers: {', '.join(missing[:8])}"
                     + ("..." if len(missing) > 8 else ""))
     return result
+
+
+def fetch_post_earnings_move(
+    ticker: str, earnings_date: str, timing: str | None
+) -> PostEarningsMove | None:
+    """
+    Compute the post-earnings stock reaction for a ticker.
+
+    BMO / DMH / unknown: move = close(earnings_date) / close(prior trading day) - 1
+        → captures the day-of reaction to a pre-market or intraday announcement.
+    AMC: move = close(next trading day) / close(earnings_date) - 1
+        → AMC reports land after close; the reaction is the next day.
+
+    Returns None if we don't yet have the closing prices needed (e.g. running
+    the check the same evening as an AMC report — next-day data doesn't exist
+    yet).
+    """
+    try:
+        ed = date.fromisoformat(earnings_date)
+    except ValueError:
+        return None
+
+    # Pull a window wide enough to cover weekends/holidays either side.
+    start = ed - timedelta(days=10)
+    end = ed + timedelta(days=10)
+
+    buf_out, buf_err = io.StringIO(), io.StringIO()
+    try:
+        with redirect_stdout(buf_out), redirect_stderr(buf_err):
+            hist = yf.Ticker(ticker).history(
+                start=start.isoformat(),
+                end=end.isoformat(),
+                auto_adjust=True,
+            )
+    except Exception as exc:
+        logger.debug(f"post-earnings move fetch failed for {ticker}: {exc}")
+        return None
+
+    if hist is None or hist.empty:
+        return None
+
+    closes = hist["Close"].dropna()
+    if closes.empty:
+        return None
+
+    # Normalize index to date objects for comparison.
+    idx_dates = [d.date() for d in closes.index.to_pydatetime()]
+
+    def _find_on_or_before(target: date) -> tuple[date, float] | None:
+        for d, px in sorted(zip(idx_dates, closes.values), reverse=True):
+            if d <= target:
+                return d, float(px)
+        return None
+
+    def _find_on_or_after(target: date) -> tuple[date, float] | None:
+        for d, px in zip(idx_dates, closes.values):
+            if d >= target:
+                return d, float(px)
+        return None
+
+    timing_l = (timing or "").lower()
+
+    if timing_l == "amc":
+        ref = _find_on_or_before(ed)
+        post = _find_on_or_after(ed + timedelta(days=1))
+        if not ref or not post or post[0] == ref[0]:
+            return None
+        ref_px, post_px = ref[1], post[1]
+        window_label = "next-day close vs earnings-day close"
+    else:
+        # BMO, DMH, or unknown timing
+        post = _find_on_or_after(ed)
+        if not post:
+            return None
+        ref = _find_on_or_before(post[0] - timedelta(days=1))
+        if not ref:
+            return None
+        ref_px, post_px = ref[1], post[1]
+        window_label = "earnings-day close vs prior close"
+
+    if ref_px == 0:
+        return None
+    move_pct = (post_px - ref_px) / ref_px * 100
+    return PostEarningsMove(move_pct=move_pct, window_label=window_label)

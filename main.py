@@ -47,9 +47,13 @@ from notifications import (
     build_slack_fallback_text,
     build_email_html,
     build_email_text,
+    build_results_slack_blocks,
+    build_results_fallback_text,
     post_slack,
     NotificationError,
+    ResultRow,
 )
+from market_data import fetch_post_earnings_move
 
 logger = logging.getLogger("earnings_agent")
 
@@ -394,6 +398,198 @@ def run_weekly_digest(dry_run: bool = False):
 
 
 # ---------------------------------------------------------------------------
+# Post-earnings results check
+# ---------------------------------------------------------------------------
+
+
+def run_check_results(target_date: str | None = None, dry_run: bool = False):
+    """
+    Detect newly-reported earnings for a specific date and alert to Slack.
+
+    Queries Finnhub for the target date, compares to DB state, and for any
+    events with actuals that aren't yet marked reported=1, computes beat/miss,
+    fetches the post-earnings stock move, posts a consolidated Slack message,
+    updates the Calendar event description (Tier 1+2), and marks DB reported=1.
+    """
+    target = date.fromisoformat(target_date) if target_date else date.today()
+    target_iso = target.isoformat()
+
+    coverage = load_coverage()
+    if not coverage:
+        logger.error("No tickers loaded. Cannot check results.")
+        sys.exit(1)
+    coverage_map = {t.ticker: t for t in coverage}
+    all_tickers = [t.ticker for t in coverage]
+
+    if not FINNHUB_API_KEY:
+        logger.error("FINNHUB_API_KEY missing.")
+        sys.exit(1)
+
+    try:
+        fh_client = get_finnhub_client()
+    except FinnhubError as exc:
+        logger.error(f"Failed to initialize Finnhub client: {exc}")
+        sys.exit(1)
+
+    conn = init_db()
+
+    cal_service = None
+    if not dry_run and GOOGLE_CALENDAR_ID:
+        try:
+            cal_service = get_calendar_service()
+        except Exception as exc:
+            logger.warning(f"Calendar service unavailable, skipping calendar updates: {exc}")
+
+    # fetch_earnings iterates `while start < end`, so a single-day range returns nothing.
+    # Query one day beyond the target and filter client-side.
+    to_iso = (target + timedelta(days=1)).isoformat()
+    earnings = [
+        e for e in fetch_earnings(fh_client, all_tickers, target_iso, to_iso)
+        if e.get("date") == target_iso
+    ]
+    logger.info(f"Finnhub returned {len(earnings)} earnings entries for {target_iso}")
+
+    new_results: list[ResultRow] = []
+    skipped_no_actuals = 0
+    skipped_already_reported = 0
+
+    for e in earnings:
+        ticker = e["symbol"].upper()
+        eps_act = e.get("epsActual")
+        rev_act = e.get("revenueActual")
+        has_actuals = eps_act is not None or rev_act is not None
+        if not has_actuals:
+            skipped_no_actuals += 1
+            continue
+
+        event_date = e["date"]
+        existing = find_existing_event(conn, ticker, event_date)
+        if existing and existing.get("reported"):
+            skipped_already_reported += 1
+            continue
+
+        info = coverage_map.get(ticker)
+        tier = info.tier if info else (existing.get("tier", 3) if existing else 3)
+        company_name = (info.company_name if info else "") or (
+            existing.get("company_name") if existing else ""
+        )
+        hour = (existing.get("event_hour") if existing else None) or e.get("hour")
+        eps_est = e.get("epsEstimate")
+        if eps_est is None and existing:
+            eps_est = existing.get("eps_estimate")
+        rev_est = e.get("revenueEstimate")
+        if rev_est is None and existing:
+            rev_est = existing.get("rev_estimate")
+
+        move = fetch_post_earnings_move(ticker, event_date, hour)
+
+        result = ResultRow(
+            ticker=ticker,
+            company_name=company_name or "",
+            event_date=event_date,
+            event_hour=hour,
+            eps_actual=eps_act,
+            eps_estimate=eps_est,
+            rev_actual=rev_act,
+            rev_estimate=rev_est,
+            tier=tier,
+            move=move,
+        )
+        new_results.append(result)
+
+        # Update Calendar description for Tier 1/2 events with an existing calendar event
+        gcal_id = existing.get("gcal_id") if existing else None
+        if tier <= 2 and gcal_id and cal_service:
+            try:
+                new_summary = f"[REPORTED] {ticker} Earnings Release"
+                new_description = build_description(
+                    ticker, hour, eps_est, eps_act, rev_est, rev_act
+                )
+                update_calendar_event_description(
+                    cal_service, GOOGLE_CALENDAR_ID, gcal_id,
+                    new_summary, new_description,
+                    ticker=ticker,
+                    quarter=(existing.get("quarter") if existing else None)
+                            or date_to_quarter(event_date),
+                    source_fingerprint=f"{ticker}:{event_date}",
+                    tier=tier,
+                )
+                logger.info(f"Calendar updated with actuals for {ticker}")
+            except CalendarError as exc:
+                logger.error(f"Failed to update calendar for {ticker}: {exc}")
+
+    logger.info(
+        f"Results scan complete: {len(new_results)} new, "
+        f"{skipped_already_reported} already reported, "
+        f"{skipped_no_actuals} pending actuals"
+    )
+
+    if not new_results:
+        logger.info(f"No new reported results for {target_iso}")
+        conn.close()
+        return
+
+    # Build + post Slack
+    blocks = build_results_slack_blocks(new_results, target)
+    fallback = build_results_fallback_text(new_results, target)
+
+    if dry_run:
+        logger.info("=" * 50)
+        logger.info("DRY RUN — Results Slack preview:")
+        logger.info(fallback)
+        for block in blocks:
+            btype = block.get("type")
+            if btype == "section":
+                logger.info(f"  [section] {block['text']['text'][:400]}")
+            elif btype == "header":
+                logger.info(f"  [header] {block['text']['text']}")
+            elif btype == "context":
+                for el in block.get("elements", []):
+                    logger.info(f"  [context] {el.get('text', '')}")
+            elif btype == "divider":
+                logger.info("  [divider]")
+        logger.info("=" * 50)
+        logger.info("(Dry run — no Slack post, no DB updates)")
+        conn.close()
+        return
+
+    posted = False
+    if SLACK_WEBHOOK_EARNINGS:
+        try:
+            post_slack(SLACK_WEBHOOK_EARNINGS, blocks, fallback)
+            posted = True
+        except NotificationError as exc:
+            logger.error(f"Slack results post failed: {exc}")
+    else:
+        logger.warning("SLACK_WEBHOOK_EARNINGS not set — skipping Slack post.")
+
+    # Only mark reported=True after Slack has been handled (or skipped explicitly
+    # because the webhook isn't configured). If the post raises, we keep the
+    # records unmarked so the next run retries.
+    if posted or not SLACK_WEBHOOK_EARNINGS:
+        for r in new_results:
+            existing = find_existing_event(conn, r.ticker, r.event_date)
+            upsert_event(
+                conn,
+                r.ticker,
+                r.event_date,
+                r.event_hour,
+                existing.get("gcal_id") if existing else None,
+                quarter=existing.get("quarter") if existing else date_to_quarter(r.event_date),
+                eps_estimate=r.eps_estimate,
+                eps_actual=r.eps_actual,
+                rev_estimate=r.rev_estimate,
+                rev_actual=r.rev_actual,
+                reported=True,
+                tier=r.tier,
+                company_name=r.company_name,
+            )
+        logger.info(f"Marked {len(new_results)} results as reported in DB")
+
+    conn.close()
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
@@ -432,6 +628,17 @@ def main():
         action="store_true",
         help="Build and send the weekly earnings digest (Slack + email HTML for MCP draft)",
     )
+    parser.add_argument(
+        "--check-results",
+        action="store_true",
+        help="Check for newly-reported earnings on --date (default: today); post results to Slack",
+    )
+    parser.add_argument(
+        "--date",
+        type=str,
+        default=None,
+        help="Target date (YYYY-MM-DD) for --check-results. Defaults to today.",
+    )
     args = parser.parse_args()
 
     if args.ticktick_status:
@@ -442,6 +649,8 @@ def main():
         show_ticktick_status(config["token"])
     elif args.weekly_digest:
         run_weekly_digest(dry_run=args.dry_run)
+    elif args.check_results:
+        run_check_results(target_date=args.date, dry_run=args.dry_run)
     elif args.cleanup:
         conn = init_db()
         cleanup_duplicates(conn, dry_run=args.dry_run)

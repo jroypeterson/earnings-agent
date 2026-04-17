@@ -11,11 +11,27 @@ from __future__ import annotations
 import html
 import json
 import logging
+from dataclasses import dataclass
 from datetime import date
 
 import requests
 
 from digest import DigestData, EventRow
+from market_data import PostEarningsMove
+
+
+@dataclass
+class ResultRow:
+    ticker: str
+    company_name: str
+    event_date: str
+    event_hour: str | None
+    eps_actual: float | None
+    eps_estimate: float | None
+    rev_actual: float | None
+    rev_estimate: float | None
+    tier: int
+    move: PostEarningsMove | None = None
 
 logger = logging.getLogger("earnings_agent")
 
@@ -346,4 +362,109 @@ def build_slack_fallback_text(digest: DigestData) -> str:
         f"Earnings week of {_fmt_date_safe(digest.week_start.isoformat())}: "
         f"{digest.week_count} releases "
         f"({len(digest.tier1_week)} Tier 1, {len(digest.tier2_week)} Tier 2)"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Post-earnings results
+# ---------------------------------------------------------------------------
+
+
+def _beat_miss_pct(actual: float | None, estimate: float | None) -> float | None:
+    if actual is None or estimate is None or estimate == 0:
+        return None
+    return (actual - estimate) / abs(estimate) * 100
+
+
+def _fmt_beat_miss(actual: float | None, estimate: float | None) -> str:
+    pct = _beat_miss_pct(actual, estimate)
+    if pct is None:
+        return "–"
+    label = "beat" if pct >= 0 else "miss"
+    if pct < 0:
+        return f"({abs(pct):.1f}%) {label}"
+    return f"+{pct:.1f}% {label}"
+
+
+def _fmt_actual_vs_estimate_eps(actual: float | None, estimate: float | None) -> str:
+    if actual is None and estimate is None:
+        return "EPS –"
+    a = _fmt_estimate_eps(actual) if actual is not None else "–"
+    e = _fmt_estimate_eps(estimate) if estimate is not None else "–"
+    return f"EPS {a} vs {e} est · {_fmt_beat_miss(actual, estimate)}"
+
+
+def _fmt_actual_vs_estimate_rev(actual: float | None, estimate: float | None) -> str:
+    if actual is None and estimate is None:
+        return "Rev –"
+    a = _fmt_estimate_rev(actual) if actual is not None else "–"
+    e = _fmt_estimate_rev(estimate) if estimate is not None else "–"
+    return f"Rev {a} vs {e} est · {_fmt_beat_miss(actual, estimate)}"
+
+
+def _fmt_move(move: PostEarningsMove | None) -> str:
+    if move is None:
+        return "Stock: reaction pending"
+    if move.move_pct < 0:
+        pct_str = f"({abs(move.move_pct):.1f}%)"
+    else:
+        pct_str = f"+{move.move_pct:.1f}%"
+    return f"Stock: {pct_str} ({move.window_label})"
+
+
+def _results_tier_label(tier: int) -> str:
+    return {1: "Core Watchlist", 2: "HC Services + MedTech"}.get(tier, "Other")
+
+
+def _results_result_block(r: ResultRow) -> dict:
+    header = f"*`{r.ticker}`*"
+    if r.company_name:
+        header += f" · {r.company_name}"
+    header += f"  _{_results_tier_label(r.tier)}_"
+
+    lines = [
+        header,
+        _fmt_actual_vs_estimate_eps(r.eps_actual, r.eps_estimate),
+        _fmt_actual_vs_estimate_rev(r.rev_actual, r.rev_estimate),
+        _fmt_move(r.move),
+    ]
+    return {
+        "type": "section",
+        "text": {"type": "mrkdwn", "text": "\n".join(lines)[:3000]},
+    }
+
+
+def build_results_slack_blocks(results: list[ResultRow], as_of: date) -> list[dict]:
+    header_text = f"Earnings Results — {_fmt_date_safe(as_of.isoformat())}"
+    blocks: list[dict] = [
+        {"type": "header", "text": {"type": "plain_text", "text": header_text[:150]}},
+        {
+            "type": "context",
+            "elements": [
+                {
+                    "type": "mrkdwn",
+                    "text": f"{len(results)} reported",
+                }
+            ],
+        },
+        {"type": "divider"},
+    ]
+    # Sort: Tier 1 first, then Tier 2, then alpha by ticker
+    ordered = sorted(results, key=lambda r: (r.tier, r.ticker))
+    for r in ordered:
+        blocks.append(_results_result_block(r))
+        if len(blocks) >= SLACK_MAX_BLOCKS:
+            break
+    return blocks
+
+
+def build_results_fallback_text(results: list[ResultRow], as_of: date) -> str:
+    beats = sum(
+        1 for r in results
+        if (_beat_miss_pct(r.eps_actual, r.eps_estimate) or 0) >= 0
+    )
+    misses = len(results) - beats
+    return (
+        f"Earnings results {_fmt_date_safe(as_of.isoformat())}: "
+        f"{len(results)} reported ({beats} beat, {misses} miss on EPS)"
     )
