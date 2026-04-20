@@ -603,6 +603,12 @@ class DisagreementRow:
     finnhub_date: str
     yf_dates: list  # list[date] from yfinance
     tier: int
+    # EDGAR signal: prior-year same-quarter 2.02 filing date, and the
+    # signed offsets of the finnhub/yfinance candidates from that
+    # anniversary (negative = target is earlier than anniversary).
+    edgar_ref_date: str | None = None
+    edgar_finnhub_offset: int | None = None
+    edgar_yf_offset: int | None = None
 
 
 def _fmt_yf_dates(yf_dates: list) -> str:
@@ -615,14 +621,47 @@ def _fmt_yf_dates(yf_dates: list) -> str:
     return f"{_fmt_date_safe(lo.isoformat())}–{_fmt_date_safe(hi.isoformat())}"
 
 
+def _fmt_offset(n: int | None) -> str:
+    if n is None:
+        return "–"
+    return f"{'+' if n >= 0 else ''}{n}d"
+
+
 def _disagreement_lines(rows: list[DisagreementRow]) -> str:
     lines = []
     for r in sorted(rows, key=lambda x: (x.finnhub_date, x.ticker)):
         co = f" — {r.company_name}" if r.company_name else ""
-        lines.append(
+        base = (
             f"• `{r.ticker}`{co}: Finnhub {_fmt_date_safe(r.finnhub_date)} "
             f"·  yfinance {_fmt_yf_dates(r.yf_dates)}"
         )
+        if r.edgar_ref_date:
+            # Which candidate is closer to last year's same-Q anniversary?
+            fh_abs = (
+                abs(r.edgar_finnhub_offset)
+                if r.edgar_finnhub_offset is not None
+                else None
+            )
+            yf_abs = (
+                abs(r.edgar_yf_offset)
+                if r.edgar_yf_offset is not None
+                else None
+            )
+            leader = ""
+            if fh_abs is not None and yf_abs is not None:
+                if fh_abs < yf_abs:
+                    leader = "  →  Finnhub closer to cadence"
+                elif yf_abs < fh_abs:
+                    leader = "  →  yfinance closer to cadence"
+                else:
+                    leader = "  →  equal distance"
+            lines.append(
+                f"{base}\n   _EDGAR: prior-Q release {_fmt_date_safe(r.edgar_ref_date)} "
+                f"· Finnhub {_fmt_offset(r.edgar_finnhub_offset)}"
+                f" · yfinance {_fmt_offset(r.edgar_yf_offset)}{leader}_"
+            )
+        else:
+            lines.append(base)
     return "\n".join(lines)
 
 

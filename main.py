@@ -77,6 +77,7 @@ from notifications import (
     UrgentMoveRow,
 )
 from market_data import fetch_post_earnings_move, fetch_yfinance_earnings_date
+from edgar_client import infer_cadence_signal
 
 logger = logging.getLogger("earnings_agent")
 
@@ -1290,12 +1291,33 @@ def run_cross_check(dry_run: bool = False, days_ahead: int = 14):
             suppressed_count += 1
             continue
 
+        # Enrich with EDGAR cadence signal. Fail silently if EDGAR has no
+        # data — it's a bonus hint, not a blocker.
+        edgar_ref: str | None = None
+        edgar_fh_offset: int | None = None
+        edgar_yf_offset: int | None = None
+        try:
+            sig = infer_cadence_signal(ticker, event_date)
+            if sig:
+                edgar_ref = sig.reference_date
+                edgar_fh_offset = sig.days_from_ref
+                # Re-use same reference by recomputing offset for yfinance
+                yf_primary = min(yf_dates)  # earliest yf candidate
+                sig_yf = infer_cadence_signal(ticker, yf_primary.isoformat())
+                if sig_yf and sig_yf.reference_date == sig.reference_date:
+                    edgar_yf_offset = sig_yf.days_from_ref
+        except Exception as exc:
+            logger.debug(f"EDGAR cadence lookup failed for {ticker}: {exc}")
+
         new_disagreements.append(DisagreementRow(
             ticker=ticker,
             company_name=company_name or "",
             finnhub_date=event_date,
             yf_dates=yf_dates,
             tier=tier,
+            edgar_ref_date=edgar_ref,
+            edgar_finnhub_offset=edgar_fh_offset,
+            edgar_yf_offset=edgar_yf_offset,
         ))
         if not dry_run:
             conn.execute(

@@ -40,6 +40,13 @@ TIMEZONE = os.getenv("TIMEZONE", "America/New_York")
 SLACK_WEBHOOK_EARNINGS = os.getenv("SLACK_WEBHOOK_EARNINGS")
 EMAIL_TO = os.getenv("EMAIL_TO")
 
+# SEC EDGAR fair-access policy requires a User-Agent with contact info.
+# Default uses the repo owner's public email; override via env var if needed.
+SEC_EDGAR_USER_AGENT = os.getenv(
+    "SEC_EDGAR_USER_AGENT",
+    "earnings-agent (jroypeterson@gmail.com)",
+)
+
 # Database
 DB_PATH = Path(__file__).parent / "earnings_events.db"
 

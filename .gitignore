@@ -8,3 +8,4 @@ __pycache__/
 logs/
 last_digest.html
 last_digest.txt
+.ticker_cik_cache.json
