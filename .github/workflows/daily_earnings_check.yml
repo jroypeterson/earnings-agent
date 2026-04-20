@@ -66,8 +66,21 @@ jobs:
           GOOGLE_CREDENTIALS_PATH: credentials.json
           COVERAGE_MANAGER_PATH: ${{ github.workspace }}/coverage-manager
           TICKTICK_ACCESS_TOKEN: ${{ secrets.TICKTICK_ACCESS_TOKEN }}
+          SLACK_WEBHOOK_EARNINGS: ${{ secrets.SLACK_WEBHOOK_EARNINGS }}
           TICKERS: ${{ vars.TICKERS }}  # Legacy fallback
         run: python main.py
+
+      # yfinance cross-check. Alert-only: Finnhub has already been applied
+      # above; this surfaces two-source disagreements to prompt IR
+      # verification. yfinance is scrapy, so do not fail the workflow if
+      # it misbehaves.
+      - name: Cross-check Finnhub vs yfinance (Tier 1/2)
+        continue-on-error: true
+        env:
+          FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
+          COVERAGE_MANAGER_PATH: ${{ github.workspace }}/coverage-manager
+          SLACK_WEBHOOK_EARNINGS: ${{ secrets.SLACK_WEBHOOK_EARNINGS }}
+        run: python main.py --cross-check
 
       # Persist the SQLite DB for next run
       - name: Save earnings database

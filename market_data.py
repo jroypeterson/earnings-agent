@@ -168,3 +168,57 @@ def fetch_post_earnings_move(
         return None
     move_pct = (post_px - ref_px) / ref_px * 100
     return PostEarningsMove(move_pct=move_pct, window_label=window_label)
+
+
+def fetch_yfinance_earnings_date(ticker: str) -> list[date] | None:
+    """
+    Return yfinance's current earnings date(s) for a ticker as a list of
+    date objects. May be a single date or a [start, end] range when
+    yfinance has a window rather than a specific day. Returns None if
+    yfinance has no data or the call fails.
+
+    Used as a cheap sanity check on Finnhub's date. yfinance itself
+    scrapes Yahoo Finance and is imperfect — treat disagreements as
+    "please verify manually", not as an automatic override.
+    """
+    buf_out, buf_err = io.StringIO(), io.StringIO()
+    try:
+        with redirect_stdout(buf_out), redirect_stderr(buf_err):
+            cal = yf.Ticker(ticker).calendar
+    except Exception as exc:
+        logger.debug(f"yfinance calendar fetch failed for {ticker}: {exc}")
+        return None
+
+    if not cal:
+        return None
+
+    # yfinance typically returns a dict; handle DataFrame just in case
+    if isinstance(cal, dict):
+        raw = cal.get("Earnings Date")
+    elif hasattr(cal, "loc") and hasattr(cal, "index"):
+        if "Earnings Date" not in cal.index:
+            return None
+        try:
+            raw = cal.loc["Earnings Date"].values.tolist()
+        except Exception:
+            return None
+    else:
+        return None
+
+    if raw is None:
+        return None
+    if not isinstance(raw, (list, tuple)):
+        raw = [raw]
+
+    result: list[date] = []
+    for d in raw:
+        if isinstance(d, date):
+            result.append(d)
+        elif hasattr(d, "date"):
+            result.append(d.date())
+        else:
+            try:
+                result.append(date.fromisoformat(str(d)[:10]))
+            except (ValueError, TypeError):
+                continue
+    return result or None

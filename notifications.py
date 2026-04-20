@@ -538,6 +538,86 @@ def build_reconcile_fallback(fixed: list[DriftRow], as_of: date) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Cross-check disagreement (B1: Finnhub vs yfinance)
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class DisagreementRow:
+    ticker: str
+    company_name: str
+    finnhub_date: str
+    yf_dates: list  # list[date] from yfinance
+    tier: int
+
+
+def _fmt_yf_dates(yf_dates: list) -> str:
+    """Render yfinance date(s) as a compact string: 'Apr 21' or 'Apr 20-24'."""
+    if not yf_dates:
+        return "–"
+    if len(yf_dates) == 1:
+        return _fmt_date_safe(yf_dates[0].isoformat())
+    lo, hi = min(yf_dates), max(yf_dates)
+    return f"{_fmt_date_safe(lo.isoformat())}–{_fmt_date_safe(hi.isoformat())}"
+
+
+def _disagreement_lines(rows: list[DisagreementRow]) -> str:
+    lines = []
+    for r in sorted(rows, key=lambda x: (x.finnhub_date, x.ticker)):
+        co = f" — {r.company_name}" if r.company_name else ""
+        lines.append(
+            f"• `{r.ticker}`{co}: Finnhub {_fmt_date_safe(r.finnhub_date)} "
+            f"·  yfinance {_fmt_yf_dates(r.yf_dates)}"
+        )
+    return "\n".join(lines)
+
+
+def build_crosscheck_blocks(rows: list[DisagreementRow], as_of: date) -> list[dict]:
+    """Slack message for Finnhub/yfinance source disagreements."""
+    t1 = [r for r in rows if r.tier == 1]
+    t2 = [r for r in rows if r.tier == 2]
+
+    header = (
+        f":mag: Source disagreement: Finnhub vs yfinance "
+        f"({len(rows)} event{'s' if len(rows) != 1 else ''})"
+    )
+    blocks: list[dict] = [
+        {"type": "header", "text": {"type": "plain_text", "text": header}},
+    ]
+
+    if t1:
+        blocks.append({
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": f":warning: *Tier 1* ({len(t1)})\n{_disagreement_lines(t1)}"},
+        })
+    if t2:
+        blocks.append({
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": f"*Tier 2* ({len(t2)})\n{_disagreement_lines(t2)}"},
+        })
+
+    blocks.append({
+        "type": "context",
+        "elements": [{
+            "type": "mrkdwn",
+            "text": (
+                "Finnhub date was applied automatically. Verify on IR page — "
+                "if Finnhub is wrong, run `--lock TICKER:YYYY-MM-DD` to pin the "
+                "correct date."
+            ),
+        }],
+    })
+    return blocks
+
+
+def build_crosscheck_fallback(rows: list[DisagreementRow], as_of: date) -> str:
+    return (
+        f"{len(rows)} Finnhub/yfinance disagreement(s) on upcoming earnings dates "
+        f"— verify on IR page"
+    )
+
+
+# ---------------------------------------------------------------------------
 # Unseen-ticker alert (B2)
 # ---------------------------------------------------------------------------
 

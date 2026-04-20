@@ -63,14 +63,17 @@ from notifications import (
     build_reconcile_fallback,
     build_unseen_blocks,
     build_unseen_fallback,
+    build_crosscheck_blocks,
+    build_crosscheck_fallback,
     post_slack,
     post_heartbeat,
     NotificationError,
     ResultRow,
     DriftRow,
     UnseenRow,
+    DisagreementRow,
 )
-from market_data import fetch_post_earnings_move
+from market_data import fetch_post_earnings_move, fetch_yfinance_earnings_date
 
 logger = logging.getLogger("earnings_agent")
 
@@ -1116,6 +1119,135 @@ def run_reconcile_calendar(dry_run: bool = False):
 
 
 # ---------------------------------------------------------------------------
+# Cross-check: Finnhub vs yfinance (B1)
+# ---------------------------------------------------------------------------
+
+
+def _yfinance_agrees(finnhub_date: str, yf_dates: list[date], tolerance_days: int = 1) -> bool:
+    """True if Finnhub's date falls within yfinance's date/range ± tolerance."""
+    fh_d = date.fromisoformat(finnhub_date)
+    if not yf_dates:
+        return True  # yfinance unknown — don't call it a disagreement
+    lo = min(yf_dates) - timedelta(days=tolerance_days)
+    hi = max(yf_dates) + timedelta(days=tolerance_days)
+    return lo <= fh_d <= hi
+
+
+def _yf_dates_signature(yf_dates: list[date]) -> str:
+    """Stable string key for a sorted list of yfinance dates."""
+    return ",".join(d.isoformat() for d in sorted(yf_dates))
+
+
+def run_cross_check(dry_run: bool = False, days_ahead: int = 14):
+    """
+    Compare Finnhub's date against yfinance for upcoming Tier 1/2 events.
+
+    Alert-only: Finnhub has already been applied by the time this runs.
+    The goal is to surface "two sources disagree, verify manually".
+    Date-locked events are skipped — the user has already decided to
+    override auto-updates for those.
+
+    Dedup: only Slacks when the set of yfinance dates has changed since
+    the last alert (or this is the first alert). Prevents daily spam
+    when yfinance is persistently stale.
+
+    yfinance is scrapy and sometimes stale; a disagreement is a hint to
+    check the IR page, not an automatic override.
+    """
+    conn = init_db()
+    today = date.today()
+    horizon_iso = (today + timedelta(days=days_ahead)).isoformat()
+
+    cur = conn.execute(
+        "SELECT ticker, event_date, tier, company_name, last_xcheck_yf_dates "
+        "FROM events "
+        "WHERE tier <= 2 AND reported = 0 AND date_locked = 0 "
+        "AND event_date >= ? AND event_date <= ? "
+        "ORDER BY event_date, ticker",
+        (today.isoformat(), horizon_iso),
+    )
+    upcoming = cur.fetchall()
+
+    if not upcoming:
+        logger.info("Cross-check: no upcoming Tier 1/2 events in window")
+        conn.close()
+        return
+
+    logger.info(
+        f"Cross-check: verifying {len(upcoming)} Tier 1/2 event(s) in the "
+        f"next {days_ahead} day(s) against yfinance"
+    )
+
+    new_disagreements: list[DisagreementRow] = []
+    suppressed_count = 0
+    yf_missing = 0
+    for ticker, event_date, tier, company_name, last_sig in upcoming:
+        yf_dates = fetch_yfinance_earnings_date(ticker)
+        if yf_dates is None:
+            yf_missing += 1
+            continue
+
+        if _yfinance_agrees(event_date, yf_dates):
+            # Agreement restored — clear any stale alert state
+            if last_sig:
+                conn.execute(
+                    "UPDATE events SET last_xcheck_yf_dates = NULL "
+                    "WHERE ticker = ? AND event_date = ?",
+                    (ticker, event_date),
+                )
+            continue
+
+        current_sig = _yf_dates_signature(yf_dates)
+        if last_sig == current_sig:
+            suppressed_count += 1
+            continue
+
+        new_disagreements.append(DisagreementRow(
+            ticker=ticker,
+            company_name=company_name or "",
+            finnhub_date=event_date,
+            yf_dates=yf_dates,
+            tier=tier,
+        ))
+        if not dry_run:
+            conn.execute(
+                "UPDATE events SET last_xcheck_yf_dates = ? "
+                "WHERE ticker = ? AND event_date = ?",
+                (current_sig, ticker, event_date),
+            )
+
+    if not dry_run:
+        conn.commit()
+    conn.close()
+
+    logger.info(
+        f"Cross-check: {len(new_disagreements)} new disagreement(s), "
+        f"{suppressed_count} suppressed (already alerted), "
+        f"{yf_missing} tickers with no yfinance data"
+    )
+
+    if not new_disagreements:
+        return
+
+    # Always log the disagreement detail so it shows up in CI artifacts
+    for r in new_disagreements:
+        logger.warning(
+            f"  T{r.tier} {r.ticker}: Finnhub={r.finnhub_date} "
+            f"yfinance={[d.isoformat() for d in r.yf_dates]}"
+        )
+
+    if not dry_run and SLACK_WEBHOOK_EARNINGS:
+        try:
+            post_slack(
+                SLACK_WEBHOOK_EARNINGS,
+                build_crosscheck_blocks(new_disagreements, today),
+                build_crosscheck_fallback(new_disagreements, today),
+            )
+        except NotificationError as exc:
+            logger.error(f"Cross-check Slack post failed: {exc}")
+
+
+# ---------------------------------------------------------------------------
 # Date-lock management (D2)
 # ---------------------------------------------------------------------------
 
@@ -1251,6 +1383,11 @@ def main():
         action="store_true",
         help="Show all currently date-locked events",
     )
+    parser.add_argument(
+        "--cross-check",
+        action="store_true",
+        help="Compare Finnhub's upcoming Tier 1/2 dates against yfinance; alert on disagreement",
+    )
     args = parser.parse_args()
 
     if args.list_locks:
@@ -1275,6 +1412,8 @@ def main():
         )
     elif args.reconcile_calendar:
         run_reconcile_calendar(dry_run=args.dry_run)
+    elif args.cross_check:
+        run_cross_check(dry_run=args.dry_run)
     elif args.cleanup:
         conn = init_db()
         cleanup_duplicates(conn, dry_run=args.dry_run)

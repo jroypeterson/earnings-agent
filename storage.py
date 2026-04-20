@@ -18,9 +18,17 @@ logger = logging.getLogger("earnings_agent")
 # Schema version tracking
 # ---------------------------------------------------------------------------
 
-CURRENT_SCHEMA_VERSION = 4  # Bump when adding migrations
+CURRENT_SCHEMA_VERSION = 5  # Bump when adding migrations
 
 _MIGRATIONS = {
+    # Version 4 → 5: Record the last yfinance date(s) that the cross-check
+    # alerted on for each event. Lets the B1 cross-check suppress daily
+    # repeat alerts when the disagreement state hasn't changed, and re-fire
+    # when yfinance updates or agreement is restored.
+    5: [
+        "ALTER TABLE events ADD COLUMN last_xcheck_yf_dates TEXT",
+    ],
+
     # Version 3 → 4: Human override flag. When date_locked = 1, the sync
     # and reconcile jobs will not move the calendar event's date even if
     # Finnhub disagrees. Used when the user has verified the date via IR
@@ -211,6 +219,7 @@ def init_db(db_path: Path = DB_PATH) -> sqlite3.Connection:
                 ticktick_task_id TEXT,
                 unseen_run_count INTEGER NOT NULL DEFAULT 0,
                 date_locked     INTEGER NOT NULL DEFAULT 0,
+                last_xcheck_yf_dates TEXT,
                 created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
                 updated_at      TEXT    NOT NULL DEFAULT (datetime('now')),
                 UNIQUE(ticker, event_date)
