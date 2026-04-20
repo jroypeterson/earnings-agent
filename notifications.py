@@ -234,7 +234,7 @@ def post_slack(webhook_url: str, blocks: list[dict], fallback_text: str) -> None
         raise NotificationError(
             f"Slack webhook returned {resp.status_code}: {resp.text[:200]}"
         )
-    logger.info("Slack digest posted successfully")
+    logger.info("Slack message posted successfully")
 
 
 # ---------------------------------------------------------------------------
@@ -467,3 +467,48 @@ def build_results_fallback_text(results: list[ResultRow], as_of: date) -> str:
         f"Earnings results {_fmt_date_safe(as_of.isoformat())}: "
         f"{len(results)} reported ({beats} beat, {misses} miss on EPS)"
     )
+
+
+# ---------------------------------------------------------------------------
+# Workflow heartbeat
+# ---------------------------------------------------------------------------
+
+
+def post_heartbeat(
+    webhook_url: str,
+    run_name: str,
+    stats: dict[str, object],
+    *,
+    duration_sec: float | None = None,
+) -> None:
+    """
+    Post a compact success heartbeat to Slack.
+
+    run_name: short label shown in the heartbeat header (e.g. "Daily sync").
+    stats: ordered dict of label -> value. None/0 values still render so the
+        reader can confirm a zero came from the run, not a missing field.
+    """
+    parts = [f"{label}: {value}" for label, value in stats.items()]
+    if duration_sec is not None:
+        parts.append(f"{duration_sec:.1f}s")
+    detail = "  ·  ".join(parts) if parts else "ok"
+
+    today = date.today().isoformat()
+    blocks = [
+        {
+            "type": "context",
+            "elements": [
+                {
+                    "type": "mrkdwn",
+                    "text": f":white_check_mark: *{run_name}* — {today}   ·   {detail}",
+                }
+            ],
+        }
+    ]
+    fallback = f"{run_name} OK · {today} · {detail}"
+
+    try:
+        post_slack(webhook_url, blocks, fallback)
+    except NotificationError as exc:
+        # Heartbeat failures must not break the calling workflow.
+        logger.warning(f"Heartbeat post failed for {run_name!r}: {exc}")

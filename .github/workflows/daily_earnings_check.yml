@@ -70,6 +70,18 @@ jobs:
           retention-days: 90
           overwrite: true
 
+      - name: Notify Slack on failure
+        if: failure()
+        env:
+          SLACK_WEBHOOK_EARNINGS: ${{ secrets.SLACK_WEBHOOK_EARNINGS }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ -n "$SLACK_WEBHOOK_EARNINGS" ]; then
+            curl -sS -X POST -H 'Content-Type: application/json' \
+              --data "{\"text\":\":rotating_light: *Daily Earnings Check* failed — <${RUN_URL}|run details>\"}" \
+              "$SLACK_WEBHOOK_EARNINGS"
+          fi
+
       - name: Cleanup credentials
         if: always()
         run: rm -f credentials.json

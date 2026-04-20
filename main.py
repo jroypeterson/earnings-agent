@@ -10,6 +10,7 @@ Usage:
 """
 
 import sys
+import time
 import argparse
 import logging
 from datetime import date, timedelta
@@ -56,6 +57,7 @@ from notifications import (
     build_results_slack_blocks,
     build_results_fallback_text,
     post_slack,
+    post_heartbeat,
     NotificationError,
     ResultRow,
 )
@@ -64,8 +66,14 @@ from market_data import fetch_post_earnings_move
 logger = logging.getLogger("earnings_agent")
 
 
-def run(dry_run: bool = False, backfill: bool = False, skip_ticktick: bool = False):
+def run(
+    dry_run: bool = False,
+    backfill: bool = False,
+    skip_ticktick: bool = False,
+    skip_heartbeat: bool = False,
+):
     """Main sync: collect earnings data, sync to calendar, store estimate snapshots."""
+    start_ts = time.monotonic()
 
     # --- Load coverage ---
     coverage = load_coverage()
@@ -338,6 +346,7 @@ def run(dry_run: bool = False, backfill: bool = False, skip_ticktick: bool = Fal
         notify_results(conn, sync_results, today)
 
     # --- TickTick task sync (Tier 1 + Tier 2 only) ---
+    tt_stats: dict | None = None
     if not skip_ticktick:
         # Gather all Tier 1+2 events that need TickTick tasks
         cur = conn.execute(
@@ -368,6 +377,27 @@ def run(dry_run: bool = False, backfill: bool = False, skip_ticktick: bool = Fal
         logger.info("TickTick sync skipped (--no-ticktick)")
 
     conn.close()
+
+    # --- Heartbeat ---
+    if not skip_heartbeat and not dry_run and SLACK_WEBHOOK_EARNINGS:
+        stats: dict[str, object] = {
+            "events": len(earnings),
+            "new": new_count,
+            "updated": updated_count,
+            "actuals": actuals_count,
+            "unchanged": skip_count,
+        }
+        if tt_stats is not None:
+            stats["tt"] = (
+                f"{tt_stats.get('created', 0)} new / "
+                f"{tt_stats.get('errors', 0)} err"
+            )
+        post_heartbeat(
+            SLACK_WEBHOOK_EARNINGS,
+            "Daily sync",
+            stats,
+            duration_sec=time.monotonic() - start_ts,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -507,7 +537,11 @@ def notify_results(
 # ---------------------------------------------------------------------------
 
 
-def run_check_results(target_date: str | None = None, dry_run: bool = False):
+def run_check_results(
+    target_date: str | None = None,
+    dry_run: bool = False,
+    skip_heartbeat: bool = False,
+):
     """
     Detect newly-reported earnings for a specific date and alert to Slack.
 
@@ -516,6 +550,7 @@ def run_check_results(target_date: str | None = None, dry_run: bool = False):
     fetches the post-earnings stock move, posts a consolidated Slack message,
     updates the Calendar event description (Tier 1+2), and marks DB reported=1.
     """
+    start_ts = time.monotonic()
     target = date.fromisoformat(target_date) if target_date else date.today()
     target_iso = target.isoformat()
 
@@ -629,9 +664,25 @@ def run_check_results(target_date: str | None = None, dry_run: bool = False):
         f"{skipped_no_actuals} pending actuals"
     )
 
+    def _emit_heartbeat():
+        if skip_heartbeat or dry_run or not SLACK_WEBHOOK_EARNINGS:
+            return
+        post_heartbeat(
+            SLACK_WEBHOOK_EARNINGS,
+            "Results check",
+            {
+                "target": target_iso,
+                "new": len(new_results),
+                "already_reported": skipped_already_reported,
+                "pending": skipped_no_actuals,
+            },
+            duration_sec=time.monotonic() - start_ts,
+        )
+
     if not new_results:
         logger.info(f"No new reported results for {target_iso}")
         conn.close()
+        _emit_heartbeat()
         return
 
     # Build + post Slack
@@ -687,6 +738,7 @@ def run_check_results(target_date: str | None = None, dry_run: bool = False):
 
     logger.info(f"Marked {len(new_results)} results as reported in DB")
     conn.close()
+    _emit_heartbeat()
 
 
 # ---------------------------------------------------------------------------
@@ -739,6 +791,11 @@ def main():
         default=None,
         help="Target date (YYYY-MM-DD) for --check-results. Defaults to today.",
     )
+    parser.add_argument(
+        "--no-heartbeat",
+        action="store_true",
+        help="Skip the Slack success heartbeat at the end of the run",
+    )
     args = parser.parse_args()
 
     if args.ticktick_status:
@@ -750,13 +807,22 @@ def main():
     elif args.weekly_digest:
         run_weekly_digest(dry_run=args.dry_run)
     elif args.check_results:
-        run_check_results(target_date=args.date, dry_run=args.dry_run)
+        run_check_results(
+            target_date=args.date,
+            dry_run=args.dry_run,
+            skip_heartbeat=args.no_heartbeat,
+        )
     elif args.cleanup:
         conn = init_db()
         cleanup_duplicates(conn, dry_run=args.dry_run)
         conn.close()
     else:
-        run(dry_run=args.dry_run, backfill=args.backfill, skip_ticktick=args.no_ticktick)
+        run(
+            dry_run=args.dry_run,
+            backfill=args.backfill,
+            skip_ticktick=args.no_ticktick,
+            skip_heartbeat=args.no_heartbeat,
+        )
 
 
 if __name__ == "__main__":
