@@ -122,6 +122,37 @@ def run(
         from_date = (today - timedelta(days=14)).isoformat()
     to_date = (today + timedelta(days=90)).isoformat()
 
+    # --- Preflight: index tagged calendar events by gcal_id so we can
+    #     detect DB/calendar date drift without an extra GET per event. ---
+    cal_start_by_id: dict[str, str] = {}
+    if cal_service:
+        try:
+            from config import CALENDAR_PAGE_SIZE
+            preflight_min = (today - timedelta(days=30)).isoformat() + "T00:00:00Z"
+            preflight_max = (today + timedelta(days=120)).isoformat() + "T00:00:00Z"
+            page_token = None
+            while True:
+                r = cal_service.events().list(
+                    calendarId=GOOGLE_CALENDAR_ID,
+                    privateExtendedProperty="earningsAgent=true",
+                    timeMin=preflight_min,
+                    timeMax=preflight_max,
+                    singleEvents=True,
+                    maxResults=CALENDAR_PAGE_SIZE,
+                    pageToken=page_token,
+                ).execute()
+                for e in r.get("items", []):
+                    start = e.get("start", {})
+                    d = start.get("date") or start.get("dateTime", "")[:10]
+                    if d:
+                        cal_start_by_id[e["id"]] = d
+                page_token = r.get("nextPageToken")
+                if not page_token:
+                    break
+            logger.info(f"Preflight indexed {len(cal_start_by_id)} tagged calendar events")
+        except Exception as exc:
+            logger.warning(f"Calendar preflight failed; drift detection disabled: {exc}")
+
     # --- Fetch earnings ---
     earnings = fetch_earnings(fh_client, all_tickers, from_date, to_date)
 
@@ -223,7 +254,25 @@ def run(
             date_changed = existing["event_date"] != earnings_date
             hour_changed = existing.get("event_hour") != hour
 
-            if not date_changed and not hour_changed:
+            # Calendar drift: DB agrees with Finnhub but the calendar event
+            # itself is parked at an old date (happens when a prior run
+            # backfilled DB from calendar without pushing Finnhub's update).
+            calendar_stale = False
+            existing_gcal_id = existing.get("gcal_id")
+            if (
+                tier <= 2
+                and existing_gcal_id
+                and existing_gcal_id in cal_start_by_id
+            ):
+                cal_start = cal_start_by_id[existing_gcal_id]
+                if cal_start != earnings_date:
+                    calendar_stale = True
+                    logger.info(
+                        f"Calendar drift: {ticker} {quarter} "
+                        f"calendar={cal_start}, Finnhub={earnings_date}. Recreating."
+                    )
+
+            if not date_changed and not hour_changed and not calendar_stale:
                 skip_count += 1
                 continue
 
@@ -291,6 +340,53 @@ def run(
                     )
                     if cal_event:
                         gcal_id = cal_event.get("id")
+                        # Compare the calendar event's actual start date against
+                        # Finnhub's current date. If Finnhub has moved the event,
+                        # delete and recreate so calendar + DB stay in sync.
+                        cal_start = cal_event.get("start", {})
+                        cal_start_date = (
+                            cal_start.get("date")
+                            or cal_start.get("dateTime", "")[:10]
+                        )
+                        if cal_start_date and cal_start_date != earnings_date:
+                            logger.info(
+                                f"Stale calendar event for {ticker}: "
+                                f"calendar={cal_start_date}, Finnhub={earnings_date}. Recreating."
+                            )
+                            try:
+                                delete_calendar_event(
+                                    cal_service, GOOGLE_CALENDAR_ID, gcal_id
+                                )
+                            except CalendarError as exc:
+                                logger.warning(
+                                    f"Could not delete stale event for {ticker}: {exc}"
+                                )
+                            gcal_id = None
+                            try:
+                                gcal_id = create_calendar_event(
+                                    cal_service, GOOGLE_CALENDAR_ID, ticker,
+                                    earnings_date, hour,
+                                    quarter=quarter, eps_estimate=eps_est,
+                                    eps_actual=eps_act, revenue_estimate=rev_est,
+                                    revenue_actual=rev_act, tier=tier,
+                                    source_fingerprint=source_fingerprint,
+                                )
+                            except CalendarError as exc:
+                                logger.error(
+                                    f"Failed to recreate event for {ticker}: {exc}"
+                                )
+                            upsert_event(
+                                conn, ticker, earnings_date, hour, gcal_id,
+                                quarter=quarter, eps_estimate=eps_est,
+                                eps_actual=eps_act, rev_estimate=rev_est,
+                                rev_actual=rev_act, reported=has_actuals,
+                                tier=tier, company_name=company_name,
+                                source_fingerprint=source_fingerprint,
+                            )
+                            updated_count += 1
+                            continue
+
+                        # Date matches — safe to backfill DB only.
                         upsert_event(
                             conn, ticker, earnings_date, hour, gcal_id,
                             quarter=quarter, eps_estimate=eps_est,
