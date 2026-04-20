@@ -56,10 +56,13 @@ from notifications import (
     build_email_text,
     build_results_slack_blocks,
     build_results_fallback_text,
+    build_reconcile_blocks,
+    build_reconcile_fallback,
     post_slack,
     post_heartbeat,
     NotificationError,
     ResultRow,
+    DriftRow,
 )
 from market_data import fetch_post_earnings_move
 
@@ -838,6 +841,179 @@ def run_check_results(
 
 
 # ---------------------------------------------------------------------------
+# Calendar reconcile (lightweight drift detection + auto-repair)
+# ---------------------------------------------------------------------------
+
+
+def run_reconcile_calendar(dry_run: bool = False):
+    """
+    Compare tagged Calendar events against Finnhub's current view and
+    auto-fix any date drift. Only touches existing Tier 1/2 events —
+    new-event creation is the daily sync's job.
+
+    Posts to Slack only when drift was detected (silent no-op otherwise),
+    so this job can run every few hours during market hours without
+    spamming the channel.
+    """
+    from config import CALENDAR_PAGE_SIZE
+
+    coverage = load_coverage()
+    if not coverage:
+        logger.error("No tickers loaded. Cannot reconcile.")
+        sys.exit(1)
+    coverage_map = {t.ticker: t for t in coverage}
+    all_tickers = [t.ticker for t in coverage]
+
+    if not FINNHUB_API_KEY or not GOOGLE_CALENDAR_ID:
+        logger.error("FINNHUB_API_KEY and GOOGLE_CALENDAR_ID are required.")
+        sys.exit(1)
+
+    try:
+        fh_client = get_finnhub_client()
+    except FinnhubError as exc:
+        logger.error(f"Failed to initialize Finnhub client: {exc}")
+        sys.exit(1)
+
+    conn = init_db()
+
+    try:
+        cal_service = get_calendar_service()
+    except Exception as exc:
+        logger.error(f"Failed to initialize Calendar service: {exc}")
+        sys.exit(1)
+
+    today = date.today()
+    from_date = today.isoformat()
+    to_date = (today + timedelta(days=45)).isoformat()
+
+    # Finnhub's current view of the next 45 days
+    earnings = fetch_earnings(fh_client, all_tickers, from_date, to_date)
+    finnhub_map: dict[str, dict] = {}
+    for e in earnings:
+        t = e.get("symbol", "").upper()
+        if t:
+            finnhub_map[t] = e
+
+    # Tagged calendar events in the same window
+    cal_events: dict[str, tuple[str, str]] = {}  # ticker -> (gcal_id, start_date)
+    time_min = today.isoformat() + "T00:00:00Z"
+    time_max = (today + timedelta(days=45)).isoformat() + "T00:00:00Z"
+    page_token = None
+    while True:
+        r = cal_service.events().list(
+            calendarId=GOOGLE_CALENDAR_ID,
+            privateExtendedProperty="earningsAgent=true",
+            timeMin=time_min,
+            timeMax=time_max,
+            singleEvents=True,
+            maxResults=CALENDAR_PAGE_SIZE,
+            pageToken=page_token,
+        ).execute()
+        for ev in r.get("items", []):
+            props = ev.get("extendedProperties", {}).get("private", {})
+            ticker = props.get("ticker")
+            if not ticker:
+                continue
+            start = ev.get("start", {})
+            d = start.get("date") or start.get("dateTime", "")[:10]
+            if d:
+                cal_events[ticker] = (ev["id"], d)
+        page_token = r.get("nextPageToken")
+        if not page_token:
+            break
+    logger.info(f"Reconcile: indexed {len(cal_events)} tagged calendar events")
+
+    # Detect drift
+    drift: list[tuple[str, str, dict, str]] = []  # (ticker, old_date, fh_event, gcal_id)
+    for ticker, (gcal_id, cal_date) in cal_events.items():
+        fh = finnhub_map.get(ticker)
+        if not fh:
+            # Finnhub dropped this ticker from the window. Unseen-ticker
+            # alerting is phase B2; here we skip to stay narrow.
+            continue
+        if cal_date != fh.get("date"):
+            drift.append((ticker, cal_date, fh, gcal_id))
+
+    if not drift:
+        logger.info("Reconcile: no drift detected — calendar matches Finnhub")
+        conn.close()
+        return
+
+    logger.info(f"Reconcile: {len(drift)} drifted event(s) to fix")
+
+    fixed: list[DriftRow] = []
+    for ticker, old_date, fh, old_gcal_id in drift:
+        new_date = fh["date"]
+        hour = fh.get("hour")
+        eps_est = fh.get("epsEstimate")
+        eps_act = fh.get("epsActual")
+        rev_est = fh.get("revenueEstimate")
+        rev_act = fh.get("revenueActual")
+        has_actuals = eps_act is not None or rev_act is not None
+        quarter = date_to_quarter(new_date)
+        info = coverage_map.get(ticker)
+        tier = info.tier if info else 3
+        company_name = info.company_name if info else None
+        source_fingerprint = f"{ticker}:{new_date}"
+
+        if dry_run:
+            logger.info(
+                f"  [dry-run] {ticker} (T{tier}): {old_date} -> {new_date} ({hour or 'TBD'})"
+            )
+            fixed.append(DriftRow(
+                ticker=ticker, old_date=old_date, new_date=new_date,
+                hour=hour, tier=tier,
+            ))
+            continue
+
+        try:
+            delete_calendar_event(cal_service, GOOGLE_CALENDAR_ID, old_gcal_id)
+        except CalendarError as exc:
+            logger.warning(f"  Could not delete stale event for {ticker}: {exc}")
+
+        new_gcal_id = None
+        try:
+            new_gcal_id = create_calendar_event(
+                cal_service, GOOGLE_CALENDAR_ID, ticker,
+                new_date, hour,
+                quarter=quarter,
+                eps_estimate=eps_est, eps_actual=eps_act,
+                revenue_estimate=rev_est, revenue_actual=rev_act,
+                tier=tier,
+                source_fingerprint=source_fingerprint,
+            )
+        except CalendarError as exc:
+            logger.error(f"  Failed to recreate event for {ticker}: {exc}")
+            continue
+
+        upsert_event(
+            conn, ticker, new_date, hour, new_gcal_id,
+            quarter=quarter,
+            eps_estimate=eps_est, eps_actual=eps_act,
+            rev_estimate=rev_est, rev_actual=rev_act,
+            reported=has_actuals, tier=tier,
+            company_name=company_name,
+            source_fingerprint=source_fingerprint,
+        )
+        logger.info(f"  Fixed {ticker} (T{tier}): {old_date} -> {new_date}")
+        fixed.append(DriftRow(
+            ticker=ticker, old_date=old_date, new_date=new_date,
+            hour=hour, tier=tier,
+        ))
+
+    conn.close()
+
+    # Slack summary — only when we actually did something
+    if fixed and not dry_run and SLACK_WEBHOOK_EARNINGS:
+        blocks = build_reconcile_blocks(fixed, today)
+        fallback = build_reconcile_fallback(fixed, today)
+        try:
+            post_slack(SLACK_WEBHOOK_EARNINGS, blocks, fallback)
+        except NotificationError as exc:
+            logger.error(f"Reconcile Slack post failed: {exc}")
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
@@ -892,6 +1068,11 @@ def main():
         action="store_true",
         help="Skip the Slack success heartbeat at the end of the run",
     )
+    parser.add_argument(
+        "--reconcile-calendar",
+        action="store_true",
+        help="Detect and fix calendar/Finnhub date drift; silent no-op if in sync",
+    )
     args = parser.parse_args()
 
     if args.ticktick_status:
@@ -908,6 +1089,8 @@ def main():
             dry_run=args.dry_run,
             skip_heartbeat=args.no_heartbeat,
         )
+    elif args.reconcile_calendar:
+        run_reconcile_calendar(dry_run=args.dry_run)
     elif args.cleanup:
         conn = init_db()
         cleanup_duplicates(conn, dry_run=args.dry_run)

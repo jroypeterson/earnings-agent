@@ -1,34 +1,38 @@
-# .github/workflows/daily_earnings_check.yml
+# .github/workflows/reconcile_calendar.yml
 #
-# Runs the earnings agent once daily at 11:00 UTC:
-#   - 6:00 AM ET during EST (November-March)
-#   - 7:00 AM ET during EDT (March-November)
-# Also supports manual triggers from the GitHub Actions UI.
+# Lightweight calendar drift reconcile. Runs every 3 hours during
+# market hours on weekdays to catch Finnhub date changes between
+# daily sync runs.
+#
+# Cron times in UTC:
+#   14:00 UTC = 10 AM EDT / 9 AM EST
+#   17:00 UTC = 1 PM EDT  / 12 PM EST
+#   20:00 UTC = 4 PM EDT  / 3 PM EST
+#
+# Slack posts only when drift was detected and fixed (silent no-op
+# otherwise), so running three times a day is safe.
 
-name: Daily Earnings Check
+name: Reconcile Calendar
 
 on:
   schedule:
-    # 11:00 UTC = 6 AM EST / 7 AM EDT
-    - cron: "0 11 * * *"
-  workflow_dispatch: # Manual trigger
+    - cron: "0 14,17,20 * * 1-5"
+  workflow_dispatch:
 
-# Serialize with reconcile_calendar and post_earnings_check — all three
-# read/write the earnings-db artifact.
+# Shares the earnings-db artifact with daily_earnings_check and
+# post_earnings_check. Serialize so two DB writers never race.
 concurrency:
   group: earnings-db-writer
   cancel-in-progress: false
 
 jobs:
-  check-earnings:
+  reconcile:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout earnings-agent
         uses: actions/checkout@v4
 
-      # Coverage Manager is public — clone its exports so the agent gets
-      # tier and sector data instead of falling back to legacy mode.
       - name: Checkout Coverage Manager exports
         uses: actions/checkout@v4
         with:
@@ -47,30 +51,27 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      # The SQLite DB is stored as a repo artifact so it persists between runs.
       - name: Restore earnings database
         uses: actions/download-artifact@v4
         with:
           name: earnings-db
           path: .
-        continue-on-error: true # First run won't have an artifact yet
+        continue-on-error: true
 
-      # Write the Google service account credentials from a GitHub secret
       - name: Write Google credentials
         run: echo '${{ secrets.GOOGLE_CREDENTIALS_JSON }}' > credentials.json
 
-      - name: Run earnings agent
+      - name: Run reconcile
         env:
           FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
           GOOGLE_CALENDAR_ID: ${{ secrets.GOOGLE_CALENDAR_ID }}
           GOOGLE_CREDENTIALS_PATH: credentials.json
           COVERAGE_MANAGER_PATH: ${{ github.workspace }}/coverage-manager
-          TICKTICK_ACCESS_TOKEN: ${{ secrets.TICKTICK_ACCESS_TOKEN }}
-          TICKERS: ${{ vars.TICKERS }}  # Legacy fallback
-        run: python main.py
+          SLACK_WEBHOOK_EARNINGS: ${{ secrets.SLACK_WEBHOOK_EARNINGS }}
+        run: python main.py --reconcile-calendar
 
-      # Persist the SQLite DB for next run
       - name: Save earnings database
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: earnings-db
@@ -86,7 +87,7 @@ jobs:
         run: |
           if [ -n "$SLACK_WEBHOOK_EARNINGS" ]; then
             curl -sS -X POST -H 'Content-Type: application/json' \
-              --data "{\"text\":\":rotating_light: *Daily Earnings Check* failed — <${RUN_URL}|run details>\"}" \
+              --data "{\"text\":\":rotating_light: *Reconcile Calendar* failed — <${RUN_URL}|run details>\"}" \
               "$SLACK_WEBHOOK_EARNINGS"
           fi
 

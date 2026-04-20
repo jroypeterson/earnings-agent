@@ -470,6 +470,74 @@ def build_results_fallback_text(results: list[ResultRow], as_of: date) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Reconcile drift summary
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class DriftRow:
+    ticker: str
+    old_date: str
+    new_date: str
+    hour: str | None
+    tier: int
+
+
+def _days_until(date_str: str, as_of: date) -> int | None:
+    try:
+        return (date.fromisoformat(date_str) - as_of).days
+    except ValueError:
+        return None
+
+
+def build_reconcile_blocks(fixed: list[DriftRow], as_of: date) -> list[dict]:
+    """Slack Block Kit message summarizing drift that was detected + fixed."""
+    lines = []
+    # Show urgent (within 5 business days) first
+    def _sort_key(r: DriftRow) -> tuple[int, str]:
+        days = _days_until(r.new_date, as_of) or 999
+        return (days, r.ticker)
+
+    for r in sorted(fixed, key=_sort_key):
+        timing = _timing_short(r.hour)
+        days = _days_until(r.new_date, as_of)
+        urgency = " :warning:" if days is not None and days <= 5 else ""
+        lines.append(
+            f"• `{r.ticker}` (T{r.tier}): "
+            f"{_fmt_date_safe(r.old_date)} → *{_fmt_date_safe(r.new_date)}* "
+            f"({timing}){urgency}"
+        )
+
+    header_text = (
+        f":calendar: Date changes detected — {len(fixed)} event"
+        f"{'s' if len(fixed) != 1 else ''} updated"
+    )
+    return [
+        {"type": "header", "text": {"type": "plain_text", "text": header_text}},
+        {"type": "section", "text": {"type": "mrkdwn", "text": "\n".join(lines)}},
+        {
+            "type": "context",
+            "elements": [
+                {
+                    "type": "mrkdwn",
+                    "text": (
+                        f"Reconciled {_fmt_date_safe(as_of.isoformat())}  ·  "
+                        f":warning: = within 5 business days"
+                    ),
+                }
+            ],
+        },
+    ]
+
+
+def build_reconcile_fallback(fixed: list[DriftRow], as_of: date) -> str:
+    return (
+        f"{len(fixed)} earnings date change(s) detected and calendar updated "
+        f"on {_fmt_date_safe(as_of.isoformat())}"
+    )
+
+
+# ---------------------------------------------------------------------------
 # Workflow heartbeat
 # ---------------------------------------------------------------------------
 

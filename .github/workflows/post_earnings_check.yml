@@ -19,6 +19,12 @@ on:
         required: false
         type: string
 
+# Serialize with daily_earnings_check and reconcile_calendar — all three
+# read/write the earnings-db artifact.
+concurrency:
+  group: earnings-db-writer
+  cancel-in-progress: false
+
 jobs:
   check-results:
     runs-on: ubuntu-latest
