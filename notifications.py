@@ -470,6 +470,60 @@ def build_results_fallback_text(results: list[ResultRow], as_of: date) -> str:
 
 
 # ---------------------------------------------------------------------------
+# T1 urgent move alert (A3)
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class UrgentMoveRow:
+    ticker: str
+    company_name: str
+    old_date: str
+    new_date: str
+    hour: str | None
+    biz_days_until: int
+    source: str  # "sync" or "reconcile" — shown in footer for provenance
+
+
+def build_urgent_move_blocks(rows: list[UrgentMoveRow], as_of: date) -> list[dict]:
+    """Separate urgent Slack alert for Tier 1 date moves within 5 business days."""
+    lines = []
+    for r in sorted(rows, key=lambda x: (x.biz_days_until, x.ticker)):
+        co = f" — {r.company_name}" if r.company_name else ""
+        days_label = (
+            "today"
+            if r.biz_days_until == 0
+            else f"in {r.biz_days_until} biz day{'s' if r.biz_days_until != 1 else ''}"
+        )
+        timing = f" ({_timing_short(r.hour)})" if r.hour else ""
+        lines.append(
+            f":rotating_light: `{r.ticker}`{co}: "
+            f"{_fmt_date_safe(r.old_date)} → *{_fmt_date_safe(r.new_date)}*{timing} "
+            f"— {days_label}"
+        )
+    sources = sorted({r.source for r in rows})
+    footer = (
+        f"Detected by {' + '.join(sources)} · "
+        "Run `--lock TICKER:YYYY-MM-DD` to pin a date if you believe Finnhub is wrong."
+    )
+    return [
+        {
+            "type": "header",
+            "text": {
+                "type": "plain_text",
+                "text": f":rotating_light: URGENT: Tier 1 date move ({len(rows)})",
+            },
+        },
+        {"type": "section", "text": {"type": "mrkdwn", "text": "\n".join(lines)}},
+        {"type": "context", "elements": [{"type": "mrkdwn", "text": footer}]},
+    ]
+
+
+def build_urgent_move_fallback(rows: list[UrgentMoveRow], as_of: date) -> str:
+    return f"URGENT: {len(rows)} Tier 1 earnings date move(s) within 5 business days"
+
+
+# ---------------------------------------------------------------------------
 # Reconcile drift summary
 # ---------------------------------------------------------------------------
 

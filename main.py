@@ -65,6 +65,8 @@ from notifications import (
     build_unseen_fallback,
     build_crosscheck_blocks,
     build_crosscheck_fallback,
+    build_urgent_move_blocks,
+    build_urgent_move_fallback,
     post_slack,
     post_heartbeat,
     NotificationError,
@@ -72,10 +74,48 @@ from notifications import (
     DriftRow,
     UnseenRow,
     DisagreementRow,
+    UrgentMoveRow,
 )
 from market_data import fetch_post_earnings_move, fetch_yfinance_earnings_date
 
 logger = logging.getLogger("earnings_agent")
+
+
+# A3: "within 5 business days" threshold for Tier 1 urgent alerts.
+A3_URGENT_BIZ_DAYS = 5
+
+
+def _business_days_until(target_iso: str, as_of: date) -> int:
+    """
+    Count business days (Mon-Fri) from as_of to target, inclusive of target
+    but exclusive of as_of. Returns -1 for past targets.
+    """
+    target = date.fromisoformat(target_iso)
+    if target < as_of:
+        return -1
+    if target == as_of:
+        return 0
+    days = 0
+    d = as_of
+    while d < target:
+        d = d + timedelta(days=1)
+        if d.weekday() < 5:
+            days += 1
+    return days
+
+
+def _post_urgent_alert(rows: list[UrgentMoveRow], as_of: date):
+    """Post the A3 Tier 1 urgent Slack alert. Swallows its own errors."""
+    if not rows or not SLACK_WEBHOOK_EARNINGS:
+        return
+    try:
+        post_slack(
+            SLACK_WEBHOOK_EARNINGS,
+            build_urgent_move_blocks(rows, as_of),
+            build_urgent_move_fallback(rows, as_of),
+        )
+    except NotificationError as exc:
+        logger.error(f"Urgent T1 alert Slack post failed: {exc}")
 
 
 def run(
@@ -175,6 +215,8 @@ def run(
     snapshot_date = today.isoformat()
     # Actuals collected during this sync for Slack + TickTick downstream
     sync_results: list[ResultRow] = []
+    # A3: Tier 1 date moves that land within 5 business days
+    urgent_moves: list[UrgentMoveRow] = []
 
     for e in earnings:
         ticker = e["symbol"].upper()
@@ -309,6 +351,18 @@ def run(
                     f"Date changed: {ticker} {quarter} moved from "
                     f"{old_date} -> {earnings_date}"
                 )
+                if tier == 1:
+                    biz_days = _business_days_until(earnings_date, today)
+                    if 0 <= biz_days <= A3_URGENT_BIZ_DAYS:
+                        urgent_moves.append(UrgentMoveRow(
+                            ticker=ticker,
+                            company_name=company_name or "",
+                            old_date=old_date,
+                            new_date=earnings_date,
+                            hour=hour,
+                            biz_days_until=biz_days,
+                            source="sync",
+                        ))
             if hour_changed:
                 logger.info(
                     f"Timing changed: {ticker} {quarter} on {earnings_date} "
@@ -560,6 +614,15 @@ def run(
         logger.info("TickTick sync skipped (--no-ticktick)")
 
     conn.close()
+
+    # --- A3: post urgent Tier 1 alert (if any) ---
+    if urgent_moves:
+        logger.warning(
+            f"A3: {len(urgent_moves)} Tier 1 date move(s) within "
+            f"{A3_URGENT_BIZ_DAYS} business days"
+        )
+        if not dry_run:
+            _post_urgent_alert(urgent_moves, today)
 
     # --- Heartbeat ---
     if not skip_heartbeat and not dry_run and SLACK_WEBHOOK_EARNINGS:
@@ -1047,6 +1110,7 @@ def run_reconcile_calendar(dry_run: bool = False):
     logger.info(f"Reconcile: {len(drift)} drifted event(s) to fix")
 
     fixed: list[DriftRow] = []
+    urgent_moves: list[UrgentMoveRow] = []
     for ticker, old_date, fh, old_gcal_id in drift:
         new_date = fh["date"]
         hour = fh.get("hour")
@@ -1106,6 +1170,21 @@ def run_reconcile_calendar(dry_run: bool = False):
             hour=hour, tier=tier,
         ))
 
+        # A3: flag Tier 1 moves within 5 business days for the urgent alert
+        if tier == 1:
+            biz_days = _business_days_until(new_date, today)
+            if 0 <= biz_days <= A3_URGENT_BIZ_DAYS:
+                info = coverage_map.get(ticker)
+                urgent_moves.append(UrgentMoveRow(
+                    ticker=ticker,
+                    company_name=(info.company_name if info else "") or "",
+                    old_date=old_date,
+                    new_date=new_date,
+                    hour=hour,
+                    biz_days_until=biz_days,
+                    source="reconcile",
+                ))
+
     conn.close()
 
     # Slack summary — only when we actually did something
@@ -1116,6 +1195,15 @@ def run_reconcile_calendar(dry_run: bool = False):
             post_slack(SLACK_WEBHOOK_EARNINGS, blocks, fallback)
         except NotificationError as exc:
             logger.error(f"Reconcile Slack post failed: {exc}")
+
+    # A3: separate urgent alert for T1 moves inside the 5-biz-day window
+    if urgent_moves:
+        logger.warning(
+            f"A3: {len(urgent_moves)} Tier 1 date move(s) within "
+            f"{A3_URGENT_BIZ_DAYS} business days"
+        )
+        if not dry_run:
+            _post_urgent_alert(urgent_moves, today)
 
 
 # ---------------------------------------------------------------------------
