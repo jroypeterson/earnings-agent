@@ -1309,7 +1309,7 @@ def run_cross_check(dry_run: bool = False, days_ahead: int = 14):
         except Exception as exc:
             logger.debug(f"EDGAR cadence lookup failed for {ticker}: {exc}")
 
-        new_disagreements.append(DisagreementRow(
+        new_disagreements.append((DisagreementRow(
             ticker=ticker,
             company_name=company_name or "",
             finnhub_date=event_date,
@@ -1318,17 +1318,7 @@ def run_cross_check(dry_run: bool = False, days_ahead: int = 14):
             edgar_ref_date=edgar_ref,
             edgar_finnhub_offset=edgar_fh_offset,
             edgar_yf_offset=edgar_yf_offset,
-        ))
-        if not dry_run:
-            conn.execute(
-                "UPDATE events SET last_xcheck_yf_dates = ? "
-                "WHERE ticker = ? AND event_date = ?",
-                (current_sig, ticker, event_date),
-            )
-
-    if not dry_run:
-        conn.commit()
-    conn.close()
+        ), current_sig))
 
     logger.info(
         f"Cross-check: {len(new_disagreements)} new disagreement(s), "
@@ -1337,24 +1327,42 @@ def run_cross_check(dry_run: bool = False, days_ahead: int = 14):
     )
 
     if not new_disagreements:
+        conn.close()
         return
 
     # Always log the disagreement detail so it shows up in CI artifacts
-    for r in new_disagreements:
+    for r, _ in new_disagreements:
         logger.warning(
             f"  T{r.tier} {r.ticker}: Finnhub={r.finnhub_date} "
             f"yfinance={[d.isoformat() for d in r.yf_dates]}"
         )
 
+    disagreement_rows = [r for r, _ in new_disagreements]
+    posted = True
     if not dry_run and SLACK_WEBHOOK_EARNINGS:
         try:
             post_slack(
                 SLACK_WEBHOOK_EARNINGS,
-                build_crosscheck_blocks(new_disagreements, today),
-                build_crosscheck_fallback(new_disagreements, today),
+                build_crosscheck_blocks(disagreement_rows, today),
+                build_crosscheck_fallback(disagreement_rows, today),
             )
         except NotificationError as exc:
             logger.error(f"Cross-check Slack post failed: {exc}")
+            posted = False
+
+    # Only update the dedup state if the alert actually went out (or if
+    # there's no webhook configured — in which case we'd suppress forever
+    # anyway). On Slack failure, leave the state untouched so the next
+    # run retries.
+    if not dry_run and posted:
+        for r, sig in new_disagreements:
+            conn.execute(
+                "UPDATE events SET last_xcheck_yf_dates = ? "
+                "WHERE ticker = ? AND event_date = ?",
+                (sig, r.ticker, r.finnhub_date),
+            )
+        conn.commit()
+    conn.close()
 
 
 # ---------------------------------------------------------------------------

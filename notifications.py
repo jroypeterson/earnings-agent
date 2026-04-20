@@ -665,6 +665,35 @@ def _disagreement_lines(rows: list[DisagreementRow]) -> str:
     return "\n".join(lines)
 
 
+_SLACK_SECTION_MAX_CHARS = 2800  # Slack hard cap is 3000 — leave some headroom
+
+
+def _chunk_section(title: str, rows: list[DisagreementRow]) -> list[dict]:
+    """
+    Render a list of DisagreementRows as one or more Slack section blocks.
+    Section text has a 3000-char Slack limit; chunk as needed.
+    """
+    line_for = lambda r: _disagreement_lines([r])
+    blocks: list[dict] = []
+    current = title + "\n"
+    for r in rows:
+        piece = line_for(r) + "\n"
+        if len(current) + len(piece) > _SLACK_SECTION_MAX_CHARS:
+            blocks.append({
+                "type": "section",
+                "text": {"type": "mrkdwn", "text": current.rstrip()},
+            })
+            current = "_(continued)_\n" + piece
+        else:
+            current += piece
+    if current.strip():
+        blocks.append({
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": current.rstrip()},
+        })
+    return blocks
+
+
 def build_crosscheck_blocks(rows: list[DisagreementRow], as_of: date) -> list[dict]:
     """Slack message for Finnhub/yfinance source disagreements."""
     t1 = [r for r in rows if r.tier == 1]
@@ -679,15 +708,9 @@ def build_crosscheck_blocks(rows: list[DisagreementRow], as_of: date) -> list[di
     ]
 
     if t1:
-        blocks.append({
-            "type": "section",
-            "text": {"type": "mrkdwn", "text": f":warning: *Tier 1* ({len(t1)})\n{_disagreement_lines(t1)}"},
-        })
+        blocks.extend(_chunk_section(f":warning: *Tier 1* ({len(t1)})", t1))
     if t2:
-        blocks.append({
-            "type": "section",
-            "text": {"type": "mrkdwn", "text": f"*Tier 2* ({len(t2)})\n{_disagreement_lines(t2)}"},
-        })
+        blocks.extend(_chunk_section(f"*Tier 2* ({len(t2)})", t2))
 
     blocks.append({
         "type": "context",
