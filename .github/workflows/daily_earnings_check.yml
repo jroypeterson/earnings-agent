@@ -9,8 +9,13 @@ name: Daily Earnings Check
 
 on:
   schedule:
-    # 11:00 UTC = 6 AM EST / 7 AM EDT
+    # 11:00 UTC = 6 AM EST / 7 AM EDT  (morning full sync)
     - cron: "0 11 * * *"
+    # 19:00 UTC = 2 PM EST / 3 PM EDT  (weekday afternoon redundancy)
+    # Catches new events and date moves Finnhub published mid-day, before
+    # the 22:00 post-earnings-check run. Reconcile at 20:00 UTC is a
+    # narrower/cheaper job that only touches existing tagged events.
+    - cron: "0 19 * * 1-5"
   workflow_dispatch: # Manual trigger
 
 # Serialize with reconcile_calendar and post_earnings_check — all three
