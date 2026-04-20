@@ -538,6 +538,56 @@ def build_reconcile_fallback(fixed: list[DriftRow], as_of: date) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Unseen-ticker alert (B2)
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class UnseenRow:
+    ticker: str
+    company_name: str
+    event_date: str
+    tier: int
+    miss_count: int
+
+
+def build_unseen_blocks(rows: list[UnseenRow], as_of: date) -> list[dict]:
+    """Slack message for Tier 1/2 events persistently missing from Finnhub."""
+    # Sort: Tier 1 before Tier 2, then by soonest event_date, then ticker
+    def _sort_key(r: UnseenRow) -> tuple[int, str, str]:
+        return (r.tier, r.event_date, r.ticker)
+
+    lines = []
+    for r in sorted(rows, key=_sort_key):
+        co = f" — {r.company_name}" if r.company_name else ""
+        lines.append(
+            f"• `{r.ticker}` (T{r.tier}){co} · expected "
+            f"{_fmt_date_safe(r.event_date)} · missed {r.miss_count} runs"
+        )
+
+    header = (
+        f":warning: Tier 1/2 earnings missing from Finnhub "
+        f"({len(rows)} event{'s' if len(rows) != 1 else ''})"
+    )
+    help_text = (
+        "Finnhub hasn't returned these events for 2+ consecutive daily syncs. "
+        "Possible date move or coverage drop — verify on the IR page."
+    )
+    return [
+        {"type": "header", "text": {"type": "plain_text", "text": header}},
+        {"type": "section", "text": {"type": "mrkdwn", "text": "\n".join(lines)}},
+        {"type": "context", "elements": [{"type": "mrkdwn", "text": help_text}]},
+    ]
+
+
+def build_unseen_fallback(rows: list[UnseenRow], as_of: date) -> str:
+    return (
+        f"{len(rows)} Tier 1/2 earnings event(s) missing from Finnhub "
+        f"for 2+ runs — verify on IR pages"
+    )
+
+
+# ---------------------------------------------------------------------------
 # Workflow heartbeat
 # ---------------------------------------------------------------------------
 

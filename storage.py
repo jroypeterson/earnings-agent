@@ -18,9 +18,16 @@ logger = logging.getLogger("earnings_agent")
 # Schema version tracking
 # ---------------------------------------------------------------------------
 
-CURRENT_SCHEMA_VERSION = 2  # Bump when adding migrations
+CURRENT_SCHEMA_VERSION = 3  # Bump when adding migrations
 
 _MIGRATIONS = {
+    # Version 2 → 3: Track how many consecutive runs a Tier 1/2 event has
+    # gone missing from Finnhub, so we can alert when a name persistently
+    # disappears (possible data loss or coverage drop).
+    3: [
+        "ALTER TABLE events ADD COLUMN unseen_run_count INTEGER NOT NULL DEFAULT 0",
+    ],
+
     # Version 1 → 2: Add new columns and tables for the earnings intelligence system.
     # Also transitions the dedup key from UNIQUE(ticker, quarter) to UNIQUE(ticker, event_date).
     2: [
@@ -194,6 +201,7 @@ def init_db(db_path: Path = DB_PATH) -> sqlite3.Connection:
                 ir_url          TEXT,
                 call_url        TEXT,
                 ticktick_task_id TEXT,
+                unseen_run_count INTEGER NOT NULL DEFAULT 0,
                 created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
                 updated_at      TEXT    NOT NULL DEFAULT (datetime('now')),
                 UNIQUE(ticker, event_date)

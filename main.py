@@ -58,11 +58,14 @@ from notifications import (
     build_results_fallback_text,
     build_reconcile_blocks,
     build_reconcile_fallback,
+    build_unseen_blocks,
+    build_unseen_fallback,
     post_slack,
     post_heartbeat,
     NotificationError,
     ResultRow,
     DriftRow,
+    UnseenRow,
 )
 from market_data import fetch_post_earnings_move
 
@@ -443,6 +446,68 @@ def run(
     if sync_results and not dry_run:
         logger.info(f"Notifying on {len(sync_results)} actuals detected during sync")
         notify_results(conn, sync_results, today)
+
+    # --- B2: unseen-ticker detection ---
+    # For every Tier 1/2 upcoming-30d event in DB, check whether Finnhub
+    # surfaced it this run. Increment a per-event counter and alert when it
+    # hits 2 consecutive daily syncs. Tickers not in current coverage are
+    # skipped to avoid noise from Coverage Manager drops.
+    if not dry_run:
+        seen_pairs = {
+            (e.get("symbol", "").upper(), e.get("date"))
+            for e in earnings
+        }
+        horizon_iso = (today + timedelta(days=30)).isoformat()
+        cur = conn.execute(
+            "SELECT ticker, event_date, company_name, tier, unseen_run_count "
+            "FROM events "
+            "WHERE tier <= 2 AND event_date >= ? AND event_date <= ? "
+            "AND reported = 0",
+            (today.isoformat(), horizon_iso),
+        )
+        persistent_unseen: list[UnseenRow] = []
+        for row in cur.fetchall():
+            ticker, event_date, company_name, tier_val, prev_count = row
+            if ticker not in coverage_map:
+                continue
+            if (ticker, event_date) in seen_pairs:
+                if prev_count and prev_count > 0:
+                    conn.execute(
+                        "UPDATE events SET unseen_run_count = 0 "
+                        "WHERE ticker = ? AND event_date = ?",
+                        (ticker, event_date),
+                    )
+                continue
+            new_count = (prev_count or 0) + 1
+            conn.execute(
+                "UPDATE events SET unseen_run_count = ? "
+                "WHERE ticker = ? AND event_date = ?",
+                (new_count, ticker, event_date),
+            )
+            if new_count >= 2:
+                persistent_unseen.append(UnseenRow(
+                    ticker=ticker,
+                    company_name=company_name or "",
+                    event_date=event_date,
+                    tier=tier_val,
+                    miss_count=new_count,
+                ))
+        conn.commit()
+
+        if persistent_unseen:
+            logger.warning(
+                f"B2: {len(persistent_unseen)} Tier 1/2 event(s) missing from "
+                f"Finnhub for 2+ consecutive runs"
+            )
+            if SLACK_WEBHOOK_EARNINGS:
+                try:
+                    post_slack(
+                        SLACK_WEBHOOK_EARNINGS,
+                        build_unseen_blocks(persistent_unseen, today),
+                        build_unseen_fallback(persistent_unseen, today),
+                    )
+                except NotificationError as exc:
+                    logger.error(f"Unseen-ticker Slack post failed: {exc}")
 
     # --- TickTick task sync (Tier 1 + Tier 2 only) ---
     tt_stats: dict | None = None
