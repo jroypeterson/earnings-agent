@@ -1,13 +1,15 @@
 # .github/workflows/daily_earnings_check.yml
 #
-# Runs the earnings agent once daily at 6:00 AM ET (11:00 UTC)
+# Runs the earnings agent once daily at 11:00 UTC:
+#   - 6:00 AM ET during EST (November-March)
+#   - 7:00 AM ET during EDT (March-November)
 # Also supports manual triggers from the GitHub Actions UI.
 
 name: Daily Earnings Check
 
 on:
   schedule:
-    # 6:00 AM ET = 11:00 UTC (handles EST; during EDT this runs at 7 AM ET)
+    # 11:00 UTC = 6 AM EST / 7 AM EDT
     - cron: "0 11 * * *"
   workflow_dispatch: # Manual trigger
 
