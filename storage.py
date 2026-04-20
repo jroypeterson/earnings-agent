@@ -18,9 +18,17 @@ logger = logging.getLogger("earnings_agent")
 # Schema version tracking
 # ---------------------------------------------------------------------------
 
-CURRENT_SCHEMA_VERSION = 3  # Bump when adding migrations
+CURRENT_SCHEMA_VERSION = 4  # Bump when adding migrations
 
 _MIGRATIONS = {
+    # Version 3 → 4: Human override flag. When date_locked = 1, the sync
+    # and reconcile jobs will not move the calendar event's date even if
+    # Finnhub disagrees. Used when the user has verified the date via IR
+    # and considers Finnhub to be wrong.
+    4: [
+        "ALTER TABLE events ADD COLUMN date_locked INTEGER NOT NULL DEFAULT 0",
+    ],
+
     # Version 2 → 3: Track how many consecutive runs a Tier 1/2 event has
     # gone missing from Finnhub, so we can alert when a name persistently
     # disappears (possible data loss or coverage drop).
@@ -202,6 +210,7 @@ def init_db(db_path: Path = DB_PATH) -> sqlite3.Connection:
                 call_url        TEXT,
                 ticktick_task_id TEXT,
                 unseen_run_count INTEGER NOT NULL DEFAULT 0,
+                date_locked     INTEGER NOT NULL DEFAULT 0,
                 created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
                 updated_at      TEXT    NOT NULL DEFAULT (datetime('now')),
                 UNIQUE(ticker, event_date)
@@ -238,7 +247,7 @@ def find_existing_event(conn: sqlite3.Connection, ticker: str, event_date: str) 
     cur = conn.execute(
         "SELECT id, ticker, quarter, event_date, event_hour, gcal_id, "
         "eps_estimate, eps_actual, rev_estimate, rev_actual, reported, "
-        "tier, company_name, ticktick_task_id "
+        "tier, company_name, ticktick_task_id, date_locked "
         "FROM events WHERE ticker = ? AND event_date = ?",
         (ticker, event_date),
     )
@@ -251,6 +260,7 @@ def find_existing_event(conn: sqlite3.Connection, ticker: str, event_date: str) 
             "rev_estimate": row[8], "rev_actual": row[9],
             "reported": bool(row[10]), "tier": row[11],
             "company_name": row[12], "ticktick_task_id": row[13],
+            "date_locked": bool(row[14]),
         }
     return None
 
@@ -284,7 +294,8 @@ def find_event_for_ticker_near_date(
     """
     cur = conn.execute(
         "SELECT id, ticker, quarter, event_date, event_hour, gcal_id, "
-        "eps_estimate, eps_actual, rev_estimate, rev_actual, reported, tier "
+        "eps_estimate, eps_actual, rev_estimate, rev_actual, reported, tier, "
+        "date_locked "
         "FROM events WHERE ticker = ? "
         "AND julianday(event_date) BETWEEN julianday(?) - ? AND julianday(?) + ? "
         "ORDER BY ABS(julianday(event_date) - julianday(?)) LIMIT 1",
@@ -298,6 +309,7 @@ def find_event_for_ticker_near_date(
             "eps_estimate": row[6], "eps_actual": row[7],
             "rev_estimate": row[8], "rev_actual": row[9],
             "reported": bool(row[10]), "tier": row[11],
+            "date_locked": bool(row[12]),
         }
     return None
 
@@ -402,6 +414,61 @@ def record_estimate_snapshot(
         (ticker, event_date, snapshot_date, eps_estimate, revenue_estimate),
     )
     conn.commit()
+
+
+# ---------------------------------------------------------------------------
+# Date-lock helpers (D2: human override when Finnhub is wrong)
+# ---------------------------------------------------------------------------
+
+
+def is_ticker_date_locked(
+    conn: sqlite3.Connection, ticker: str, ref_date: str, window_days: int = 30
+) -> bool:
+    """
+    Return True if any event for `ticker` within `window_days` of `ref_date`
+    is date-locked. Used as a ticker-wide safety net when DB and calendar
+    event dates have drifted apart and exact-date lookup might miss the
+    locked row.
+    """
+    cur = conn.execute(
+        "SELECT 1 FROM events WHERE ticker = ? AND date_locked = 1 "
+        "AND julianday(event_date) BETWEEN julianday(?) - ? AND julianday(?) + ? "
+        "LIMIT 1",
+        (ticker.upper(), ref_date, window_days, ref_date, window_days),
+    )
+    return cur.fetchone() is not None
+
+
+def set_date_lock(
+    conn: sqlite3.Connection, ticker: str, event_date: str, locked: bool
+) -> bool:
+    """Set or clear the date_locked flag. Returns True if a row was affected."""
+    cur = conn.execute(
+        "UPDATE events SET date_locked = ?, updated_at = datetime('now') "
+        "WHERE ticker = ? AND event_date = ?",
+        (1 if locked else 0, ticker.upper(), event_date),
+    )
+    conn.commit()
+    return cur.rowcount > 0
+
+
+def list_locked_events(conn: sqlite3.Connection) -> list[dict]:
+    """Return all events currently date-locked."""
+    cur = conn.execute(
+        "SELECT ticker, event_date, event_hour, tier, company_name "
+        "FROM events WHERE date_locked = 1 "
+        "ORDER BY event_date, ticker"
+    )
+    return [
+        {
+            "ticker": r[0],
+            "event_date": r[1],
+            "event_hour": r[2],
+            "tier": r[3],
+            "company_name": r[4],
+        }
+        for r in cur.fetchall()
+    ]
 
 
 # ---------------------------------------------------------------------------

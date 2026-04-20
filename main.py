@@ -29,6 +29,9 @@ from storage import (
     upsert_event,
     record_estimate_snapshot,
     date_to_quarter,
+    set_date_lock,
+    list_locked_events,
+    is_ticker_date_locked,
 )
 from finnhub_client import get_client as get_finnhub_client, fetch_earnings, FinnhubError
 from calendar_sync import (
@@ -279,6 +282,19 @@ def run(
                     )
 
             if not date_changed and not hour_changed and not calendar_stale:
+                skip_count += 1
+                continue
+
+            # D2: respect human override. If the event is date-locked, do
+            # not delete+recreate the calendar event even when Finnhub
+            # disagrees. Log a single WARNING per drift so the user knows
+            # the lock is suppressing an update.
+            if existing.get("date_locked"):
+                logger.warning(
+                    f"Locked: {ticker} {quarter} date_locked=1 — "
+                    f"NOT moving calendar. DB={existing['event_date']}, "
+                    f"Finnhub={earnings_date}"
+                )
                 skip_count += 1
                 continue
 
@@ -988,19 +1004,40 @@ def run_reconcile_calendar(dry_run: bool = False):
             break
     logger.info(f"Reconcile: indexed {len(cal_events)} tagged calendar events")
 
-    # Detect drift
+    # Detect drift. Locked events are skipped but reported as "respected"
+    # so we never silently move a date the user has overridden.
     drift: list[tuple[str, str, dict, str]] = []  # (ticker, old_date, fh_event, gcal_id)
+    locked_drift: list[tuple[str, str, str]] = []  # (ticker, cal_date, fh_date)
     for ticker, (gcal_id, cal_date) in cal_events.items():
         fh = finnhub_map.get(ticker)
         if not fh:
             # Finnhub dropped this ticker from the window. Unseen-ticker
             # alerting is phase B2; here we skip to stay narrow.
             continue
-        if cal_date != fh.get("date"):
-            drift.append((ticker, cal_date, fh, gcal_id))
+        fh_date = fh.get("date")
+        if cal_date == fh_date:
+            continue
+        # Ticker-wide lock check handles the case where DB and calendar
+        # have drifted and an exact-date lookup would miss the locked row.
+        if is_ticker_date_locked(conn, ticker, cal_date):
+            locked_drift.append((ticker, cal_date, fh_date))
+            continue
+        drift.append((ticker, cal_date, fh, gcal_id))
+
+    for ticker, cal_date, fh_date in locked_drift:
+        logger.warning(
+            f"Reconcile: {ticker} locked at {cal_date}, Finnhub says {fh_date}. "
+            f"Skipping auto-fix."
+        )
 
     if not drift:
-        logger.info("Reconcile: no drift detected — calendar matches Finnhub")
+        if locked_drift:
+            logger.info(
+                f"Reconcile: no actionable drift ({len(locked_drift)} locked event(s) "
+                f"disagree with Finnhub, but overrides are in place)"
+            )
+        else:
+            logger.info("Reconcile: no drift detected — calendar matches Finnhub")
         conn.close()
         return
 
@@ -1079,6 +1116,67 @@ def run_reconcile_calendar(dry_run: bool = False):
 
 
 # ---------------------------------------------------------------------------
+# Date-lock management (D2)
+# ---------------------------------------------------------------------------
+
+
+def _parse_lock_arg(value: str) -> tuple[str, str]:
+    """Parse a TICKER:YYYY-MM-DD argument. Raises ValueError on bad input."""
+    if ":" not in value:
+        raise ValueError(f"Expected TICKER:YYYY-MM-DD, got {value!r}")
+    ticker, event_date = value.split(":", 1)
+    ticker = ticker.strip().upper()
+    event_date = event_date.strip()
+    # Validate date
+    date.fromisoformat(event_date)
+    if not ticker:
+        raise ValueError("Ticker cannot be empty")
+    return ticker, event_date
+
+
+def run_set_lock(target: str, locked: bool):
+    """Set or clear the date-lock on an event. target format: TICKER:YYYY-MM-DD."""
+    try:
+        ticker, event_date = _parse_lock_arg(target)
+    except ValueError as exc:
+        logger.error(f"Invalid lock argument: {exc}")
+        sys.exit(1)
+
+    conn = init_db()
+    ok = set_date_lock(conn, ticker, event_date, locked)
+    conn.close()
+
+    if not ok:
+        logger.error(
+            f"No event found for {ticker} on {event_date}. "
+            f"Nothing to {'lock' if locked else 'unlock'}."
+        )
+        sys.exit(1)
+
+    verb = "Locked" if locked else "Unlocked"
+    logger.info(f"{verb} {ticker} {event_date}")
+
+
+def run_list_locks():
+    """Print currently-locked events."""
+    conn = init_db()
+    locks = list_locked_events(conn)
+    conn.close()
+
+    if not locks:
+        print("No events are currently date-locked.")
+        return
+    print(f"{len(locks)} event(s) currently date-locked:")
+    for lock in locks:
+        ticker = lock["ticker"]
+        ev_date = lock["event_date"]
+        hour = lock["event_hour"] or "TBD"
+        tier = lock["tier"]
+        co = f" — {lock['company_name']}" if lock["company_name"] else ""
+        print(f"  {ticker} (T{tier}) {ev_date} {hour}{co}")
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
@@ -1138,9 +1236,30 @@ def main():
         action="store_true",
         help="Detect and fix calendar/Finnhub date drift; silent no-op if in sync",
     )
+    parser.add_argument(
+        "--lock",
+        metavar="TICKER:YYYY-MM-DD",
+        help="Lock an event's date so sync/reconcile won't overwrite it with Finnhub",
+    )
+    parser.add_argument(
+        "--unlock",
+        metavar="TICKER:YYYY-MM-DD",
+        help="Remove a date lock",
+    )
+    parser.add_argument(
+        "--list-locks",
+        action="store_true",
+        help="Show all currently date-locked events",
+    )
     args = parser.parse_args()
 
-    if args.ticktick_status:
+    if args.list_locks:
+        run_list_locks()
+    elif args.lock:
+        run_set_lock(args.lock, locked=True)
+    elif args.unlock:
+        run_set_lock(args.unlock, locked=False)
+    elif args.ticktick_status:
         config = get_ticktick_config()
         if not config:
             logger.error("TickTick not configured. Set TICKTICK_ACCESS_TOKEN in .env")
