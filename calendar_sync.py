@@ -359,8 +359,10 @@ def cleanup_duplicates(conn, dry_run: bool = False):
     """
     Scan Google Calendar for duplicate earnings events and delete extras.
 
-    Pass 1: Events with extendedProperties (earningsAgent=true) — groups by ticker + date.
-    Pass 2: Legacy events without extendedProperties — matched by summary pattern.
+    Fetches both tagged events (extendedProperties earningsAgent=true) and
+    legacy events (matched by summary pattern), merges them into a single
+    ticker|date grouping, and dedupes. The keeper prefers a tagged event over
+    a legacy one; ties break on newest creation time.
     """
     from storage import upsert_event, date_to_quarter
 
@@ -374,14 +376,10 @@ def cleanup_duplicates(conn, dry_run: bool = False):
     time_min = (today - timedelta(days=365)).isoformat() + "T00:00:00Z"
     time_max = (today + timedelta(days=365)).isoformat() + "T00:00:00Z"
 
-    deleted_count = 0
-
-    # -- Pass 1: events with extendedProperties --
-    logger.info("Pass 1: Scanning events with extendedProperties...")
+    # -- Fetch tagged events --
+    logger.info("Fetching events with extendedProperties...")
     tagged_events = []
-    tagged_ids = set()
     page_token = None
-
     while True:
         request = cal_service.events().list(
             calendarId=GOOGLE_CALENDAR_ID,
@@ -393,39 +391,18 @@ def cleanup_duplicates(conn, dry_run: bool = False):
             pageToken=page_token,
         )
         result = _retry_calendar(request.execute)
-
         tagged_events.extend(result.get("items", []))
         page_token = result.get("nextPageToken")
         if not page_token:
             break
 
+    tagged_ids = {e["id"] for e in tagged_events}
     logger.info(f"  Found {len(tagged_events)} tagged events")
 
-    groups: dict[str, list[dict]] = {}
-    for event in tagged_events:
-        tagged_ids.add(event["id"])
-        props = event.get("extendedProperties", {}).get("private", {})
-        ticker = props.get("ticker")
-        if not ticker:
-            continue
-        # Group by ticker + event date
-        start = event.get("start", {})
-        event_date = start.get("date") or start.get("dateTime", "")[:10]
-        if not event_date:
-            continue
-        key = f"{ticker}|{event_date}"
-        groups.setdefault(key, []).append(event)
-
-    for key, events in groups.items():
-        deleted_count += _dedup_group(
-            events, key.replace("|", " "), cal_service, conn, dry_run
-        )
-
-    # -- Pass 2: legacy events (no extendedProperties) --
-    logger.info("Pass 2: Scanning legacy events by summary pattern...")
+    # -- Fetch legacy events (summary search, minus tagged) --
+    logger.info("Fetching legacy events by summary pattern...")
     legacy_events = []
     page_token = None
-
     while True:
         request = cal_service.events().list(
             calendarId=GOOGLE_CALENDAR_ID,
@@ -437,7 +414,6 @@ def cleanup_duplicates(conn, dry_run: bool = False):
             pageToken=page_token,
         )
         result = _retry_calendar(request.execute)
-
         legacy_events.extend(result.get("items", []))
         page_token = result.get("nextPageToken")
         if not page_token:
@@ -446,7 +422,20 @@ def cleanup_duplicates(conn, dry_run: bool = False):
     legacy_events = [e for e in legacy_events if e["id"] not in tagged_ids]
     logger.info(f"  Found {len(legacy_events)} legacy events (without extendedProperties)")
 
-    legacy_groups: dict[str, list[dict]] = {}
+    # -- Build unified groups keyed by ticker|date --
+    groups: dict[str, list[dict]] = {}
+
+    for event in tagged_events:
+        props = event.get("extendedProperties", {}).get("private", {})
+        ticker = props.get("ticker")
+        if not ticker:
+            continue
+        start = event.get("start", {})
+        event_date = start.get("date") or start.get("dateTime", "")[:10]
+        if not event_date:
+            continue
+        groups.setdefault(f"{ticker}|{event_date}", []).append(event)
+
     for event in legacy_events:
         ticker = parse_ticker_from_summary(event.get("summary", ""))
         if not ticker:
@@ -455,10 +444,10 @@ def cleanup_duplicates(conn, dry_run: bool = False):
         event_date = start.get("date") or start.get("dateTime", "")[:10]
         if not event_date:
             continue
-        key = f"{ticker}|{event_date}"
-        legacy_groups.setdefault(key, []).append(event)
+        groups.setdefault(f"{ticker}|{event_date}", []).append(event)
 
-    for key, events in legacy_groups.items():
+    deleted_count = 0
+    for key, events in groups.items():
         deleted_count += _dedup_group(
             events, key.replace("|", " "), cal_service, conn, dry_run
         )
@@ -484,7 +473,10 @@ def _dedup_group(
     if len(events) <= 1:
         return 0
 
-    events.sort(key=lambda e: e.get("created", ""), reverse=True)
+    def _is_tagged(e: dict) -> bool:
+        return bool(e.get("extendedProperties", {}).get("private", {}).get("earningsAgent"))
+
+    events.sort(key=lambda e: (_is_tagged(e), e.get("created", "")), reverse=True)
     keep = events[0]
     dupes = events[1:]
 
