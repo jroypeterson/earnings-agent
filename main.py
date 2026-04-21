@@ -42,6 +42,7 @@ from calendar_sync import (
     delete_calendar_event,
     build_description,
     cleanup_duplicates,
+    _is_confirmed_hour,
     CalendarError,
 )
 from ticktick import (
@@ -1208,6 +1209,117 @@ def run_reconcile_calendar(dry_run: bool = False):
 
 
 # ---------------------------------------------------------------------------
+# Refresh calendar summaries + descriptions (one-shot backfill)
+# ---------------------------------------------------------------------------
+
+
+def run_refresh_descriptions(dry_run: bool = False, days_ahead: int = 90):
+    """
+    Rewrite title + description for every tagged upcoming Calendar event
+    using current DB state. Useful after adding a field (like
+    date_confirmed) so existing events pick up the new rendering
+    without waiting for a natural date change.
+    """
+    from config import CALENDAR_PAGE_SIZE
+
+    if not GOOGLE_CALENDAR_ID:
+        logger.error("GOOGLE_CALENDAR_ID required")
+        sys.exit(1)
+
+    conn = init_db()
+    try:
+        cal_service = get_calendar_service()
+    except Exception as exc:
+        logger.error(f"Failed to init Calendar: {exc}")
+        sys.exit(1)
+
+    today = date.today()
+    time_min = today.isoformat() + "T00:00:00Z"
+    time_max = (today + timedelta(days=days_ahead)).isoformat() + "T00:00:00Z"
+
+    events = []
+    page_token = None
+    while True:
+        r = cal_service.events().list(
+            calendarId=GOOGLE_CALENDAR_ID,
+            privateExtendedProperty="earningsAgent=true",
+            timeMin=time_min, timeMax=time_max,
+            singleEvents=True, maxResults=CALENDAR_PAGE_SIZE,
+            pageToken=page_token,
+        ).execute()
+        events.extend(r.get("items", []))
+        page_token = r.get("nextPageToken")
+        if not page_token:
+            break
+
+    logger.info(f"Refresh: {len(events)} tagged calendar events in window")
+
+    updated = 0
+    skipped_no_db = 0
+    failed = 0
+    for ev in events:
+        props = ev.get("extendedProperties", {}).get("private", {})
+        ticker = props.get("ticker")
+        if not ticker:
+            continue
+        start = ev.get("start", {})
+        event_date = start.get("date") or start.get("dateTime", "")[:10]
+        if not event_date:
+            continue
+
+        db_row = find_existing_event(conn, ticker, event_date)
+        if not db_row:
+            skipped_no_db += 1
+            continue
+
+        hour = db_row.get("event_hour")
+        eps_est = db_row.get("eps_estimate")
+        eps_act = db_row.get("eps_actual")
+        rev_est = db_row.get("rev_estimate")
+        rev_act = db_row.get("rev_actual")
+        has_actuals = eps_act is not None or rev_act is not None
+
+        est_marker = "" if (has_actuals or _is_confirmed_hour(hour)) else " (est.)"
+        new_summary = (
+            f"{'[REPORTED]' if has_actuals else ''} {ticker} "
+            f"Earnings Release{est_marker}"
+        ).strip()
+        new_description = build_description(
+            ticker, hour, eps_est, eps_act, rev_est, rev_act
+        )
+
+        if dry_run:
+            if ev.get("summary") != new_summary:
+                logger.info(
+                    f"  [dry-run] {ticker} {event_date}: "
+                    f"'{ev.get('summary')}' -> '{new_summary}'"
+                )
+                updated += 1
+            continue
+
+        try:
+            update_calendar_event_description(
+                cal_service, GOOGLE_CALENDAR_ID, ev["id"],
+                new_summary, new_description,
+                ticker=ticker,
+                quarter=db_row.get("quarter"),
+                source_fingerprint=f"{ticker}:{event_date}",
+                tier=db_row.get("tier"),
+            )
+            updated += 1
+        except CalendarError as exc:
+            logger.warning(f"  Failed to update {ticker} {event_date}: {exc}")
+            failed += 1
+
+    conn.close()
+
+    logger.info(
+        f"Refresh complete: {updated} updated, {skipped_no_db} skipped "
+        f"(no DB row), {failed} failed"
+    )
+
+
+# ---------------------------------------------------------------------------
 # Cross-check: Finnhub vs yfinance (B1)
 # ---------------------------------------------------------------------------
 
@@ -1508,6 +1620,11 @@ def main():
         action="store_true",
         help="Compare Finnhub's upcoming Tier 1/2 dates against yfinance; alert on disagreement",
     )
+    parser.add_argument(
+        "--refresh-descriptions",
+        action="store_true",
+        help="Rewrite title + description for all tagged upcoming calendar events from current DB state",
+    )
     args = parser.parse_args()
 
     if args.list_locks:
@@ -1534,6 +1651,8 @@ def main():
         run_reconcile_calendar(dry_run=args.dry_run)
     elif args.cross_check:
         run_cross_check(dry_run=args.dry_run)
+    elif args.refresh_descriptions:
+        run_refresh_descriptions(dry_run=args.dry_run)
     elif args.cleanup:
         conn = init_db()
         cleanup_duplicates(conn, dry_run=args.dry_run)
