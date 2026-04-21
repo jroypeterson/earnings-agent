@@ -18,9 +18,28 @@ logger = logging.getLogger("earnings_agent")
 # Schema version tracking
 # ---------------------------------------------------------------------------
 
-CURRENT_SCHEMA_VERSION = 5  # Bump when adding migrations
+CURRENT_SCHEMA_VERSION = 7  # Bump when adding migrations
 
 _MIGRATIONS = {
+    # Version 6 → 7: Backfill date_confirmed from event_hour. Every row
+    # whose hour is bmo/amc/dmh is retroactively flagged confirmed — the
+    # v6 migration only added the column, not the initial values, so
+    # rows that don't upsert on the next sync (skip_count path) would
+    # otherwise stay at the default 0.
+    7: [
+        "UPDATE events SET date_confirmed = 1 "
+        "WHERE LOWER(COALESCE(event_hour, '')) IN ('bmo', 'amc', 'dmh')",
+    ],
+
+    # Version 5 → 6: Confirmed vs estimated flag. Set to 1 when Finnhub's
+    # `hour` field is populated (bmo/amc/dmh) — indicates the company has
+    # announced timing, which in practice means the date is confirmed too.
+    # Empty hour = Finnhub is projecting from historical cadence; the
+    # release date has not been announced by the company.
+    6: [
+        "ALTER TABLE events ADD COLUMN date_confirmed INTEGER NOT NULL DEFAULT 0",
+    ],
+
     # Version 4 → 5: Record the last yfinance date(s) that the cross-check
     # alerted on for each event. Lets the B1 cross-check suppress daily
     # repeat alerts when the disagreement state hasn't changed, and re-fire
@@ -220,6 +239,7 @@ def init_db(db_path: Path = DB_PATH) -> sqlite3.Connection:
                 unseen_run_count INTEGER NOT NULL DEFAULT 0,
                 date_locked     INTEGER NOT NULL DEFAULT 0,
                 last_xcheck_yf_dates TEXT,
+                date_confirmed  INTEGER NOT NULL DEFAULT 0,
                 created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
                 updated_at      TEXT    NOT NULL DEFAULT (datetime('now')),
                 UNIQUE(ticker, event_date)
@@ -256,7 +276,7 @@ def find_existing_event(conn: sqlite3.Connection, ticker: str, event_date: str) 
     cur = conn.execute(
         "SELECT id, ticker, quarter, event_date, event_hour, gcal_id, "
         "eps_estimate, eps_actual, rev_estimate, rev_actual, reported, "
-        "tier, company_name, ticktick_task_id, date_locked "
+        "tier, company_name, ticktick_task_id, date_locked, date_confirmed "
         "FROM events WHERE ticker = ? AND event_date = ?",
         (ticker, event_date),
     )
@@ -270,6 +290,7 @@ def find_existing_event(conn: sqlite3.Connection, ticker: str, event_date: str) 
             "reported": bool(row[10]), "tier": row[11],
             "company_name": row[12], "ticktick_task_id": row[13],
             "date_locked": bool(row[14]),
+            "date_confirmed": bool(row[15]),
         }
     return None
 
@@ -340,9 +361,17 @@ def upsert_event(
     company_name: str | None = None,
     source_fingerprint: str | None = None,
 ):
-    """Insert or update an event, keyed on (ticker, event_date)."""
+    """
+    Insert or update an event, keyed on (ticker, event_date).
+
+    The `date_confirmed` column is derived from `event_hour`: Finnhub
+    populates `bmo`/`amc`/`dmh` only when the company has announced
+    timing, which in practice signals the date is confirmed.
+    """
     if source_fingerprint is None:
         source_fingerprint = f"{ticker}:{event_date}"
+
+    date_confirmed = int((event_hour or "").lower() in ("bmo", "amc", "dmh"))
 
     # Try update first (handles both old UNIQUE(ticker, quarter) and new UNIQUE(ticker, event_date))
     cur = conn.execute(
@@ -366,12 +395,14 @@ def upsert_event(
                 tier             = ?,
                 company_name     = COALESCE(?, company_name),
                 source_fingerprint = ?,
+                date_confirmed   = ?,
                 updated_at       = datetime('now')
             WHERE ticker = ? AND event_date = ?
             """,
             (event_hour, gcal_id, quarter,
              eps_estimate, eps_actual, rev_estimate, rev_actual,
              int(reported), tier, company_name, source_fingerprint,
+             date_confirmed,
              ticker, event_date),
         )
     else:
@@ -386,12 +417,14 @@ def upsert_event(
             """
             INSERT INTO events (ticker, event_date, event_hour, gcal_id, quarter,
                                 eps_estimate, eps_actual, rev_estimate, rev_actual,
-                                reported, tier, company_name, source_fingerprint)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                reported, tier, company_name, source_fingerprint,
+                                date_confirmed)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (ticker, event_date, event_hour, gcal_id, quarter,
              eps_estimate, eps_actual, rev_estimate, rev_actual,
-             int(reported), tier, company_name, source_fingerprint),
+             int(reported), tier, company_name, source_fingerprint,
+             date_confirmed),
         )
 
     conn.commit()

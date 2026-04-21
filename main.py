@@ -1248,7 +1248,8 @@ def run_cross_check(dry_run: bool = False, days_ahead: int = 14):
     horizon_iso = (today + timedelta(days=days_ahead)).isoformat()
 
     cur = conn.execute(
-        "SELECT ticker, event_date, tier, company_name, last_xcheck_yf_dates "
+        "SELECT ticker, event_date, tier, company_name, last_xcheck_yf_dates, "
+        "date_confirmed "
         "FROM events "
         "WHERE tier <= 2 AND reported = 0 AND date_locked = 0 "
         "AND event_date >= ? AND event_date <= ? "
@@ -1267,10 +1268,10 @@ def run_cross_check(dry_run: bool = False, days_ahead: int = 14):
         f"next {days_ahead} day(s) against yfinance"
     )
 
-    new_disagreements: list[DisagreementRow] = []
+    new_disagreements = []  # list[tuple[DisagreementRow, signature_str]]
     suppressed_count = 0
     yf_missing = 0
-    for ticker, event_date, tier, company_name, last_sig in upcoming:
+    for ticker, event_date, tier, company_name, last_sig, date_confirmed in upcoming:
         yf_dates = fetch_yfinance_earnings_date(ticker)
         if yf_dates is None:
             yf_missing += 1
@@ -1315,6 +1316,7 @@ def run_cross_check(dry_run: bool = False, days_ahead: int = 14):
             finnhub_date=event_date,
             yf_dates=yf_dates,
             tier=tier,
+            finnhub_confirmed=bool(date_confirmed),
             edgar_ref_date=edgar_ref,
             edgar_finnhub_offset=edgar_fh_offset,
             edgar_yf_offset=edgar_yf_offset,

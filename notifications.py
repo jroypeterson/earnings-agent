@@ -603,6 +603,10 @@ class DisagreementRow:
     finnhub_date: str
     yf_dates: list  # list[date] from yfinance
     tier: int
+    # True when Finnhub's `hour` field was populated (bmo/amc/dmh),
+    # which signals the company has announced timing. Empty hour is
+    # Finnhub's projection from historical cadence.
+    finnhub_confirmed: bool = False
     # EDGAR signal: prior-year same-quarter 2.02 filing date, and the
     # signed offsets of the finnhub/yfinance candidates from that
     # anniversary (negative = target is earlier than anniversary).
@@ -631,8 +635,9 @@ def _disagreement_lines(rows: list[DisagreementRow]) -> str:
     lines = []
     for r in sorted(rows, key=lambda x: (x.finnhub_date, x.ticker)):
         co = f" — {r.company_name}" if r.company_name else ""
+        fh_marker = "" if r.finnhub_confirmed else " _(est.)_"
         base = (
-            f"• `{r.ticker}`{co}: Finnhub {_fmt_date_safe(r.finnhub_date)} "
+            f"• `{r.ticker}`{co}: Finnhub {_fmt_date_safe(r.finnhub_date)}{fh_marker} "
             f"·  yfinance {_fmt_yf_dates(r.yf_dates)}"
         )
         if r.edgar_ref_date:

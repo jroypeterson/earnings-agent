@@ -90,6 +90,11 @@ def get_calendar_service():
 # ---------------------------------------------------------------------------
 
 
+def _is_confirmed_hour(hour: str | None) -> bool:
+    """Finnhub populates bmo/amc/dmh only when timing is announced."""
+    return (hour or "").lower() in ("bmo", "amc", "dmh")
+
+
 def build_description(
     ticker: str,
     hour: str | None,
@@ -107,6 +112,9 @@ def build_description(
     ]
 
     has_actuals = eps_actual is not None or revenue_actual is not None
+    if not has_actuals:
+        status = "Confirmed" if _is_confirmed_hour(hour) else "Estimated (Finnhub has no timing)"
+        lines.append(f"Status: {status}")
 
     # --- EPS section ---
     if eps_actual is not None and eps_estimate is not None:
@@ -244,7 +252,10 @@ def create_calendar_event(
     Returns the created event's Google Calendar ID.
     """
     has_actuals = eps_actual is not None or revenue_actual is not None
-    summary = f"{'[REPORTED]' if has_actuals else ''} {ticker} Earnings Release".strip()
+    est_marker = "" if (has_actuals or _is_confirmed_hour(hour)) else " (est.)"
+    summary = (
+        f"{'[REPORTED]' if has_actuals else ''} {ticker} Earnings Release{est_marker}"
+    ).strip()
     description = build_description(
         ticker, hour, eps_estimate, eps_actual, revenue_estimate, revenue_actual
     )
