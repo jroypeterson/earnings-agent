@@ -1,0 +1,12 @@
+{
+  "__about": "Map of ticker -> IR press-release RSS URL. Used by --check-announcements to auto-upgrade estimated events to confirmed when a company publishes its earnings-date press release. Populate for Tier 1 tickers you care about; tickers without a config are silently skipped.",
+  "__schema": {
+    "TICKER": "https://ir.example.com/rss.xml",
+    "or": {"url": "https://ir.example.com/rss.xml", "note": "per-company flavor / vendor info"}
+  },
+  "__tips": [
+    "Common URL patterns: ir.{company}.com/rss, investor.{company}.com/press-releases/rss, investors.{company}.com/rss.xml",
+    "Many companies use Q4 Inc or Notified.com as their IR vendor; URLs look like https://{company}.q4cdn.com/rss or https://www.notified.com/rss/{id}",
+    "Press-release only feeds (not all newsroom items) give cleaner signal — look for 'press releases' or 'news releases' RSS specifically"
+  ]
+}

@@ -18,9 +18,17 @@ logger = logging.getLogger("earnings_agent")
 # Schema version tracking
 # ---------------------------------------------------------------------------
 
-CURRENT_SCHEMA_VERSION = 7  # Bump when adding migrations
+CURRENT_SCHEMA_VERSION = 8  # Bump when adding migrations
 
 _MIGRATIONS = {
+    # Version 7 → 8: URL of the press release that confirmed this event's
+    # date, when one is detected by the RSS announcement scanner. Stored
+    # so we can show provenance in alerts and avoid re-confirming via RSS
+    # on events that are already anchored to a specific announcement.
+    8: [
+        "ALTER TABLE events ADD COLUMN announcement_url TEXT",
+    ],
+
     # Version 6 → 7: Backfill date_confirmed from event_hour. Every row
     # whose hour is bmo/amc/dmh is retroactively flagged confirmed — the
     # v6 migration only added the column, not the initial values, so
@@ -240,6 +248,7 @@ def init_db(db_path: Path = DB_PATH) -> sqlite3.Connection:
                 date_locked     INTEGER NOT NULL DEFAULT 0,
                 last_xcheck_yf_dates TEXT,
                 date_confirmed  INTEGER NOT NULL DEFAULT 0,
+                announcement_url TEXT,
                 created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
                 updated_at      TEXT    NOT NULL DEFAULT (datetime('now')),
                 UNIQUE(ticker, event_date)

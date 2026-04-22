@@ -1320,6 +1320,142 @@ def run_refresh_descriptions(dry_run: bool = False, days_ahead: int = 90):
 
 
 # ---------------------------------------------------------------------------
+# Announcement check: scan configured IR RSS feeds (B1 bonus)
+# ---------------------------------------------------------------------------
+
+
+def run_check_announcements(dry_run: bool = False, days_ahead: int = 30):
+    """
+    For each upcoming Tier 1 estimated event that has an IR RSS URL
+    configured in ir_feeds.json, scan the feed for a pre-announcement
+    press release. When found, upgrade date_confirmed=1 and record the
+    announcement URL.
+
+    Tickers without an IR feed configured are silently skipped —
+    aggregator RSS (Seeking Alpha, Nasdaq, Business Wire) don't
+    reliably carry company earnings press releases, so we don't pretend
+    to cover them.
+    """
+    from rss_client import (
+        fetch_ticker_feed, detect_announcement, _load_ir_feeds,
+    )
+
+    ir_map = _load_ir_feeds()
+    if not ir_map:
+        logger.warning(
+            "No IR feeds configured in ir_feeds.json — nothing to check. "
+            "Populate the file with {TICKER: rss_url} entries."
+        )
+        return
+
+    conn = init_db()
+    today = date.today()
+    horizon = (today + timedelta(days=days_ahead)).isoformat()
+
+    cur = conn.execute(
+        "SELECT ticker, event_date, company_name, tier "
+        "FROM events "
+        "WHERE tier = 1 AND reported = 0 AND date_confirmed = 0 "
+        "AND announcement_url IS NULL "
+        "AND event_date >= ? AND event_date <= ? "
+        "ORDER BY event_date, ticker",
+        (today.isoformat(), horizon),
+    )
+    candidates = cur.fetchall()
+    if not candidates:
+        logger.info("No Tier 1 estimated events in window")
+        conn.close()
+        return
+
+    configured = [c for c in candidates if c[0].upper() in ir_map]
+    skipped = len(candidates) - len(configured)
+    logger.info(
+        f"Checking {len(configured)} Tier 1 estimated event(s) with IR feeds "
+        f"({skipped} without IR feed configured)"
+    )
+
+    newly_confirmed = []
+    for ticker, event_date, company_name, tier in configured:
+        try:
+            result = fetch_ticker_feed(ticker)
+        except Exception as exc:
+            logger.warning(f"  {ticker}: feed fetch failed: {exc}")
+            continue
+        if not result:
+            continue
+        items, src = result
+        evt_dt = date.fromisoformat(event_date)
+        match = detect_announcement(items, evt_dt, source=src)
+        if not match:
+            logger.info(f"  {ticker}: no announcement found in {len(items)} IR items")
+            continue
+        logger.info(
+            f"  {ticker}: announcement detected [{match.feed_item.pub_date}] "
+            f"{match.feed_item.title[:100]}"
+        )
+        newly_confirmed.append({
+            "ticker": ticker,
+            "event_date": event_date,
+            "company_name": company_name or "",
+            "title": match.feed_item.title,
+            "link": match.feed_item.link,
+            "pub_date": (
+                match.feed_item.pub_date.isoformat()
+                if match.feed_item.pub_date else ""
+            ),
+            "announced_date": (
+                match.announced_date.isoformat() if match.announced_date else None
+            ),
+        })
+
+        if not dry_run:
+            conn.execute(
+                "UPDATE events SET date_confirmed = 1, announcement_url = ? "
+                "WHERE ticker = ? AND event_date = ?",
+                (match.feed_item.link, ticker, event_date),
+            )
+
+    if not dry_run:
+        conn.commit()
+    conn.close()
+
+    if not newly_confirmed:
+        logger.info("No new announcements detected")
+        return
+
+    logger.info(
+        f"Upgraded {len(newly_confirmed)} Tier 1 event(s) from estimated to confirmed"
+    )
+
+    if not dry_run and SLACK_WEBHOOK_EARNINGS:
+        lines = []
+        for r in newly_confirmed:
+            co = f" — {r['company_name']}" if r["company_name"] else ""
+            lines.append(
+                f"• `{r['ticker']}`{co}  →  *confirmed* for {r['event_date']}"
+                + (f"\n  <{r['link']}|{r['title'][:90]}>" if r["link"] else "")
+            )
+        blocks = [
+            {
+                "type": "header",
+                "text": {
+                    "type": "plain_text",
+                    "text": f":newspaper: {len(newly_confirmed)} Tier 1 event(s) newly confirmed via IR RSS",
+                },
+            },
+            {"type": "section", "text": {"type": "mrkdwn", "text": "\n".join(lines)}},
+        ]
+        try:
+            post_slack(
+                SLACK_WEBHOOK_EARNINGS,
+                blocks,
+                f"{len(newly_confirmed)} IR-announced earnings dates confirmed",
+            )
+        except NotificationError as exc:
+            logger.error(f"Slack post failed: {exc}")
+
+
+# ---------------------------------------------------------------------------
 # Cross-check: Finnhub vs yfinance (B1)
 # ---------------------------------------------------------------------------
 
@@ -1625,6 +1761,11 @@ def main():
         action="store_true",
         help="Rewrite title + description for all tagged upcoming calendar events from current DB state",
     )
+    parser.add_argument(
+        "--check-announcements",
+        action="store_true",
+        help="Scan configured IR RSS feeds (ir_feeds.json) for earnings-date announcements; upgrade estimated Tier 1 events to confirmed when found",
+    )
     args = parser.parse_args()
 
     if args.list_locks:
@@ -1653,6 +1794,8 @@ def main():
         run_cross_check(dry_run=args.dry_run)
     elif args.refresh_descriptions:
         run_refresh_descriptions(dry_run=args.dry_run)
+    elif args.check_announcements:
+        run_check_announcements(dry_run=args.dry_run)
     elif args.cleanup:
         conn = init_db()
         cleanup_duplicates(conn, dry_run=args.dry_run)
