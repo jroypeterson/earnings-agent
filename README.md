@@ -7,10 +7,13 @@ An earnings review execution system that monitors upcoming earnings, syncs to Go
 - Reads your ticker universe and tiers from **Coverage Manager** (Core Watchlist / HC Services & MedTech / Other)
 - Queries Finnhub daily for upcoming earnings dates, timing (BMO/AMC), and consensus estimates
 - Creates **Google Calendar** events for Tier 1 + Tier 2 names (with deduplication)
+- Labels every event as **Confirmed vs Estimated** based on whether the company has announced timing
 - Creates **TickTick** review tasks in quarterly lists (e.g. "1Q26 Earnings - Core Watchlist")
 - Stores consensus estimate snapshots for building revision trends over time
 - Tracks actuals (beat/miss) after earnings are reported and updates calendar events
-- Supports dry-run, backfill, and cleanup modes
+- **Multi-source date correctness**: cross-checks Finnhub against yfinance + SEC EDGAR historical cadence, scans IR RSS feeds for pre-release announcements, alerts on Tier 1 moves within 5 business days
+- Human override via `--lock TICKER:DATE` when Finnhub is wrong and IR page is verified
+- Supports dry-run, backfill, cleanup, and reconcile modes
 
 ## Architecture
 
@@ -82,23 +85,28 @@ python main.py --cleanup
 
 ## Deploy on GitHub Actions
 
-Two workflows ship in `.github/workflows/`:
+Four workflows ship in `.github/workflows/`:
 
-- **`daily_earnings_check.yml`** — daily calendar sync at ~6 AM ET
-- **`weekly_digest.yml`** — Sunday ~noon ET Slack digest post
+| Workflow | Cron (UTC) | Local ET (EDT) | Purpose |
+|---|---|---|---|
+| `daily_earnings_check.yml` | `0 11 * * *` | ~7 AM | Full daily sync + B1 cross-check |
+| `daily_earnings_check.yml` | `0 19 * * 1-5` | ~3 PM weekdays | Afternoon redundancy for mid-day Finnhub changes |
+| `reconcile_calendar.yml` | `0 14,17,20 * * 1-5` | ~10 AM / 1 PM / 4 PM | Lightweight drift auto-repair |
+| `weekly_digest.yml` | `0 16 * * 0` | Sunday ~12 PM | Weekly digest to Slack |
+| `post_earnings_check.yml` | `0 22 * * 1-5` | Weekday ~6 PM | Results sweep + AMC overnight catch-up |
 
-Both workflows clone the public [Coverage-Manager](https://github.com/jroypeterson/Coverage-Manager) repo (sparse checkout of `exports/`) so the agent gets full tier and sector data in CI.
+All workflows clone the public [Coverage-Manager](https://github.com/jroypeterson/Coverage-Manager) repo (sparse checkout of `exports/`). DB-writing workflows share `concurrency: earnings-db-writer` so they serialize on the shared `earnings-db` artifact. Every workflow has an `if: failure()` step that posts to Slack on non-zero exit.
 
 In your repo → Settings → Secrets and variables → Actions, add:
 
 **Secrets** (encrypted):
 | Name | Used by | Value |
 |------|---------|-------|
-| `FINNHUB_API_KEY` | both | Your Finnhub API key |
-| `GOOGLE_CALENDAR_ID` | both | Your calendar ID |
-| `GOOGLE_CREDENTIALS_JSON` | daily | Entire contents of `credentials.json` |
+| `FINNHUB_API_KEY` | all | Your Finnhub API key |
+| `GOOGLE_CALENDAR_ID` | all | Your calendar ID |
+| `GOOGLE_CREDENTIALS_JSON` | all | Entire contents of `credentials.json` |
 | `TICKTICK_ACCESS_TOKEN` | daily | TickTick OAuth token (optional) |
-| `SLACK_WEBHOOK_EARNINGS` | weekly | Slack incoming webhook for `#earnings` |
+| `SLACK_WEBHOOK_EARNINGS` | all | Slack incoming webhook for `#earnings` |
 
 Then go to repo → Actions tab → enable workflows.
 
@@ -117,23 +125,30 @@ Logs land in `logs\weekly_digest_YYYYMMDD.log`.
 
 ```
 earnings_agent/
-├── main.py              # CLI entry point and orchestrator
+├── main.py              # CLI entry point + all top-level flows
 ├── config.py            # Environment, paths, constants
 ├── coverage.py          # Coverage Manager integration, tier resolution
-├── storage.py           # SQLite schema, non-destructive migrations
-├── finnhub_client.py    # Finnhub API with retry + exponential backoff
-├── calendar_sync.py     # Google Calendar operations with pagination
+├── storage.py           # SQLite schema (v8), non-destructive migrations
+├── finnhub_client.py    # Finnhub API with adaptive chunk splitting + fail-fast
+├── calendar_sync.py     # Google Calendar CRUD + dedup + confirmed/est rendering
+├── edgar_client.py      # SEC EDGAR 8-K fetcher + cadence inference
+├── rss_client.py        # RSS/Atom parser + IR announcement detector
+├── market_data.py       # yfinance wrappers (YTD, post-earnings move, calendar)
 ├── ticktick.py          # TickTick list/task management
 ├── digest.py            # Weekly digest query + grouping + clustering
-├── notifications.py     # Slack webhook + email HTML/plaintext rendering
+├── notifications.py     # Slack Block Kit builders for every alert surface
 ├── weekly_digest.bat    # Windows Task Scheduler wrapper for the weekly digest
 ├── earnings_agent.py    # Legacy entry point (delegates to main.py)
-├── test_dedup.py        # Test suite (13 tests)
+├── ir_feeds.json        # Per-ticker IR RSS URL mapping (for --check-announcements)
+├── test_dedup.py        # Test suite
 ├── requirements.txt
 ├── .env.example
 ├── PLAN.md              # Detailed implementation plan (7 phases)
 └── .github/workflows/
-    └── daily_earnings_check.yml
+    ├── daily_earnings_check.yml
+    ├── reconcile_calendar.yml
+    ├── post_earnings_check.yml
+    └── weekly_digest.yml
 ```
 
 ## TickTick Integration
@@ -153,6 +168,7 @@ See `PLAN.md` for the full 7-phase roadmap. Completed:
 - [x] Phase 2: TickTick integration (quarterly lists, review tasks)
 - [x] Phase 3: Weekly digest (Slack + Gmail MCP draft)
 - [x] Phase 4: Post-earnings alerts (T+0 Slack + TickTick close-loop)
+- [x] Phase 4.5: Date-correctness hardening (A1 adaptive chunks + fail-fast, A2 reconcile, A3 urgent alert, B1 yfinance cross-check + EDGAR cadence, B2 unseen-ticker alert, D2 lock override, confirmed/estimated flag, IR RSS announcement scanner). See `CLAUDE.md` for architecture.
 - [ ] Phase 5: Pre-earnings briefs (T-1 enriched context)
 - [ ] Phase 6: Prediction tracking + accuracy analysis
-- [ ] Phase 7: Reconcile mode + hardening
+- [ ] Phase 7: Reconcile mode + hardening (partial — reconcile job + failure alerts done; SLO tracking + event colors remaining)

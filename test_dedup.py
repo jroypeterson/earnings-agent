@@ -69,6 +69,11 @@ def make_in_memory_db():
             ir_url          TEXT,
             call_url        TEXT,
             ticktick_task_id TEXT,
+            unseen_run_count INTEGER NOT NULL DEFAULT 0,
+            date_locked     INTEGER NOT NULL DEFAULT 0,
+            last_xcheck_yf_dates TEXT,
+            date_confirmed  INTEGER NOT NULL DEFAULT 0,
+            announcement_url TEXT,
             created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
             updated_at      TEXT    NOT NULL DEFAULT (datetime('now')),
             UNIQUE(ticker, event_date)
