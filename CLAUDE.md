@@ -54,7 +54,7 @@ Getting the earnings date right is the primary goal. The stack of safeguards, fr
 - **`fetch_earnings` skips single-day ranges** (`while start < end` — if `from == to`, loop never runs). `run_check_results` works around this by passing `target → target+1` and filtering client-side.
 - **Slack has no native underline.** `notifications._underline()` uses U+0332 combining low line. Works in most clients; if it breaks, fall back to `*━━ Day ━━*`.
 - **Gmail send is MCP-only.** CI cannot create Gmail drafts — `--weekly-digest` in CI just uploads `last_digest.html` as an artifact; email draft happens when a human Claude session runs the MCP `create_draft` tool.
-- **`PA` sector = Personal Account** (uncategorized tickers the user follows). These fall to Tier 3 — not noise, intentional follows.
+- **`Other` sector catches uncategorized tickers** the user follows but hasn't assigned a formal sector to. These fall to Tier 3. (Previous "PA" code was retired in Coverage Manager schema v2 on 2026-04-17 — collapsed into "Other".)
 - **TickTick list naming uses *reporting quarter*, not release-date quarter.** April releases land in `1Q26 Earnings - *`, not `2Q26`. `_reporting_quarter()` in `ticktick.py`.
 - **Idempotent result detection.** `run_check_results` skips events already marked `reported=1`. DB update happens *after* Slack post succeeds, so a Slack failure leaves records unmarked for the next run to retry.
 - **`run()` shares `notify_results()` with `run_check_results`** — the 6 AM daily sync also posts Slack alerts when it detects overnight AMC actuals. Don't re-post from a separate path.
