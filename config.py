@@ -38,6 +38,12 @@ TIMEZONE = os.getenv("TIMEZONE", "America/New_York")
 
 # Notifications
 SLACK_WEBHOOK_EARNINGS = os.getenv("SLACK_WEBHOOK_EARNINGS")
+# Bot-token Slack client (powers per-question threads + reply polling).
+# Webhook remains the path for heartbeat / digest posts that don't need
+# replies. When SLACK_BOT_TOKEN + SLACK_CHANNEL_ID are unset, threaded
+# question paths fall back to webhook posting (no replies possible).
+SLACK_BOT_TOKEN = os.getenv("SLACK_BOT_TOKEN")
+SLACK_CHANNEL_ID = os.getenv("SLACK_CHANNEL_ID")
 EMAIL_TO = os.getenv("EMAIL_TO")
 
 # SEC EDGAR fair-access policy requires a User-Agent with contact info.

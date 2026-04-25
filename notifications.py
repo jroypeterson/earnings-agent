@@ -739,6 +739,148 @@ def build_crosscheck_fallback(rows: list[DisagreementRow], as_of: date) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Per-thread builders (v9: bot-token + reply flow)
+#
+# Phase 1 reframe — each disagreement gets its own thread parent so the
+# user can resolve them with thread replies. The parent message tells the
+# user what the agent sees, what its tentative read is, and which reply
+# commands are available.
+# ---------------------------------------------------------------------------
+
+
+_REPLY_HINT_XCHECK = (
+    "*Reply with:*  `lock fh`  ·  `lock yf`  ·  `lock YYYY-MM-DD`  ·  "
+    "`confirm fh`  ·  `wait`  ·  `snooze 3d`  ·  `ignore`  ·  `help`"
+)
+_REPLY_HINT_UNSEEN = (
+    "*Reply with:*  `lock YYYY-MM-DD`  ·  `reported`  ·  `wait`  ·  "
+    "`snooze 3d`  ·  `ignore`  ·  `help`"
+)
+_REPLY_HINT_URGENT = (
+    "*Reply with:*  `lock YYYY-MM-DD`  ·  `confirm fh`  ·  `wait`  ·  "
+    "`snooze 3d`  ·  `ignore`  ·  `help`"
+)
+
+
+def _xcheck_verdict(r: DisagreementRow) -> str:
+    """
+    Tentative read on which source is right, given Finnhub's confirmed
+    flag and the EDGAR cadence offsets.
+    """
+    fh_off = r.edgar_finnhub_offset
+    yf_off = r.edgar_yf_offset
+    if r.finnhub_confirmed:
+        if fh_off is not None and yf_off is not None and abs(fh_off) <= abs(yf_off):
+            return "Finnhub likely right (company-confirmed + on cadence)."
+        return "Finnhub likely right (company-confirmed timing)."
+    if fh_off is None or yf_off is None:
+        return "Low confidence — both sources estimated, no EDGAR signal."
+    if abs(yf_off) + 2 <= abs(fh_off):
+        return "yfinance closer to cadence — Finnhub may be stale."
+    if abs(fh_off) + 2 <= abs(yf_off):
+        return "Finnhub closer to cadence."
+    return "Low confidence — both within a few days of cadence anniversary."
+
+
+def build_crosscheck_summary_blocks(
+    rows: list[DisagreementRow], as_of: date
+) -> list[dict]:
+    """Short header summarising how many disagreements were detected."""
+    t1 = sum(1 for r in rows if r.tier == 1)
+    t2 = sum(1 for r in rows if r.tier == 2)
+    return [
+        {
+            "type": "header",
+            "text": {
+                "type": "plain_text",
+                "text": (
+                    f":mag: Source disagreement: Finnhub vs yfinance "
+                    f"({len(rows)} event{'s' if len(rows) != 1 else ''})"
+                ),
+            },
+        },
+        {
+            "type": "context",
+            "elements": [{
+                "type": "mrkdwn",
+                "text": (
+                    f"Tier 1: {t1}  ·  Tier 2: {t2}  ·  "
+                    "see threads below — reply in any thread to resolve."
+                ),
+            }],
+        },
+    ]
+
+
+def build_crosscheck_summary_fallback(rows: list[DisagreementRow]) -> str:
+    return f"{len(rows)} earnings-date disagreement(s) — see threads to resolve"
+
+
+def build_crosscheck_thread_blocks(
+    row: DisagreementRow,
+    as_of: date,
+    *,
+    first_seen_iso: str | None = None,
+) -> list[dict]:
+    """Thread-parent message for a single cross-check disagreement."""
+    co = f" — {row.company_name}" if row.company_name else ""
+    title = f":warning: T{row.tier} `{row.ticker}`{co}"
+
+    fh_marker = "" if row.finnhub_confirmed else " _(est.)_"
+    detail = (
+        f"Finnhub: *{_fmt_date_safe(row.finnhub_date)}*{fh_marker}  ·  "
+        f"yfinance: *{_fmt_yf_dates(row.yf_dates)}*"
+    )
+    if row.edgar_ref_date:
+        fh_abs = abs(row.edgar_finnhub_offset) if row.edgar_finnhub_offset is not None else None
+        yf_abs = abs(row.edgar_yf_offset) if row.edgar_yf_offset is not None else None
+        leader = ""
+        if fh_abs is not None and yf_abs is not None:
+            if fh_abs < yf_abs:
+                leader = "  →  Finnhub closer"
+            elif yf_abs < fh_abs:
+                leader = "  →  yfinance closer"
+            else:
+                leader = "  →  equal"
+        detail += (
+            f"\n_EDGAR: prior-Q release {_fmt_date_safe(row.edgar_ref_date)} · "
+            f"Finnhub {_fmt_offset(row.edgar_finnhub_offset)} · "
+            f"yfinance {_fmt_offset(row.edgar_yf_offset)}{leader}_"
+        )
+
+    status_line = "Status: *New* — just detected"
+    if first_seen_iso:
+        try:
+            seen = date.fromisoformat(first_seen_iso)
+            age = (as_of - seen).days
+            if age >= 1:
+                status_line = f"Status: *Recurring* — first seen {age}d ago"
+        except ValueError:
+            pass
+
+    body = (
+        f"*{title}*\n"
+        f"{detail}\n\n"
+        f"_{status_line}_\n"
+        f"*Read:* {_xcheck_verdict(row)}"
+    )
+    return [
+        {"type": "section", "text": {"type": "mrkdwn", "text": body}},
+        {"type": "context", "elements": [{
+            "type": "mrkdwn",
+            "text": _REPLY_HINT_XCHECK,
+        }]},
+    ]
+
+
+def build_crosscheck_thread_fallback(row: DisagreementRow) -> str:
+    return (
+        f"T{row.tier} {row.ticker}: Finnhub {row.finnhub_date} vs "
+        f"yfinance {[d.isoformat() for d in row.yf_dates]}"
+    )
+
+
+# ---------------------------------------------------------------------------
 # Unseen-ticker alert (B2)
 # ---------------------------------------------------------------------------
 
@@ -785,6 +927,147 @@ def build_unseen_fallback(rows: list[UnseenRow], as_of: date) -> str:
     return (
         f"{len(rows)} Tier 1/2 earnings event(s) missing from Finnhub "
         f"for 2+ runs — verify on IR pages"
+    )
+
+
+def build_unseen_summary_blocks(rows: list[UnseenRow], as_of: date) -> list[dict]:
+    return [
+        {
+            "type": "header",
+            "text": {
+                "type": "plain_text",
+                "text": (
+                    f":warning: Tier 1/2 earnings missing from Finnhub "
+                    f"({len(rows)} event{'s' if len(rows) != 1 else ''})"
+                ),
+            },
+        },
+        {
+            "type": "context",
+            "elements": [{
+                "type": "mrkdwn",
+                "text": (
+                    "Finnhub hasn't returned these for 2+ daily syncs. "
+                    "Per-event threads below — reply to resolve."
+                ),
+            }],
+        },
+    ]
+
+
+def build_unseen_summary_fallback(rows: list[UnseenRow]) -> str:
+    return f"{len(rows)} Tier 1/2 events missing from Finnhub — see threads to resolve"
+
+
+def build_unseen_thread_blocks(
+    row: UnseenRow,
+    as_of: date,
+    *,
+    first_seen_iso: str | None = None,
+) -> list[dict]:
+    co = f" — {row.company_name}" if row.company_name else ""
+    title = f":warning: T{row.tier} `{row.ticker}`{co}"
+    detail = (
+        f"Expected: *{_fmt_date_safe(row.event_date)}*  ·  "
+        f"missed *{row.miss_count}* consecutive runs"
+    )
+    status_line = "Status: *New* — just detected"
+    if first_seen_iso:
+        try:
+            seen = date.fromisoformat(first_seen_iso)
+            age = (as_of - seen).days
+            if age >= 1:
+                status_line = f"Status: *Recurring* — first seen {age}d ago"
+        except ValueError:
+            pass
+
+    read = (
+        "Possible causes: date moved (most likely), Finnhub coverage drop, "
+        "or already reported but not flagged. Verify on IR page."
+    )
+    body = (
+        f"*{title}*\n"
+        f"{detail}\n\n"
+        f"_{status_line}_\n"
+        f"*Read:* {read}"
+    )
+    return [
+        {"type": "section", "text": {"type": "mrkdwn", "text": body}},
+        {"type": "context", "elements": [{
+            "type": "mrkdwn",
+            "text": _REPLY_HINT_UNSEEN,
+        }]},
+    ]
+
+
+def build_unseen_thread_fallback(row: UnseenRow) -> str:
+    return f"T{row.tier} {row.ticker}: missing from Finnhub for {row.miss_count} runs"
+
+
+# ---------------------------------------------------------------------------
+# Per-thread urgent move (A3)
+# ---------------------------------------------------------------------------
+
+
+def build_urgent_move_summary_blocks(
+    rows: list[UrgentMoveRow], as_of: date
+) -> list[dict]:
+    return [
+        {
+            "type": "header",
+            "text": {
+                "type": "plain_text",
+                "text": (
+                    f":rotating_light: URGENT: Tier 1 date move "
+                    f"({len(rows)} event{'s' if len(rows) != 1 else ''})"
+                ),
+            },
+        },
+        {
+            "type": "context",
+            "elements": [{
+                "type": "mrkdwn",
+                "text": (
+                    "Within 5 business days. See threads — reply to resolve."
+                ),
+            }],
+        },
+    ]
+
+
+def build_urgent_move_summary_fallback(rows: list[UrgentMoveRow]) -> str:
+    return f"URGENT: {len(rows)} Tier 1 date move(s) within 5 biz days"
+
+
+def build_urgent_move_thread_blocks(
+    row: UrgentMoveRow, as_of: date
+) -> list[dict]:
+    co = f" — {row.company_name}" if row.company_name else ""
+    days_label = (
+        "today"
+        if row.biz_days_until == 0
+        else f"in {row.biz_days_until} biz day{'s' if row.biz_days_until != 1 else ''}"
+    )
+    timing = f" ({_timing_short(row.hour)})" if row.hour else ""
+    body = (
+        f":rotating_light: *T1 `{row.ticker}`*{co}\n"
+        f"*{_fmt_date_safe(row.old_date)}* → *{_fmt_date_safe(row.new_date)}*"
+        f"{timing} — {days_label}\n"
+        f"_Detected by {row.source}._"
+    )
+    return [
+        {"type": "section", "text": {"type": "mrkdwn", "text": body}},
+        {"type": "context", "elements": [{
+            "type": "mrkdwn",
+            "text": _REPLY_HINT_URGENT,
+        }]},
+    ]
+
+
+def build_urgent_move_thread_fallback(row: UrgentMoveRow) -> str:
+    return (
+        f"URGENT: T1 {row.ticker} moved {row.old_date} → {row.new_date} "
+        f"({row.biz_days_until} biz days)"
     )
 
 

@@ -68,7 +68,20 @@ jobs:
           GOOGLE_CREDENTIALS_PATH: credentials.json
           COVERAGE_MANAGER_PATH: ${{ github.workspace }}/coverage-manager
           SLACK_WEBHOOK_EARNINGS: ${{ secrets.SLACK_WEBHOOK_EARNINGS }}
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }}
         run: python main.py --reconcile-calendar
+
+      # Poll Slack threads for replies on open questions and apply any
+      # commands (lock/wait/snooze/ignore/etc) to DB state. No-op when
+      # SLACK_BOT_TOKEN/SLACK_CHANNEL_ID are unset.
+      - name: Check Slack replies on open questions
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }}
+          GOOGLE_CALENDAR_ID: ${{ secrets.GOOGLE_CALENDAR_ID }}
+          GOOGLE_CREDENTIALS_PATH: credentials.json
+        run: python main.py --check-replies
 
       - name: Save earnings database
         if: always()

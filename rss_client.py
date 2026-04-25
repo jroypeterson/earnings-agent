@@ -59,22 +59,44 @@ class AnnouncementMatch:
 
 
 def _load_ir_feeds() -> dict[str, str]:
-    """Return {ticker: url} for tickers with an IR RSS URL configured."""
-    if not _IR_FEEDS_PATH.exists():
-        return {}
-    try:
-        raw = json.loads(_IR_FEEDS_PATH.read_text())
-    except (json.JSONDecodeError, OSError) as exc:
-        logger.warning(f"Could not read ir_feeds.json: {exc}")
-        return {}
+    """
+    Return {ticker: url} for tickers with an IR RSS URL configured.
+
+    Reads from two sources, with kv_store taking precedence so feeds
+    registered via Slack reply (`ir <url>`) win over the static JSON.
+    JSON remains the bootstrapping mechanism for committed defaults.
+    """
     out: dict[str, str] = {}
-    for ticker, entry in raw.items():
-        if ticker.startswith("__"):
-            continue  # comment keys
-        if isinstance(entry, str):
-            out[ticker.upper()] = entry
-        elif isinstance(entry, dict) and entry.get("url"):
-            out[ticker.upper()] = entry["url"]
+
+    # 1. JSON file (committed defaults)
+    if _IR_FEEDS_PATH.exists():
+        try:
+            raw = json.loads(_IR_FEEDS_PATH.read_text())
+        except (json.JSONDecodeError, OSError) as exc:
+            logger.warning(f"Could not read ir_feeds.json: {exc}")
+            raw = {}
+        for ticker, entry in raw.items():
+            if ticker.startswith("__"):
+                continue
+            if isinstance(entry, str):
+                out[ticker.upper()] = entry
+            elif isinstance(entry, dict) and entry.get("url"):
+                out[ticker.upper()] = entry["url"]
+
+    # 2. kv_store overrides (mutable via Slack reply). Best-effort — the
+    # DB may not exist yet on a fresh checkout, in which case we skip.
+    try:
+        from storage import init_db, kv_list_prefix
+        conn = init_db()
+        kv = kv_list_prefix(conn, "ir_feed:")
+        conn.close()
+        for key, url in kv.items():
+            ticker = key.split(":", 1)[1].upper()
+            if url:
+                out[ticker] = url
+    except Exception as exc:
+        logger.debug(f"kv_store IR feed lookup skipped: {exc}")
+
     return out
 
 

@@ -19,6 +19,8 @@ from config import (
     GOOGLE_CALENDAR_ID,
     FINNHUB_API_KEY,
     SLACK_WEBHOOK_EARNINGS,
+    SLACK_BOT_TOKEN,
+    SLACK_CHANNEL_ID,
     DIGEST_HTML_PATH,
 )
 from coverage import load_coverage, get_tickers_by_tier, get_ticker_info, TickerInfo
@@ -32,6 +34,10 @@ from storage import (
     set_date_lock,
     list_locked_events,
     is_ticker_date_locked,
+    open_question,
+    update_question_state,
+    advance_reply_watermark,
+    list_open_questions,
 )
 from finnhub_client import get_client as get_finnhub_client, fetch_earnings, FinnhubError
 from calendar_sync import (
@@ -64,10 +70,22 @@ from notifications import (
     build_reconcile_fallback,
     build_unseen_blocks,
     build_unseen_fallback,
+    build_unseen_summary_blocks,
+    build_unseen_summary_fallback,
+    build_unseen_thread_blocks,
+    build_unseen_thread_fallback,
     build_crosscheck_blocks,
     build_crosscheck_fallback,
+    build_crosscheck_summary_blocks,
+    build_crosscheck_summary_fallback,
+    build_crosscheck_thread_blocks,
+    build_crosscheck_thread_fallback,
     build_urgent_move_blocks,
     build_urgent_move_fallback,
+    build_urgent_move_summary_blocks,
+    build_urgent_move_summary_fallback,
+    build_urgent_move_thread_blocks,
+    build_urgent_move_thread_fallback,
     post_slack,
     post_heartbeat,
     NotificationError,
@@ -76,6 +94,29 @@ from notifications import (
     UnseenRow,
     DisagreementRow,
     UrgentMoveRow,
+)
+from slack_api import (
+    post_message as slack_post_message,
+    fetch_thread_replies,
+    SlackAPIError,
+)
+from slack_replies import (
+    parse_reply,
+    format_help,
+    format_status,
+    ReplyContext,
+    ParsedAction,
+    ACT_LOCK,
+    ACT_CONFIRM_FH,
+    ACT_WAIT,
+    ACT_SNOOZE,
+    ACT_IGNORE,
+    ACT_REPORTED,
+    ACT_IR,
+    ACT_NOTE,
+    ACT_HELP,
+    ACT_STATUS,
+    ACT_UNKNOWN,
 )
 from market_data import fetch_post_earnings_move, fetch_yfinance_earnings_date
 from edgar_client import infer_cadence_signal
@@ -106,9 +147,45 @@ def _business_days_until(target_iso: str, as_of: date) -> int:
     return days
 
 
-def _post_urgent_alert(rows: list[UrgentMoveRow], as_of: date):
-    """Post the A3 Tier 1 urgent Slack alert. Swallows its own errors."""
-    if not rows or not SLACK_WEBHOOK_EARNINGS:
+def _post_urgent_alert(rows: list[UrgentMoveRow], as_of: date, conn=None):
+    """
+    Post the A3 Tier 1 urgent Slack alert. Swallows its own errors.
+
+    With SLACK_BOT_TOKEN+SLACK_CHANNEL_ID set, posts a summary header +
+    one threaded parent per row and persists thread_ts via open_question
+    so --check-replies can drive resolution. Falls back to webhook batched
+    post otherwise. `conn` is required for the bot-token path.
+    """
+    if not rows:
+        return
+    bot_path = bool(SLACK_BOT_TOKEN and SLACK_CHANNEL_ID and conn is not None)
+    if bot_path:
+        try:
+            slack_post_message(
+                SLACK_BOT_TOKEN,
+                SLACK_CHANNEL_ID,
+                blocks=build_urgent_move_summary_blocks(rows, as_of),
+                text=build_urgent_move_summary_fallback(rows),
+            )
+            for r in rows:
+                ts = slack_post_message(
+                    SLACK_BOT_TOKEN,
+                    SLACK_CHANNEL_ID,
+                    blocks=build_urgent_move_thread_blocks(r, as_of),
+                    text=build_urgent_move_thread_fallback(r),
+                )
+                open_question(
+                    conn,
+                    r.ticker,
+                    r.new_date,
+                    thread_ts=ts,
+                    kind="urgent",
+                    first_seen_iso=as_of.isoformat(),
+                )
+        except SlackAPIError as exc:
+            logger.error(f"Urgent T1 alert Slack post failed (bot path): {exc}")
+        return
+    if not SLACK_WEBHOOK_EARNINGS:
         return
     try:
         post_slack(
@@ -574,7 +651,33 @@ def run(
                 f"B2: {len(persistent_unseen)} Tier 1/2 event(s) missing from "
                 f"Finnhub for 2+ consecutive runs"
             )
-            if SLACK_WEBHOOK_EARNINGS:
+            bot_path = bool(SLACK_BOT_TOKEN and SLACK_CHANNEL_ID)
+            if bot_path:
+                try:
+                    slack_post_message(
+                        SLACK_BOT_TOKEN,
+                        SLACK_CHANNEL_ID,
+                        blocks=build_unseen_summary_blocks(persistent_unseen, today),
+                        text=build_unseen_summary_fallback(persistent_unseen),
+                    )
+                    for u in persistent_unseen:
+                        ts = slack_post_message(
+                            SLACK_BOT_TOKEN,
+                            SLACK_CHANNEL_ID,
+                            blocks=build_unseen_thread_blocks(u, today),
+                            text=build_unseen_thread_fallback(u),
+                        )
+                        open_question(
+                            conn,
+                            u.ticker,
+                            u.event_date,
+                            thread_ts=ts,
+                            kind="unseen",
+                            first_seen_iso=today.isoformat(),
+                        )
+                except SlackAPIError as exc:
+                    logger.error(f"Unseen-ticker Slack post failed (bot path): {exc}")
+            elif SLACK_WEBHOOK_EARNINGS:
                 try:
                     post_slack(
                         SLACK_WEBHOOK_EARNINGS,
@@ -624,7 +727,7 @@ def run(
             f"{A3_URGENT_BIZ_DAYS} business days"
         )
         if not dry_run:
-            _post_urgent_alert(urgent_moves, today)
+            _post_urgent_alert(urgent_moves, today, conn=conn)
 
     # --- Heartbeat ---
     if not skip_heartbeat and not dry_run and SLACK_WEBHOOK_EARNINGS:
@@ -1205,7 +1308,7 @@ def run_reconcile_calendar(dry_run: bool = False):
             f"{A3_URGENT_BIZ_DAYS} business days"
         )
         if not dry_run:
-            _post_urgent_alert(urgent_moves, today)
+            _post_urgent_alert(urgent_moves, today, conn=conn)
 
 
 # ---------------------------------------------------------------------------
@@ -1589,7 +1692,38 @@ def run_cross_check(dry_run: bool = False, days_ahead: int = 14):
 
     disagreement_rows = [r for r, _ in new_disagreements]
     posted = True
-    if not dry_run and SLACK_WEBHOOK_EARNINGS:
+    bot_path = bool(SLACK_BOT_TOKEN and SLACK_CHANNEL_ID)
+    if not dry_run and bot_path:
+        # v9 per-thread path: summary header + one thread parent per row.
+        # Persist each thread_ts back to the event row so --check-replies
+        # can later poll for resolution.
+        try:
+            slack_post_message(
+                SLACK_BOT_TOKEN,
+                SLACK_CHANNEL_ID,
+                blocks=build_crosscheck_summary_blocks(disagreement_rows, today),
+                text=build_crosscheck_summary_fallback(disagreement_rows),
+            )
+            for r in disagreement_rows:
+                ts = slack_post_message(
+                    SLACK_BOT_TOKEN,
+                    SLACK_CHANNEL_ID,
+                    blocks=build_crosscheck_thread_blocks(r, today),
+                    text=build_crosscheck_thread_fallback(r),
+                )
+                open_question(
+                    conn,
+                    r.ticker,
+                    r.finnhub_date,
+                    thread_ts=ts,
+                    kind="xcheck",
+                    first_seen_iso=today.isoformat(),
+                )
+        except SlackAPIError as exc:
+            logger.error(f"Cross-check Slack post failed (bot path): {exc}")
+            posted = False
+    elif not dry_run and SLACK_WEBHOOK_EARNINGS:
+        # Legacy webhook fallback: single batched message, no replies.
         try:
             post_slack(
                 SLACK_WEBHOOK_EARNINGS,
@@ -1612,6 +1746,216 @@ def run_cross_check(dry_run: bool = False, days_ahead: int = 14):
                 (sig, r.ticker, r.finnhub_date),
             )
         conn.commit()
+    conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Slack reply polling (v9): drive resolution from in-thread commands
+# ---------------------------------------------------------------------------
+
+
+def _yf_dates_from_signature(sig: str | None) -> list[str]:
+    """Recover the list of yfinance ISO dates from a stored signature."""
+    if not sig:
+        return []
+    return [s for s in sig.split(",") if s]
+
+
+def _ack_in_thread(thread_ts: str, text: str) -> None:
+    """Post a short text-only ack in the thread. Logs but does not raise."""
+    if not (SLACK_BOT_TOKEN and SLACK_CHANNEL_ID):
+        return
+    try:
+        slack_post_message(
+            SLACK_BOT_TOKEN,
+            SLACK_CHANNEL_ID,
+            text=text,
+            thread_ts=thread_ts,
+        )
+    except SlackAPIError as exc:
+        logger.error(f"Ack post failed: {exc}")
+
+
+def _apply_action(
+    conn,
+    q: dict,
+    action: ParsedAction,
+    today: date,
+) -> None:
+    """Apply a ParsedAction to DB state. No-ops on UNKNOWN/HELP."""
+    from storage import kv_set  # local import to keep the top of file tidy
+    ticker = q["ticker"]
+    event_date = q["event_date"]
+
+    if action.action == ACT_LOCK:
+        new_date = action.payload["date"]
+        if new_date != event_date:
+            # Lock applies to the new date; ensure the row's event_date matches
+            # before flipping the lock. Move the row's event_date if needed.
+            conn.execute(
+                "UPDATE events SET event_date = ?, updated_at = datetime('now') "
+                "WHERE ticker = ? AND event_date = ?",
+                (new_date, ticker, event_date),
+            )
+            conn.commit()
+        set_date_lock(conn, ticker, new_date, True)
+        update_question_state(conn, ticker, new_date, "resolved")
+        return
+
+    if action.action == ACT_CONFIRM_FH:
+        conn.execute(
+            "UPDATE events SET date_confirmed = 1, updated_at = datetime('now') "
+            "WHERE ticker = ? AND event_date = ?",
+            (ticker, event_date),
+        )
+        conn.commit()
+        update_question_state(conn, ticker, event_date, "resolved")
+        return
+
+    if action.action == ACT_WAIT:
+        update_question_state(conn, ticker, event_date, "monitoring")
+        return
+
+    if action.action == ACT_SNOOZE:
+        days = action.payload["days"]
+        until = (today + timedelta(days=days)).isoformat()
+        update_question_state(
+            conn, ticker, event_date, "snoozed", snooze_until_iso=until
+        )
+        return
+
+    if action.action == ACT_IGNORE:
+        update_question_state(conn, ticker, event_date, "dismissed")
+        return
+
+    if action.action == ACT_REPORTED:
+        conn.execute(
+            "UPDATE events SET reported = 1, unseen_run_count = 0, "
+            "updated_at = datetime('now') "
+            "WHERE ticker = ? AND event_date = ?",
+            (ticker, event_date),
+        )
+        conn.commit()
+        update_question_state(conn, ticker, event_date, "resolved")
+        return
+
+    if action.action == ACT_IR:
+        kv_set(conn, f"ir_feed:{ticker}", action.payload["url"])
+        update_question_state(conn, ticker, event_date, "resolved")
+        return
+
+    if action.action == ACT_NOTE:
+        # Store as a numbered note under note:TICKER:DATE:N. Keeps history.
+        from storage import kv_list_prefix
+        existing = kv_list_prefix(conn, f"note:{ticker}:{event_date}:")
+        next_n = len(existing) + 1
+        kv_set(
+            conn,
+            f"note:{ticker}:{event_date}:{next_n}",
+            f"{today.isoformat()} {action.payload['text']}",
+        )
+        return
+
+    # HELP/STATUS/UNKNOWN have no DB side effects — caller already handled ack.
+
+
+def run_check_replies(dry_run: bool = False, days_lookback: int = 14):
+    """
+    Poll Slack threads for replies on open questions and apply them.
+
+    For each event with slack_thread_ts set and a non-terminal state,
+    this fetches replies posted after the watermark, parses each, applies
+    the resulting action to DB state, and posts a short ack in-thread.
+
+    Snoozed questions whose snooze window has expired transition back to
+    `open` so the next disagreement detection can re-alert.
+    """
+    if not (SLACK_BOT_TOKEN and SLACK_CHANNEL_ID):
+        logger.info(
+            "--check-replies: SLACK_BOT_TOKEN/SLACK_CHANNEL_ID not set; skipping"
+        )
+        return
+
+    conn = init_db()
+    today = date.today()
+    questions = list_open_questions(conn)
+    if not questions:
+        logger.info("--check-replies: no open questions")
+        conn.close()
+        return
+
+    processed = 0
+    acked = 0
+    snoozed_reopened = 0
+    for q in questions:
+        # Snooze expiry → reopen so next detection fires fresh
+        if q["question_state"] == "snoozed":
+            until = q["question_snooze_until"]
+            if until and until <= today.isoformat():
+                update_question_state(conn, q["ticker"], q["event_date"], "open")
+                snoozed_reopened += 1
+                q["question_state"] = "open"
+
+        thread_ts = q["slack_thread_ts"]
+        oldest = q["slack_last_reply_ts"]
+        try:
+            replies = fetch_thread_replies(
+                SLACK_BOT_TOKEN, SLACK_CHANNEL_ID, thread_ts, oldest=oldest
+            )
+        except SlackAPIError as exc:
+            logger.error(
+                f"Reply fetch failed for {q['ticker']}@{q['event_date']}: {exc}"
+            )
+            continue
+        if not replies:
+            continue
+
+        kind = q["slack_question_kind"] or "xcheck"
+        ctx = ReplyContext(
+            ticker=q["ticker"],
+            event_date=q["event_date"],
+            kind=kind,
+            finnhub_date=q["event_date"] if kind == "xcheck" else None,
+            yf_dates=_yf_dates_from_signature(q["last_xcheck_yf_dates"]),
+        )
+
+        latest_ts = oldest
+        for reply in replies:
+            if reply.is_bot:
+                latest_ts = reply.ts
+                continue
+            action = parse_reply(reply.text, ctx)
+
+            if action.action == ACT_HELP:
+                if not dry_run:
+                    _ack_in_thread(thread_ts, format_help(kind))
+            elif action.action == ACT_STATUS:
+                if not dry_run:
+                    _ack_in_thread(thread_ts, format_status(q, today))
+            elif action.action == ACT_UNKNOWN:
+                if not dry_run:
+                    _ack_in_thread(
+                        thread_ts,
+                        f":x: {action.error}",
+                    )
+            else:
+                if not dry_run:
+                    _apply_action(conn, q, action, today)
+                    if action.ack:
+                        _ack_in_thread(thread_ts, action.ack)
+
+            latest_ts = reply.ts
+            processed += 1
+            if action.ack and action.action != ACT_UNKNOWN:
+                acked += 1
+
+        if not dry_run and latest_ts and latest_ts != oldest:
+            advance_reply_watermark(conn, q["ticker"], q["event_date"], latest_ts)
+
+    logger.info(
+        f"--check-replies: {processed} reply(ies) processed, "
+        f"{acked} action(s) applied, {snoozed_reopened} snoozed reopened"
+    )
     conn.close()
 
 
@@ -1766,6 +2110,11 @@ def main():
         action="store_true",
         help="Scan configured IR RSS feeds (ir_feeds.json) for earnings-date announcements; upgrade estimated Tier 1 events to confirmed when found",
     )
+    parser.add_argument(
+        "--check-replies",
+        action="store_true",
+        help="Poll Slack threads for replies on open questions; apply commands (lock/wait/snooze/ignore/etc) to DB state",
+    )
     args = parser.parse_args()
 
     if args.list_locks:
@@ -1796,6 +2145,8 @@ def main():
         run_refresh_descriptions(dry_run=args.dry_run)
     elif args.check_announcements:
         run_check_announcements(dry_run=args.dry_run)
+    elif args.check_replies:
+        run_check_replies(dry_run=args.dry_run)
     elif args.cleanup:
         conn = init_db()
         cleanup_duplicates(conn, dry_run=args.dry_run)

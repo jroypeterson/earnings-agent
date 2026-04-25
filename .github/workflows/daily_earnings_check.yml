@@ -72,6 +72,8 @@ jobs:
           COVERAGE_MANAGER_PATH: ${{ github.workspace }}/coverage-manager
           TICKTICK_ACCESS_TOKEN: ${{ secrets.TICKTICK_ACCESS_TOKEN }}
           SLACK_WEBHOOK_EARNINGS: ${{ secrets.SLACK_WEBHOOK_EARNINGS }}
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }}
           TICKERS: ${{ vars.TICKERS }}  # Legacy fallback
         run: python main.py
 
@@ -85,7 +87,21 @@ jobs:
           FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
           COVERAGE_MANAGER_PATH: ${{ github.workspace }}/coverage-manager
           SLACK_WEBHOOK_EARNINGS: ${{ secrets.SLACK_WEBHOOK_EARNINGS }}
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }}
         run: python main.py --cross-check
+
+      # Poll Slack threads for replies on open questions and apply any
+      # commands to DB state. No-op when SLACK_BOT_TOKEN/SLACK_CHANNEL_ID
+      # are unset.
+      - name: Check Slack replies on open questions
+        continue-on-error: true
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }}
+          GOOGLE_CALENDAR_ID: ${{ secrets.GOOGLE_CALENDAR_ID }}
+          GOOGLE_CREDENTIALS_PATH: credentials.json
+        run: python main.py --check-replies
 
       # Persist the SQLite DB for next run
       - name: Save earnings database

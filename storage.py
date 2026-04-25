@@ -18,9 +18,28 @@ logger = logging.getLogger("earnings_agent")
 # Schema version tracking
 # ---------------------------------------------------------------------------
 
-CURRENT_SCHEMA_VERSION = 8  # Bump when adding migrations
+CURRENT_SCHEMA_VERSION = 9  # Bump when adding migrations
 
 _MIGRATIONS = {
+    # Version 8 → 9: Slack-reply state. Each open question (cross-check
+    # disagreement, unseen-ticker, urgent-move) gets its own threaded
+    # parent message; replies in that thread drive resolution actions.
+    # Also adds a generic kv_store table so things like IR feed URLs can
+    # be mutated via Slack reply without committing to the repo.
+    9: [
+        "ALTER TABLE events ADD COLUMN slack_thread_ts TEXT",
+        "ALTER TABLE events ADD COLUMN slack_question_kind TEXT",
+        "ALTER TABLE events ADD COLUMN slack_last_reply_ts TEXT",
+        "ALTER TABLE events ADD COLUMN question_state TEXT",
+        "ALTER TABLE events ADD COLUMN question_snooze_until TEXT",
+        "ALTER TABLE events ADD COLUMN question_first_seen TEXT",
+        """CREATE TABLE IF NOT EXISTS kv_store (
+            key   TEXT PRIMARY KEY,
+            value TEXT NOT NULL,
+            updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )""",
+    ],
+
     # Version 7 → 8: URL of the press release that confirmed this event's
     # date, when one is detected by the RSS announcement scanner. Stored
     # so we can show provenance in alerts and avoid re-confirming via RSS
@@ -249,6 +268,12 @@ def init_db(db_path: Path = DB_PATH) -> sqlite3.Connection:
                 last_xcheck_yf_dates TEXT,
                 date_confirmed  INTEGER NOT NULL DEFAULT 0,
                 announcement_url TEXT,
+                slack_thread_ts TEXT,
+                slack_question_kind TEXT,
+                slack_last_reply_ts TEXT,
+                question_state  TEXT,
+                question_snooze_until TEXT,
+                question_first_seen TEXT,
                 created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
                 updated_at      TEXT    NOT NULL DEFAULT (datetime('now')),
                 UNIQUE(ticker, event_date)
@@ -550,3 +575,138 @@ def date_to_quarter(d: str) -> str:
         return f"{dt.year}Q2"
     else:
         return f"{dt.year}Q3"
+
+
+# ---------------------------------------------------------------------------
+# Slack-question state (v9)
+# ---------------------------------------------------------------------------
+
+
+# question_state values:
+#   open       — alert posted, awaiting any input
+#   monitoring — user said `wait`; agent keeps watching, no re-alert
+#   snoozed    — user said `snooze Nd`; reactivates at question_snooze_until
+#   dismissed  — user said `ignore`; never re-alert for this event
+#   resolved   — action applied (lock, reported, etc.); thread closed
+QUESTION_STATES = {"open", "monitoring", "snoozed", "dismissed", "resolved"}
+
+
+def open_question(
+    conn: sqlite3.Connection,
+    ticker: str,
+    event_date: str,
+    *,
+    thread_ts: str,
+    kind: str,
+    first_seen_iso: str,
+) -> None:
+    """Mark an event as having an open Slack question."""
+    conn.execute(
+        "UPDATE events SET slack_thread_ts = ?, slack_question_kind = ?, "
+        "slack_last_reply_ts = NULL, question_state = 'open', "
+        "question_snooze_until = NULL, question_first_seen = ?, "
+        "updated_at = datetime('now') "
+        "WHERE ticker = ? AND event_date = ?",
+        (thread_ts, kind, first_seen_iso, ticker.upper(), event_date),
+    )
+    conn.commit()
+
+
+def update_question_state(
+    conn: sqlite3.Connection,
+    ticker: str,
+    event_date: str,
+    state: str,
+    *,
+    snooze_until_iso: str | None = None,
+) -> None:
+    """Update question_state (and optional snooze date)."""
+    if state not in QUESTION_STATES:
+        raise ValueError(f"Unknown question_state {state!r}")
+    conn.execute(
+        "UPDATE events SET question_state = ?, question_snooze_until = ?, "
+        "updated_at = datetime('now') "
+        "WHERE ticker = ? AND event_date = ?",
+        (state, snooze_until_iso, ticker.upper(), event_date),
+    )
+    conn.commit()
+
+
+def advance_reply_watermark(
+    conn: sqlite3.Connection,
+    ticker: str,
+    event_date: str,
+    last_ts: str,
+) -> None:
+    """Advance slack_last_reply_ts watermark to skip already-processed replies."""
+    conn.execute(
+        "UPDATE events SET slack_last_reply_ts = ?, updated_at = datetime('now') "
+        "WHERE ticker = ? AND event_date = ?",
+        (last_ts, ticker.upper(), event_date),
+    )
+    conn.commit()
+
+
+def list_open_questions(conn: sqlite3.Connection) -> list[dict]:
+    """
+    Return events with a Slack thread that may need polling. Includes open,
+    monitoring, and snoozed states (snoozed are filtered against
+    question_snooze_until by the caller). Excludes dismissed/resolved.
+    """
+    cur = conn.execute(
+        "SELECT ticker, event_date, tier, company_name, "
+        "slack_thread_ts, slack_question_kind, slack_last_reply_ts, "
+        "question_state, question_snooze_until, question_first_seen, "
+        "date_confirmed, last_xcheck_yf_dates "
+        "FROM events "
+        "WHERE slack_thread_ts IS NOT NULL "
+        "AND question_state IN ('open', 'monitoring', 'snoozed') "
+        "ORDER BY event_date, ticker"
+    )
+    return [
+        {
+            "ticker": r[0],
+            "event_date": r[1],
+            "tier": r[2],
+            "company_name": r[3],
+            "slack_thread_ts": r[4],
+            "slack_question_kind": r[5],
+            "slack_last_reply_ts": r[6],
+            "question_state": r[7],
+            "question_snooze_until": r[8],
+            "question_first_seen": r[9],
+            "date_confirmed": bool(r[10]),
+            "last_xcheck_yf_dates": r[11],
+        }
+        for r in cur.fetchall()
+    ]
+
+
+# ---------------------------------------------------------------------------
+# kv_store (v9) — generic config that can be mutated via Slack reply
+# ---------------------------------------------------------------------------
+
+
+def kv_get(conn: sqlite3.Connection, key: str) -> str | None:
+    cur = conn.execute("SELECT value FROM kv_store WHERE key = ?", (key,))
+    row = cur.fetchone()
+    return row[0] if row else None
+
+
+def kv_set(conn: sqlite3.Connection, key: str, value: str) -> None:
+    conn.execute(
+        "INSERT INTO kv_store (key, value, updated_at) "
+        "VALUES (?, ?, datetime('now')) "
+        "ON CONFLICT(key) DO UPDATE SET "
+        "value = excluded.value, updated_at = excluded.updated_at",
+        (key, value),
+    )
+    conn.commit()
+
+
+def kv_list_prefix(conn: sqlite3.Connection, prefix: str) -> dict[str, str]:
+    cur = conn.execute(
+        "SELECT key, value FROM kv_store WHERE key LIKE ? ORDER BY key",
+        (prefix + "%",),
+    )
+    return {row[0]: row[1] for row in cur.fetchall()}
