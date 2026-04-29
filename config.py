@@ -37,7 +37,14 @@ COVERAGE_MANAGER_PATH = os.getenv(
 TIMEZONE = os.getenv("TIMEZONE", "America/New_York")
 
 # Notifications
+# Earnings channel: heartbeat, weekly digest, results, urgent-T1 moves.
 SLACK_WEBHOOK_EARNINGS = os.getenv("SLACK_WEBHOOK_EARNINGS")
+# Status-reports channel: date-disagreement notices (cross-check, unseen,
+# reconcile auto-fix). Routed away from the earnings channel so user can
+# focus on actual earnings updates there. Falls back to the earnings
+# channel when unset.
+SLACK_WEBHOOK_STATUS = os.getenv("SLACK_WEBHOOK_STATUS")
+SLACK_STATUS_CHANNEL_ID = os.getenv("SLACK_STATUS_CHANNEL_ID")
 # Bot-token Slack client (powers per-question threads + reply polling).
 # Webhook remains the path for heartbeat / digest posts that don't need
 # replies. When SLACK_BOT_TOKEN + SLACK_CHANNEL_ID are unset, threaded

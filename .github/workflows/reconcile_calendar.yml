@@ -68,8 +68,10 @@ jobs:
           GOOGLE_CREDENTIALS_PATH: credentials.json
           COVERAGE_MANAGER_PATH: ${{ github.workspace }}/coverage-manager
           SLACK_WEBHOOK_EARNINGS: ${{ secrets.SLACK_WEBHOOK_EARNINGS }}
+          SLACK_WEBHOOK_STATUS: ${{ secrets.SLACK_WEBHOOK_STATUS }}
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
           SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }}
+          SLACK_STATUS_CHANNEL_ID: ${{ secrets.SLACK_STATUS_CHANNEL_ID }}
         run: python main.py --reconcile-calendar
 
       # Poll Slack threads for replies on open questions and apply any
@@ -79,6 +81,7 @@ jobs:
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
           SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }}
+          SLACK_STATUS_CHANNEL_ID: ${{ secrets.SLACK_STATUS_CHANNEL_ID }}
           GOOGLE_CALENDAR_ID: ${{ secrets.GOOGLE_CALENDAR_ID }}
           GOOGLE_CREDENTIALS_PATH: credentials.json
         run: python main.py --check-replies

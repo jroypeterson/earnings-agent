@@ -61,11 +61,16 @@ Getting the earnings date right is the primary goal. The stack of safeguards, fr
 - **Idempotent result detection.** `run_check_results` skips events already marked `reported=1`. DB update happens *after* Slack post succeeds, so a Slack failure leaves records unmarked for the next run to retry.
 - **`run()` shares `notify_results()` with `run_check_results`** — the 6 AM daily sync also posts Slack alerts when it detects overnight AMC actuals. Don't re-post from a separate path.
 - **DB artifact is shared across three workflows.** `daily_earnings_check`, `reconcile_calendar`, `post_earnings_check` all restore/upload the `earnings-db` artifact. They share the `concurrency: group: earnings-db-writer` setting so they serialize and don't clobber each other. `weekly_digest` doesn't persist the DB so it's not in the group.
-- **Schema is at v9.** `storage.py CURRENT_SCHEMA_VERSION=9`. Migrations are non-destructive. Fresh-DB `CREATE TABLE` duplicates v2–v9 columns; when adding a column, update both the migration and the fresh-DB statement. Column history: v3=`unseen_run_count`, v4=`date_locked`, v5=`last_xcheck_yf_dates`, v6=`date_confirmed`, v7=backfill for v6, v8=`announcement_url`, v9=`slack_thread_ts` + `slack_question_kind` + `slack_last_reply_ts` + `question_state` + `question_snooze_until` + `question_first_seen` + `kv_store` table.
+- **Schema is at v10.** `storage.py CURRENT_SCHEMA_VERSION=10`. Migrations are non-destructive. Fresh-DB `CREATE TABLE` duplicates v2–v10 columns; when adding a column, update both the migration and the fresh-DB statement. Column history: v3=`unseen_run_count`, v4=`date_locked`, v5=`last_xcheck_yf_dates`, v6=`date_confirmed`, v7=backfill for v6, v8=`announcement_url`, v9=`slack_thread_ts` + `slack_question_kind` + `slack_last_reply_ts` + `question_state` + `question_snooze_until` + `question_first_seen` + `kv_store` table, v10=`slack_channel_id` (so `--check-replies` knows which channel to poll for each thread).
 - **SEC EDGAR requires contact info in User-Agent.** Default in `config.py` is `"earnings-agent (jroypeterson@gmail.com)"`. Override via `SEC_EDGAR_USER_AGENT` env var. SEC returns HTTP 403/malformed responses to generic User-Agents. Rate-limited self-throttle (~8 req/s) to stay under the 10 req/s ceiling.
 - **`.ticker_cik_cache.json`** is a local 30-day cache of SEC's ticker→CIK mapping (800KB blob). Gitignored.
 - **`ir_feeds.json` is empty by default.** Aggregator RSS testing showed Seeking Alpha / Nasdaq / Business Wire / PR Newswire do NOT carry company IR press releases (only analyst commentary). So `--check-announcements` silently skips any ticker without an explicit per-company IR RSS URL. To use: populate `ir_feeds.json` with `{"TICKER": "https://ir.example.com/rss"}` entries, or reply `ir <url>` in a question thread (writes to `kv_store.ir_feed:TICKER` which `_load_ir_feeds()` overlays on top of the JSON).
-- **Schema is at v9.** v9 adds `slack_thread_ts`, `slack_question_kind`, `slack_last_reply_ts`, `question_state`, `question_snooze_until`, `question_first_seen` on `events` (Slack-reply state), plus a generic `kv_store(key, value)` table for things mutable via Slack reply (IR feeds, free-text notes).
+- **Schema is at v10.** v9 adds `slack_thread_ts`, `slack_question_kind`, `slack_last_reply_ts`, `question_state`, `question_snooze_until`, `question_first_seen` on `events` (Slack-reply state), plus a generic `kv_store(key, value)` table for things mutable via Slack reply (IR feeds, free-text notes). v10 adds `slack_channel_id` so the reply poller can find threads regardless of which channel they were posted to.
+
+## Slack channel routing
+
+- **#earnings** (`SLACK_WEBHOOK_EARNINGS`, `SLACK_CHANNEL_ID`): heartbeat, weekly digest, results beat/miss alerts, urgent Tier 1 date moves within 5 biz days. The "primary feed" — actual earnings updates.
+- **#status-reports** (`SLACK_WEBHOOK_STATUS`, `SLACK_STATUS_CHANNEL_ID`): date-disagreement notices — cross-check (Finnhub vs yfinance), unseen-ticker, reconcile auto-fix. Routed off the earnings channel so it stays focused. Status secrets fall back to earnings ones when unset (back-compat for setups that haven't created the second channel).
 
 ## Scheduled workflows (GitHub Actions)
 
@@ -83,7 +88,9 @@ All workflows sparse-checkout `jroypeterson/Coverage-Manager/exports/` (the repo
 
 `FINNHUB_API_KEY`, `GOOGLE_CALENDAR_ID`, `GOOGLE_CREDENTIALS_JSON`, `TICKTICK_ACCESS_TOKEN`, `SLACK_WEBHOOK_EARNINGS`.
 
-Optional for Slack-reply flow: `SLACK_BOT_TOKEN` (xoxb-...) + `SLACK_CHANNEL_ID` (Cxxx). Bot needs `chat:write` and `channels:history` (or `groups:history` for private channels) scopes. When unset, the agent falls back to webhook-only batched messages with no reply support.
+Optional for Slack-reply flow: `SLACK_BOT_TOKEN` (xoxb-...) + `SLACK_CHANNEL_ID` (Cxxx) for the earnings channel. Bot needs `chat:write` and `channels:history` (or `groups:history` for private channels) scopes. When unset, the agent falls back to webhook-only batched messages with no reply support.
+
+Optional for status-reports routing: `SLACK_WEBHOOK_STATUS` + `SLACK_STATUS_CHANNEL_ID`. Cross-check / unseen / reconcile alerts post here instead of #earnings. Bot must be a member of #status-reports for threaded replies to work. Falls back to the earnings webhook/channel when unset.
 
 ## Local `.env`
 

@@ -19,8 +19,10 @@ from config import (
     GOOGLE_CALENDAR_ID,
     FINNHUB_API_KEY,
     SLACK_WEBHOOK_EARNINGS,
+    SLACK_WEBHOOK_STATUS,
     SLACK_BOT_TOKEN,
     SLACK_CHANNEL_ID,
+    SLACK_STATUS_CHANNEL_ID,
     DIGEST_HTML_PATH,
 )
 from coverage import load_coverage, get_tickers_by_tier, get_ticker_info, TickerInfo
@@ -651,19 +653,22 @@ def run(
                 f"B2: {len(persistent_unseen)} Tier 1/2 event(s) missing from "
                 f"Finnhub for 2+ consecutive runs"
             )
-            bot_path = bool(SLACK_BOT_TOKEN and SLACK_CHANNEL_ID)
+            # Unseen-ticker alerts route to the status-reports channel.
+            unseen_channel = SLACK_STATUS_CHANNEL_ID or SLACK_CHANNEL_ID
+            unseen_webhook = SLACK_WEBHOOK_STATUS or SLACK_WEBHOOK_EARNINGS
+            bot_path = bool(SLACK_BOT_TOKEN and unseen_channel)
             if bot_path:
                 try:
                     slack_post_message(
                         SLACK_BOT_TOKEN,
-                        SLACK_CHANNEL_ID,
+                        unseen_channel,
                         blocks=build_unseen_summary_blocks(persistent_unseen, today),
                         text=build_unseen_summary_fallback(persistent_unseen),
                     )
                     for u in persistent_unseen:
                         ts = slack_post_message(
                             SLACK_BOT_TOKEN,
-                            SLACK_CHANNEL_ID,
+                            unseen_channel,
                             blocks=build_unseen_thread_blocks(u, today),
                             text=build_unseen_thread_fallback(u),
                         )
@@ -674,13 +679,14 @@ def run(
                             thread_ts=ts,
                             kind="unseen",
                             first_seen_iso=today.isoformat(),
+                            channel_id=unseen_channel,
                         )
                 except SlackAPIError as exc:
                     logger.error(f"Unseen-ticker Slack post failed (bot path): {exc}")
-            elif SLACK_WEBHOOK_EARNINGS:
+            elif unseen_webhook:
                 try:
                     post_slack(
-                        SLACK_WEBHOOK_EARNINGS,
+                        unseen_webhook,
                         build_unseen_blocks(persistent_unseen, today),
                         build_unseen_fallback(persistent_unseen, today),
                     )
@@ -1292,12 +1298,14 @@ def run_reconcile_calendar(dry_run: bool = False):
 
     conn.close()
 
-    # Slack summary — only when we actually did something
-    if fixed and not dry_run and SLACK_WEBHOOK_EARNINGS:
+    # Slack summary — only when we actually did something. Routes to the
+    # status-reports channel; falls back to the earnings webhook if unset.
+    reconcile_webhook = SLACK_WEBHOOK_STATUS or SLACK_WEBHOOK_EARNINGS
+    if fixed and not dry_run and reconcile_webhook:
         blocks = build_reconcile_blocks(fixed, today)
         fallback = build_reconcile_fallback(fixed, today)
         try:
-            post_slack(SLACK_WEBHOOK_EARNINGS, blocks, fallback)
+            post_slack(reconcile_webhook, blocks, fallback)
         except NotificationError as exc:
             logger.error(f"Reconcile Slack post failed: {exc}")
 
@@ -1692,7 +1700,12 @@ def run_cross_check(dry_run: bool = False, days_ahead: int = 14):
 
     disagreement_rows = [r for r, _ in new_disagreements]
     posted = True
-    bot_path = bool(SLACK_BOT_TOKEN and SLACK_CHANNEL_ID)
+    # Cross-check disagreements route to the status-reports channel so
+    # the earnings channel stays focused on actual earnings updates.
+    # Falls back to the earnings channel if status secrets are unset.
+    target_channel = SLACK_STATUS_CHANNEL_ID or SLACK_CHANNEL_ID
+    target_webhook = SLACK_WEBHOOK_STATUS or SLACK_WEBHOOK_EARNINGS
+    bot_path = bool(SLACK_BOT_TOKEN and target_channel)
     if not dry_run and bot_path:
         # v9 per-thread path: summary header + one thread parent per row.
         # Persist each thread_ts back to the event row so --check-replies
@@ -1700,14 +1713,14 @@ def run_cross_check(dry_run: bool = False, days_ahead: int = 14):
         try:
             slack_post_message(
                 SLACK_BOT_TOKEN,
-                SLACK_CHANNEL_ID,
+                target_channel,
                 blocks=build_crosscheck_summary_blocks(disagreement_rows, today),
                 text=build_crosscheck_summary_fallback(disagreement_rows),
             )
             for r in disagreement_rows:
                 ts = slack_post_message(
                     SLACK_BOT_TOKEN,
-                    SLACK_CHANNEL_ID,
+                    target_channel,
                     blocks=build_crosscheck_thread_blocks(r, today),
                     text=build_crosscheck_thread_fallback(r),
                 )
@@ -1718,15 +1731,16 @@ def run_cross_check(dry_run: bool = False, days_ahead: int = 14):
                     thread_ts=ts,
                     kind="xcheck",
                     first_seen_iso=today.isoformat(),
+                    channel_id=target_channel,
                 )
         except SlackAPIError as exc:
             logger.error(f"Cross-check Slack post failed (bot path): {exc}")
             posted = False
-    elif not dry_run and SLACK_WEBHOOK_EARNINGS:
+    elif not dry_run and target_webhook:
         # Legacy webhook fallback: single batched message, no replies.
         try:
             post_slack(
-                SLACK_WEBHOOK_EARNINGS,
+                target_webhook,
                 build_crosscheck_blocks(disagreement_rows, today),
                 build_crosscheck_fallback(disagreement_rows, today),
             )
@@ -1761,14 +1775,17 @@ def _yf_dates_from_signature(sig: str | None) -> list[str]:
     return [s for s in sig.split(",") if s]
 
 
-def _ack_in_thread(thread_ts: str, text: str) -> None:
+def _ack_in_thread(thread_ts: str, text: str, channel_id: str | None = None) -> None:
     """Post a short text-only ack in the thread. Logs but does not raise."""
-    if not (SLACK_BOT_TOKEN and SLACK_CHANNEL_ID):
+    if not SLACK_BOT_TOKEN:
+        return
+    target = channel_id or SLACK_CHANNEL_ID
+    if not target:
         return
     try:
         slack_post_message(
             SLACK_BOT_TOKEN,
-            SLACK_CHANNEL_ID,
+            target,
             text=text,
             thread_ts=thread_ts,
         )
@@ -1870,9 +1887,10 @@ def run_check_replies(dry_run: bool = False, days_lookback: int = 14):
     Snoozed questions whose snooze window has expired transition back to
     `open` so the next disagreement detection can re-alert.
     """
-    if not (SLACK_BOT_TOKEN and SLACK_CHANNEL_ID):
+    if not SLACK_BOT_TOKEN or not (SLACK_CHANNEL_ID or SLACK_STATUS_CHANNEL_ID):
         logger.info(
-            "--check-replies: SLACK_BOT_TOKEN/SLACK_CHANNEL_ID not set; skipping"
+            "--check-replies: SLACK_BOT_TOKEN and at least one of "
+            "SLACK_CHANNEL_ID/SLACK_STATUS_CHANNEL_ID must be set; skipping"
         )
         return
 
@@ -1898,9 +1916,14 @@ def run_check_replies(dry_run: bool = False, days_lookback: int = 14):
 
         thread_ts = q["slack_thread_ts"]
         oldest = q["slack_last_reply_ts"]
+        # Per-thread channel (v10). NULL on legacy rows posted before the
+        # status-reports split — fall back to SLACK_CHANNEL_ID for those.
+        channel_id = q.get("slack_channel_id") or SLACK_CHANNEL_ID
+        if not channel_id:
+            continue
         try:
             replies = fetch_thread_replies(
-                SLACK_BOT_TOKEN, SLACK_CHANNEL_ID, thread_ts, oldest=oldest
+                SLACK_BOT_TOKEN, channel_id, thread_ts, oldest=oldest
             )
         except SlackAPIError as exc:
             logger.error(
@@ -1928,21 +1951,22 @@ def run_check_replies(dry_run: bool = False, days_lookback: int = 14):
 
             if action.action == ACT_HELP:
                 if not dry_run:
-                    _ack_in_thread(thread_ts, format_help(kind))
+                    _ack_in_thread(thread_ts, format_help(kind), channel_id)
             elif action.action == ACT_STATUS:
                 if not dry_run:
-                    _ack_in_thread(thread_ts, format_status(q, today))
+                    _ack_in_thread(thread_ts, format_status(q, today), channel_id)
             elif action.action == ACT_UNKNOWN:
                 if not dry_run:
                     _ack_in_thread(
                         thread_ts,
                         f":x: {action.error}",
+                        channel_id,
                     )
             else:
                 if not dry_run:
                     _apply_action(conn, q, action, today)
                     if action.ack:
-                        _ack_in_thread(thread_ts, action.ack)
+                        _ack_in_thread(thread_ts, action.ack, channel_id)
 
             latest_ts = reply.ts
             processed += 1

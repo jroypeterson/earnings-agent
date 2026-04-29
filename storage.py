@@ -18,9 +18,18 @@ logger = logging.getLogger("earnings_agent")
 # Schema version tracking
 # ---------------------------------------------------------------------------
 
-CURRENT_SCHEMA_VERSION = 9  # Bump when adding migrations
+CURRENT_SCHEMA_VERSION = 10  # Bump when adding migrations
 
 _MIGRATIONS = {
+    # Version 9 → 10: Track which Slack channel each open-question thread
+    # lives in. Cross-check / unseen / reconcile alerts now post to the
+    # status-reports channel instead of the earnings channel; the reply
+    # poller needs to know which channel to query for each thread. NULL
+    # for legacy rows; the poller falls back to SLACK_CHANNEL_ID then.
+    10: [
+        "ALTER TABLE events ADD COLUMN slack_channel_id TEXT",
+    ],
+
     # Version 8 → 9: Slack-reply state. Each open question (cross-check
     # disagreement, unseen-ticker, urgent-move) gets its own threaded
     # parent message; replies in that thread drive resolution actions.
@@ -274,6 +283,7 @@ def init_db(db_path: Path = DB_PATH) -> sqlite3.Connection:
                 question_state  TEXT,
                 question_snooze_until TEXT,
                 question_first_seen TEXT,
+                slack_channel_id TEXT,
                 created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
                 updated_at      TEXT    NOT NULL DEFAULT (datetime('now')),
                 UNIQUE(ticker, event_date)
@@ -599,15 +609,17 @@ def open_question(
     thread_ts: str,
     kind: str,
     first_seen_iso: str,
+    channel_id: str | None = None,
 ) -> None:
     """Mark an event as having an open Slack question."""
     conn.execute(
         "UPDATE events SET slack_thread_ts = ?, slack_question_kind = ?, "
+        "slack_channel_id = ?, "
         "slack_last_reply_ts = NULL, question_state = 'open', "
         "question_snooze_until = NULL, question_first_seen = ?, "
         "updated_at = datetime('now') "
         "WHERE ticker = ? AND event_date = ?",
-        (thread_ts, kind, first_seen_iso, ticker.upper(), event_date),
+        (thread_ts, kind, channel_id, first_seen_iso, ticker.upper(), event_date),
     )
     conn.commit()
 
@@ -657,7 +669,7 @@ def list_open_questions(conn: sqlite3.Connection) -> list[dict]:
         "SELECT ticker, event_date, tier, company_name, "
         "slack_thread_ts, slack_question_kind, slack_last_reply_ts, "
         "question_state, question_snooze_until, question_first_seen, "
-        "date_confirmed, last_xcheck_yf_dates "
+        "date_confirmed, last_xcheck_yf_dates, slack_channel_id "
         "FROM events "
         "WHERE slack_thread_ts IS NOT NULL "
         "AND question_state IN ('open', 'monitoring', 'snoozed') "
@@ -677,6 +689,7 @@ def list_open_questions(conn: sqlite3.Connection) -> list[dict]:
             "question_first_seen": r[9],
             "date_confirmed": bool(r[10]),
             "last_xcheck_yf_dates": r[11],
+            "slack_channel_id": r[12],
         }
         for r in cur.fetchall()
     ]
