@@ -1069,6 +1069,92 @@ def test_split_day_summary_header_softens_messaging():
     assert "informational" in header_text.lower()
 
 
+# ── EDGAR 8-K tiebreaker ──────────────────────────────────────────────────
+
+
+def test_edgar_release_date_overrides_split_day_in_verdict():
+    """EDGAR 2.02 takes priority — even over the split-day classifier."""
+    from notifications import DisagreementRow, _xcheck_verdict
+    from datetime import date as _date
+    r = DisagreementRow(
+        ticker="UFPT", company_name="UFP Technologies",
+        finnhub_date="2026-05-05",
+        yf_dates=[_date(2026, 5, 4)],
+        tier=2,
+        # Both split-day AND EDGAR set; EDGAR wins.
+        split_day_call_date="2026-05-05",
+        edgar_release_date="2026-05-04",
+    )
+    verdict = _xcheck_verdict(r)
+    assert "EDGAR confirms 2026-05-04" in verdict
+    assert "Auto-locked" in verdict
+    assert "yfinance correct" in verdict
+    assert "split-day" not in verdict.lower()
+
+
+def test_edgar_confirms_finnhub():
+    """EDGAR matches Finnhub's date — verdict says Finnhub correct."""
+    from notifications import DisagreementRow, _xcheck_verdict
+    from datetime import date as _date
+    r = DisagreementRow(
+        ticker="XYZ", company_name="",
+        finnhub_date="2026-05-04",
+        yf_dates=[_date(2026, 5, 6)],
+        tier=2,
+        edgar_release_date="2026-05-04",
+    )
+    verdict = _xcheck_verdict(r)
+    assert "Finnhub correct" in verdict
+    assert "yfinance off" in verdict
+
+
+def test_edgar_disagrees_with_both():
+    """EDGAR has a date neither Finnhub nor yfinance agrees with."""
+    from notifications import DisagreementRow, _xcheck_verdict
+    from datetime import date as _date
+    r = DisagreementRow(
+        ticker="XYZ", company_name="",
+        finnhub_date="2026-05-04",
+        yf_dates=[_date(2026, 5, 6)],
+        tier=2,
+        edgar_release_date="2026-05-05",
+    )
+    verdict = _xcheck_verdict(r)
+    assert "EDGAR confirms 2026-05-05" in verdict
+    assert "both Finnhub and yfinance off" in verdict
+
+
+def test_find_earnings_release_filing_window():
+    """Verify find_earnings_release_filing filters fetch_8k_filings to the window."""
+    import edgar_client
+    from edgar_client import find_earnings_release_filing, Filing8K
+    from datetime import date as _date
+    from unittest.mock import patch
+
+    fake = [
+        Filing8K(form="8-K", filing_date="2026-05-04", accession="X1",
+                 primary_doc_title="Earnings", items=("2.02",)),
+        Filing8K(form="8-K", filing_date="2026-04-25", accession="X0",
+                 primary_doc_title="Older earnings", items=("2.02",)),
+        Filing8K(form="8-K", filing_date="2026-05-10", accession="X2",
+                 primary_doc_title="Future earnings", items=("2.02",)),
+    ]
+    with patch.object(edgar_client, "fetch_8k_filings", return_value=fake):
+        # Window includes May 4 -> matches X1
+        result = find_earnings_release_filing("XYZ", _date(2026, 5, 3), _date(2026, 5, 5))
+        assert result is not None
+        assert result.accession == "X1"
+
+        # Window excludes both -> None
+        result = find_earnings_release_filing("XYZ", _date(2026, 6, 1), _date(2026, 6, 5))
+        assert result is None
+
+        # Empty fetch -> None
+        with patch.object(edgar_client, "fetch_8k_filings", return_value=[]):
+            result = find_earnings_release_filing("XYZ", _date(2026, 5, 3), _date(2026, 5, 5))
+            assert result is None
+
+
 # ── Run all tests ─────────────────────────────────────────────────────────
 
 if __name__ == "__main__":

@@ -177,6 +177,36 @@ def fetch_8k_filings(
     return out
 
 
+def find_earnings_release_filing(
+    ticker: str, window_start: date, window_end: date
+) -> Filing8K | None:
+    """Search SEC EDGAR for an 8-K Item 2.02 ('Results of Operations and
+    Financial Condition') filed in the inclusive window [window_start,
+    window_end]. Returns the most recent matching filing, or None.
+
+    8-K Item 2.02 IS the earnings release by SEC definition — when a
+    filing exists in the window, its filing date is ground truth for the
+    earnings event date. Used by the cross-check tiebreaker as an
+    authoritative signal beyond Finnhub vs yfinance.
+    """
+    if window_end < window_start:
+        return None
+
+    # Cap days_back so we always have enough history to cover the window
+    # plus a small buffer (filings are sometimes filed a few days late).
+    today = date.today()
+    days_back = max(7, (today - window_start).days + 7)
+    filings = fetch_8k_filings(ticker, days_back=days_back, earnings_only=True)
+    for f in filings:
+        try:
+            fd = date.fromisoformat(f.filing_date)
+        except ValueError:
+            continue
+        if window_start <= fd <= window_end:
+            return f
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Cadence inference: find the prior-year same-quarter 2.02 filing
 # ---------------------------------------------------------------------------

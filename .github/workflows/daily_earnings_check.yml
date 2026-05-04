@@ -111,6 +111,18 @@ jobs:
           TICKERS: ${{ vars.TICKERS }}  # Legacy fallback
         run: python main.py
 
+      # Description drift: the daily sync's existing-event fast path
+      # only triggers calendar updates on date or hour changes, so
+      # description-only changes (e.g., newly-populated call_datetime_utc
+      # via yfinance Ticker.info) won't propagate without this step.
+      # Idempotent — no-op when descriptions already match.
+      - name: Refresh calendar descriptions
+        continue-on-error: true
+        env:
+          GOOGLE_CALENDAR_ID: ${{ secrets.GOOGLE_CALENDAR_ID }}
+          GOOGLE_CREDENTIALS_PATH: credentials.json
+        run: python main.py --refresh-descriptions
+
       # yfinance cross-check. Alert-only: Finnhub has already been applied
       # above; this surfaces two-source disagreements to prompt IR
       # verification. yfinance is scrapy, so do not fail the workflow if

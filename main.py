@@ -138,7 +138,7 @@ from market_data import (
     fetch_yfinance_hour_for_date,
     fetch_yfinance_call_for_date,
 )
-from edgar_client import infer_cadence_signal
+from edgar_client import infer_cadence_signal, find_earnings_release_filing
 
 logger = logging.getLogger("earnings_agent")
 
@@ -1989,6 +1989,45 @@ def run_cross_check(dry_run: bool = False, days_ahead: int = 14):
         except Exception as exc:
             logger.debug(f"split-day detection failed for {ticker}: {exc}")
 
+        # EDGAR 8-K Item 2.02 tiebreaker: if at least one candidate date
+        # has passed (the 8-K can only exist post-release), search for a
+        # 2.02 filing in the candidate window. SEC's filing receipt is
+        # the company's authoritative timestamp — when present, it
+        # outranks Finnhub and yfinance as a third independent source.
+        edgar_release: str | None = None
+        try:
+            fh_d = date.fromisoformat(event_date)
+            yf_d_min = min(yf_dates) if yf_dates else fh_d
+            yf_d_max = max(yf_dates) if yf_dates else fh_d
+            window_start = min(fh_d, yf_d_min) - timedelta(days=1)
+            window_end = max(fh_d, yf_d_max) + timedelta(days=1)
+            if window_start <= today:
+                # Cap the upper bound at today — EDGAR can't have a
+                # filing for a future date.
+                edgar_window_end = min(window_end, today)
+                filing = find_earnings_release_filing(ticker, window_start, edgar_window_end)
+                if filing is not None:
+                    edgar_release = filing.filing_date
+                    logger.info(
+                        f"EDGAR Item 2.02 for {ticker} filed {filing.filing_date} "
+                        f"(accession {filing.accession}) — overrides Finnhub/yfinance"
+                    )
+        except Exception as exc:
+            logger.debug(f"EDGAR tiebreaker failed for {ticker}: {exc}")
+
+        # Auto-lock when EDGAR confirms a date that disagrees with
+        # what's stored. The lock prevents subsequent Finnhub date
+        # changes from overriding the truth.
+        if edgar_release and edgar_release != event_date:
+            try:
+                set_date_lock(conn, ticker, edgar_release, locked=True)
+                logger.info(
+                    f"Auto-locked {ticker} to EDGAR-confirmed date "
+                    f"{edgar_release} (was Finnhub {event_date})"
+                )
+            except Exception as exc:
+                logger.warning(f"Could not auto-lock {ticker}: {exc}")
+
         new_disagreements.append((DisagreementRow(
             ticker=ticker,
             company_name=company_name or "",
@@ -2000,6 +2039,7 @@ def run_cross_check(dry_run: bool = False, days_ahead: int = 14):
             edgar_finnhub_offset=edgar_fh_offset,
             edgar_yf_offset=edgar_yf_offset,
             split_day_call_date=split_day_call,
+            edgar_release_date=edgar_release,
         ), current_sig))
 
     logger.info(

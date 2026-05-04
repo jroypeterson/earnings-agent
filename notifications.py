@@ -619,6 +619,12 @@ class DisagreementRow:
     # rather than a true source conflict. Downstream messaging downgrades
     # the alert tone when this is True.
     split_day_call_date: str | None = None
+    # Authoritative tiebreaker: when at least one candidate date has
+    # passed and SEC EDGAR has an 8-K Item 2.02 ("Results of Operations
+    # and Financial Condition") filing in the candidate window, the
+    # filing date is ground truth. Auto-locked by the cross-check job
+    # when present.
+    edgar_release_date: str | None = None
 
 
 def _fmt_yf_dates(yf_dates: list) -> str:
@@ -773,6 +779,17 @@ def _xcheck_verdict(r: DisagreementRow) -> str:
     Tentative read on which source is right, given Finnhub's confirmed
     flag and the EDGAR cadence offsets.
     """
+    # EDGAR Item 2.02 filing in the candidate window: authoritative.
+    # Takes priority over every other heuristic — this is the company's
+    # own SEC filing of the earnings release, not a third opinion.
+    if r.edgar_release_date:
+        truth = r.edgar_release_date
+        if truth == r.finnhub_date:
+            return f"EDGAR confirms {truth} — Finnhub correct, yfinance off. Auto-locked."
+        yf_iso = [d.isoformat() for d in r.yf_dates] if r.yf_dates else []
+        if truth in yf_iso:
+            return f"EDGAR confirms {truth} — yfinance correct, Finnhub off. Auto-locked."
+        return f"EDGAR confirms {truth} — both Finnhub and yfinance off. Auto-locked."
     # Split-day pattern: not a true source disagreement. Companies that
     # release post-close and hold the call the next morning legitimately
     # appear at two different dates depending on which event a vendor
