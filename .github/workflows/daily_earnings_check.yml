@@ -137,6 +137,11 @@ jobs:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
           SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }}
           SLACK_STATUS_CHANNEL_ID: ${{ secrets.SLACK_STATUS_CHANNEL_ID }}
+          # Calendar credentials needed for EDGAR auto-correction:
+          # when SEC contradicts the stored date, the agent moves the
+          # calendar event in addition to updating DB.
+          GOOGLE_CALENDAR_ID: ${{ secrets.GOOGLE_CALENDAR_ID }}
+          GOOGLE_CREDENTIALS_PATH: credentials.json
         run: python main.py --cross-check
 
       # Poll Slack threads for replies on open questions and apply any
