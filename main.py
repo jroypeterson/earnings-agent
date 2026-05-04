@@ -1061,6 +1061,12 @@ def notify_results(
     if not results:
         return True
 
+    # Build a fresh coverage_map locally — historically this referenced
+    # a closure variable from run(), which broke when the function was
+    # called from run_check_results() (different caller, different scope).
+    coverage = load_coverage()
+    coverage_map = {t.ticker: t for t in coverage}
+
     blocks = build_results_slack_blocks(results, as_of)
     fallback = build_results_fallback_text(results, as_of)
 
