@@ -706,8 +706,13 @@ def run(
         )
         ticktick_events = []
         for row in cur.fetchall():
+            ticker = row[0]
+            # Look up position from coverage so Tier 1 events can be split
+            # into Portfolio vs Researching TickTick lists.
+            info = coverage_map.get(ticker)
+            position = info.position if info else ""
             ticktick_events.append({
-                "ticker": row[0],
+                "ticker": ticker,
                 "event_date": row[1],
                 "event_hour": row[2],
                 "eps_estimate": row[3],
@@ -715,6 +720,7 @@ def run(
                 "tier": row[5],
                 "company_name": row[6],
                 "ticktick_task_id": row[7],
+                "position": position,
             })
 
         if ticktick_events:
@@ -858,6 +864,10 @@ def notify_results(
             task_id = existing.get("ticktick_task_id") if existing else None
             if not task_id:
                 continue
+            # Position is needed so Tier 1 reports go into the correct
+            # Portfolio vs Researching TickTick list.
+            info = coverage_map.get(r.ticker)
+            r_position = info.position if info else ""
             try:
                 ok = mark_task_reported(
                     tt_token,
@@ -873,6 +883,7 @@ def notify_results(
                     revenue_actual=r.rev_actual,
                     move_pct=r.move.move_pct if r.move else None,
                     move_label=r.move.window_label if r.move else None,
+                    position=r_position,
                 )
                 if ok:
                     logger.info(f"  TickTick task marked reported for {r.ticker}")

@@ -2,9 +2,15 @@
 Coverage Manager integration — reads the canonical ticker universe and
 resolves each ticker to a service tier.
 
-Tier 1 (Core Watchlist): tickers in watchlist.csv with Core=Y
+Tier 1 (Top priority — held + actively researched): tickers with Core=Y that
+    are EITHER in portfolio.json (Position == "Portfolio") OR in researching.json
+    (Position == "Researching"). The TickerInfo.position field disambiguates
+    Portfolio vs Researching for the ticktick.py list-name split.
 Tier 2 (HC Services + MedTech): universe tickers in those sectors, excluding Tier 1
 Tier 3 (Other): everything else in the universe
+
+Falls back to legacy core_watchlist.json (= Portfolio + Researching unioned)
+during the Coverage Manager Phase B->C migration window.
 """
 
 import csv
@@ -25,23 +31,60 @@ class TickerInfo:
     company_name: str
     sector: str
     subsector: str
+    position: str = ""      # "Portfolio" | "Researching" | "" (Tier 2/3 leave empty)
 
 
-def _read_watchlist(exports_path: Path) -> dict[str, dict]:
-    """Read watchlist.csv and return dict of ticker -> row data for Core=Y tickers."""
-    watchlist_path = exports_path / "watchlist.csv"
-    if not watchlist_path.exists():
-        logger.warning(f"Watchlist not found: {watchlist_path}")
+def _read_position_json(exports_path: Path, filename: str) -> dict[str, dict]:
+    """Read portfolio.json or researching.json, return {TICKER: row dict}."""
+    path = exports_path / filename
+    if not path.exists():
         return {}
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+    except (json.JSONDecodeError, OSError) as e:
+        logger.warning(f"Could not read {filename}: {e}")
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    return {t.strip().upper(): row for t, row in data.items() if isinstance(row, dict)}
 
-    result = {}
-    with open(watchlist_path, newline="", encoding="utf-8") as f:
-        for row in csv.DictReader(f):
-            if row.get("Core", "").strip().upper() == "Y":
-                ticker = row.get("Ticker", "").strip().upper()
-                if ticker:
-                    result[ticker] = row
-    return result
+
+def _read_watchlist(exports_path: Path) -> tuple[dict[str, dict], dict[str, dict]]:
+    """Read portfolio.json + researching.json, filtered to Core=Y tickers.
+
+    Returns (portfolio_core, researching_core) — two ticker->row dicts that
+    together form Tier 1. We need universe Core info to apply the Core=Y filter,
+    so we read watchlist.csv too (it carries every universe column including
+    the Core flag).
+
+    Falls back to legacy watchlist.csv during the migration window if
+    portfolio.json + researching.json haven't been pushed yet.
+    """
+    portfolio = _read_position_json(exports_path, "portfolio.json")
+    researching = _read_position_json(exports_path, "researching.json")
+
+    if not portfolio and not researching:
+        # Legacy fallback: read watchlist.csv (Portfolio + Researching unioned)
+        # and treat everything as Portfolio for the migration window.
+        watchlist_path = exports_path / "watchlist.csv"
+        if not watchlist_path.exists():
+            logger.warning(f"Neither portfolio/researching nor legacy watchlist found at {exports_path}")
+            return {}, {}
+        result = {}
+        with open(watchlist_path, newline="", encoding="utf-8") as f:
+            for row in csv.DictReader(f):
+                if row.get("Core", "").strip().upper() == "Y":
+                    ticker = row.get("Ticker", "").strip().upper()
+                    if ticker:
+                        result[ticker] = row
+        return result, {}
+
+    # Filter to Core=Y. Both files include the full universe column join,
+    # so the "Core" key is present on each entry.
+    portfolio_core = {t: row for t, row in portfolio.items() if (row.get("Core") or "").strip().upper() == "Y"}
+    researching_core = {t: row for t, row in researching.items() if (row.get("Core") or "").strip().upper() == "Y"}
+    return portfolio_core, researching_core
 
 
 def _read_universe_metadata(exports_path: Path) -> dict[str, dict]:
@@ -121,9 +164,15 @@ def load_coverage() -> list[TickerInfo]:
         ]
 
     # Load data from Coverage Manager
-    watchlist = _read_watchlist(exports_path)
+    portfolio_core, researching_core = _read_watchlist(exports_path)
     metadata = _read_universe_metadata(exports_path)
     universe_tickers = _read_universe_tickers(exports_path)
+
+    # Tier 1 = Portfolio ∩ Core ∪ Researching ∩ Core. Track which sub-bucket
+    # each ticker lives in via the position field on TickerInfo so ticktick.py
+    # can split into separate "Portfolio" and "Researching" TickTick lists.
+    watchlist = {**researching_core, **portfolio_core}  # Portfolio wins on collision
+    portfolio_tickers = set(portfolio_core.keys())
 
     # Also include watchlist tickers in the universe set
     all_tickers = universe_tickers | set(watchlist.keys())
@@ -150,10 +199,13 @@ def load_coverage() -> list[TickerInfo]:
         # Determine tier
         if ticker in watchlist:
             tier = 1
+            position = "Portfolio" if ticker in portfolio_tickers else "Researching"
         elif sector in TIER_2_SECTORS:
             tier = 2
+            position = ""
         else:
             tier = 3
+            position = ""
 
         tier_counts[tier] += 1
         result.append(TickerInfo(
@@ -162,6 +214,7 @@ def load_coverage() -> list[TickerInfo]:
             company_name=company_name,
             sector=sector,
             subsector=subsector,
+            position=position,
         ))
 
     logger.info(

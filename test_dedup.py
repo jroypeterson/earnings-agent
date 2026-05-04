@@ -511,21 +511,29 @@ def test_ticktick_dedup_skips_existing():
 # ── Test 13: TickTick quarterly list name generation ──────────────────
 
 def test_ticktick_quarter_list_name():
-    """Test quarterly list name generation with reporting quarter + tier."""
+    """Test quarterly list name generation with reporting quarter + tier + position."""
     from ticktick import _quarter_list_name
 
-    # Reporting quarter: Apr-Jun releases report Q1
+    # Tier 1 with no position falls back to legacy "Core Watchlist" label.
     assert _quarter_list_name("2026-04-30", tier=1) == "1Q26 Earnings - Core Watchlist"
+
+    # Tier 1 with position splits into Portfolio / Researching lists.
+    assert _quarter_list_name("2026-04-30", tier=1, position="Portfolio") == "1Q26 Earnings - Portfolio"
+    assert _quarter_list_name("2026-04-30", tier=1, position="Researching") == "1Q26 Earnings - Researching"
+
+    # Tier 2 unchanged — HC Svcs & MedTech.
     assert _quarter_list_name("2026-04-30", tier=2) == "1Q26 Earnings - HC Svcs & MedTech"
 
-    # Jul-Sep releases report Q2
+    # Tier 3 has no suffix.
+    assert _quarter_list_name("2026-04-30", tier=3) == "1Q26 Earnings"
+
+    # Reporting-quarter math unchanged — Jan-Mar releases report Q4 of prior year, etc.
     assert _quarter_list_name("2026-07-15", tier=2) == "2Q26 Earnings - HC Svcs & MedTech"
-
-    # Oct-Dec releases report Q3
-    assert _quarter_list_name("2026-10-15", tier=1) == "3Q26 Earnings - Core Watchlist"
-
-    # Jan-Mar releases report Q4 of prior year
+    assert _quarter_list_name("2026-10-15", tier=1, position="Portfolio") == "3Q26 Earnings - Portfolio"
     assert _quarter_list_name("2026-01-15", tier=2) == "4Q25 Earnings - HC Svcs & MedTech"
+
+    # Unknown position falls back to legacy "Core Watchlist".
+    assert _quarter_list_name("2026-04-30", tier=1, position="Unknown") == "1Q26 Earnings - Core Watchlist"
 
     print("PASS: TickTick quarterly list name generation correct")
 

@@ -69,8 +69,17 @@ def _headers(token: str) -> dict:
 
 
 TIER_LIST_LABELS = {
-    1: "Core Watchlist",
+    1: "Core Watchlist",       # legacy default for tier 1 — used when no
+                                # position is provided (back-compat)
     2: "HC Svcs & MedTech",
+}
+
+# When a Tier 1 row carries a `position` value, the TickTick list name is
+# split based on which sub-bucket it lives in. Coverage Manager Phase D
+# (2026-05-03) introduced this distinction.
+TIER1_POSITION_LABELS = {
+    "Portfolio": "Portfolio",
+    "Researching": "Researching",
 }
 
 
@@ -103,17 +112,26 @@ def _reporting_quarter(event_date: str) -> str:
     return f"{q}Q{year % 100}"
 
 
-def _quarter_list_name(event_date: str, tier: int = 2) -> str:
+def _quarter_list_name(event_date: str, tier: int = 2, position: str = "") -> str:
     """
-    Generate the quarterly list name from an event date and tier.
+    Generate the quarterly list name from an event date, tier, and (for
+    Tier 1) a position sub-bucket.
 
     Uses the reporting quarter (what period results cover), not the
     calendar quarter of the release date.
 
-    e.g. "2026-04-30", tier=1 -> "1Q26 Earnings - Core Watchlist"
-         "2026-04-30", tier=2 -> "1Q26 Earnings - HC Svcs & MedTech"
+    Examples:
+      tier=1, position="Portfolio"   -> "1Q26 Earnings - Portfolio"
+      tier=1, position="Researching" -> "1Q26 Earnings - Researching"
+      tier=1, position=""            -> "1Q26 Earnings - Core Watchlist"  (legacy)
+      tier=2                          -> "1Q26 Earnings - HC Svcs & MedTech"
+      tier=3                          -> "1Q26 Earnings"  (no suffix)
     """
     rq = _reporting_quarter(event_date)
+    if tier == 1 and position:
+        sub_label = TIER1_POSITION_LABELS.get(position)
+        if sub_label:
+            return f"{rq} Earnings - {sub_label}"
     tier_label = TIER_LIST_LABELS.get(tier)
     if tier_label:
         return f"{rq} Earnings - {tier_label}"
@@ -489,6 +507,7 @@ def mark_task_reported(
     revenue_estimate: float | None,
     revenue_actual: float | None,
     move_pct: float | None = None,
+    position: str = "",
     move_label: str | None = None,
 ) -> bool:
     """
@@ -498,7 +517,7 @@ def mark_task_reported(
     The task lives in the quarterly list keyed on (event_date, tier), so we
     look up the list ID by name rather than tracking it in the DB.
     """
-    list_name = _quarter_list_name(event_date, tier)
+    list_name = _quarter_list_name(event_date, tier, position=position)
     try:
         list_id = find_or_create_list(token, list_name)
     except TickTickTokenExpired:
@@ -566,7 +585,8 @@ def sync_ticktick_tasks(
             stats["skipped"] += 1
             continue  # Already has a task
 
-        list_name = _quarter_list_name(event["event_date"], tier)
+        position = event.get("position", "") or ""
+        list_name = _quarter_list_name(event["event_date"], tier, position=position)
         events_by_list.setdefault(list_name, []).append(event)
 
     if not events_by_list:
