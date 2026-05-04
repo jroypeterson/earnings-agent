@@ -25,7 +25,15 @@ from config import (
     SLACK_STATUS_CHANNEL_ID,
     DIGEST_HTML_PATH,
 )
-from coverage import load_coverage, get_tickers_by_tier, get_ticker_info, TickerInfo
+from coverage import (
+    load_coverage,
+    get_tickers_by_tier,
+    get_ticker_info,
+    TickerInfo,
+    compute_coverage_freshness,
+    CoverageHealth,
+    COVERAGE_STALENESS_DAYS,
+)
 from storage import (
     init_db,
     find_existing_event,
@@ -40,6 +48,8 @@ from storage import (
     update_question_state,
     advance_reply_watermark,
     list_open_questions,
+    kv_get,
+    kv_set,
 )
 from finnhub_client import get_client as get_finnhub_client, fetch_earnings, FinnhubError
 from calendar_sync import (
@@ -51,6 +61,8 @@ from calendar_sync import (
     build_description,
     cleanup_duplicates,
     _is_confirmed_hour,
+    expected_calendar_state,
+    calendar_event_drift_kind,
     CalendarError,
 )
 from ticktick import (
@@ -120,7 +132,11 @@ from slack_replies import (
     ACT_STATUS,
     ACT_UNKNOWN,
 )
-from market_data import fetch_post_earnings_move, fetch_yfinance_earnings_date
+from market_data import (
+    fetch_post_earnings_move,
+    fetch_yfinance_earnings_date,
+    fetch_yfinance_hour_for_date,
+)
 from edgar_client import infer_cadence_signal
 
 logger = logging.getLogger("earnings_agent")
@@ -147,6 +163,61 @@ def _business_days_until(target_iso: str, as_of: date) -> int:
         if d.weekday() < 5:
             days += 1
     return days
+
+
+def _alert_coverage_stale_if_needed(conn, health: CoverageHealth) -> None:
+    """Post a Slack alert when Coverage Manager exports are stale, dedup'd
+    once per UTC day via kv_store. Always called after init_db so kv_store
+    is available.
+
+    Routes to #status-reports (falls back to #earnings). Swallows its own
+    errors — coverage staleness is informational, not blocking.
+    """
+    if not health.stale:
+        return
+
+    today_iso = date.today().isoformat()
+    dedup_key = f"coverage_stale_alerted:{today_iso}"
+    if kv_get(conn, dedup_key):
+        logger.debug(f"Coverage staleness already alerted today ({today_iso}); skipping")
+        return
+
+    logger.warning(f"Coverage Manager exports stale: {health.message}")
+
+    webhook = SLACK_WEBHOOK_STATUS or SLACK_WEBHOOK_EARNINGS
+    if not webhook:
+        logger.info("No Slack webhook configured; skipping coverage staleness alert")
+        # Mark dedup anyway so we don't re-log this every hour today
+        kv_set(conn, dedup_key, "no-webhook")
+        return
+
+    if health.source == "missing":
+        text = (
+            f":rotating_light: *Coverage Manager exports missing* — "
+            f"{health.message}. The earnings agent is running on the legacy "
+            f"fallback (or no tickers at all). Investigate Coverage Manager CI."
+        )
+    else:
+        age_str = f"{health.age_days:.1f} days" if health.age_days is not None else "unknown"
+        text = (
+            f":warning: *Coverage Manager exports stale* — last published "
+            f"{age_str} ago (threshold {COVERAGE_STALENESS_DAYS} days, source={health.source}). "
+            f"The earnings agent is using stale tier classifications. "
+            f"Check Coverage Manager's weekly publish job."
+        )
+
+    try:
+        import urllib.request
+        import json as _json
+        req = urllib.request.Request(
+            webhook,
+            data=_json.dumps({"text": text}).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+        )
+        urllib.request.urlopen(req, timeout=10).read()
+        kv_set(conn, dedup_key, "alerted")
+    except Exception as exc:
+        logger.error(f"Coverage staleness Slack post failed: {exc}")
 
 
 def _post_urgent_alert(rows: list[UrgentMoveRow], as_of: date, conn=None):
@@ -238,6 +309,7 @@ def run(
         sys.exit(1)
 
     conn = init_db()
+    _alert_coverage_stale_if_needed(conn, compute_coverage_freshness())
 
     cal_service = None
     if not dry_run:
@@ -328,6 +400,30 @@ def run(
         if not existing:
             existing = find_event_for_ticker_near_date(conn, ticker, earnings_date)
 
+        # yfinance hour fallback: when Finnhub didn't publish timing for an
+        # upcoming Tier 1/2 event, try to infer it from yfinance's earnings
+        # datetime time-of-day. Only run for upcoming events (Finnhub often
+        # has empty hour for past events too, but those don't need calendar
+        # corrections). Reuse a cached value from DB to avoid hammering
+        # yfinance on every sync. Does NOT touch event_hour or date_confirmed
+        # — keeps Finnhub-canonical semantics intact.
+        hour_yf: str | None = None
+        is_upcoming = (not has_actuals) and earnings_date >= today.isoformat()
+        if not hour and is_upcoming and tier <= 2:
+            cached_yf = (existing or {}).get("event_hour_yf") if existing else None
+            if cached_yf:
+                hour_yf = cached_yf
+            else:
+                try:
+                    inferred = fetch_yfinance_hour_for_date(ticker, earnings_date)
+                    if inferred:
+                        hour_yf = inferred
+                        logger.info(
+                            f"yfinance fallback timing for {ticker} {earnings_date}: {hour_yf}"
+                        )
+                except Exception as exc:
+                    logger.debug(f"yfinance hour fallback failed for {ticker}: {exc}")
+
         if existing:
             # --- Check if actuals just came in ---
             if has_actuals and not existing["reported"]:
@@ -342,9 +438,10 @@ def run(
 
                 if not dry_run and gcal_id and cal_service:
                     try:
-                        new_summary = f"[REPORTED] {ticker} Earnings Release"
-                        new_description = build_description(
-                            ticker, hour, eps_est, eps_act, rev_est, rev_act
+                        new_summary, new_description, _ = expected_calendar_state(
+                            ticker, hour, eps_est, eps_act, rev_est, rev_act,
+                            quarter=quarter, tier=tier,
+                            source_fingerprint=source_fingerprint,
                         )
                         update_calendar_event_description(
                             cal_service, GOOGLE_CALENDAR_ID,
@@ -363,6 +460,7 @@ def run(
                     rev_estimate=rev_est, rev_actual=rev_act, reported=True,
                     tier=tier, company_name=company_name,
                     source_fingerprint=source_fingerprint,
+                    event_hour_yf=hour_yf,
                 )
                 actuals_count += 1
 
@@ -469,6 +567,7 @@ def run(
                             eps_actual=eps_act, revenue_estimate=rev_est,
                             revenue_actual=rev_act, tier=tier,
                             source_fingerprint=source_fingerprint,
+                            hour_yf=hour_yf,
                         )
                     except CalendarError as exc:
                         logger.error(f"Failed to create updated event for {ticker}: {exc}")
@@ -483,6 +582,7 @@ def run(
                 rev_estimate=rev_est, rev_actual=rev_act, reported=has_actuals,
                 tier=tier, company_name=company_name,
                 source_fingerprint=source_fingerprint,
+                event_hour_yf=hour_yf,
             )
             updated_count += 1
 
@@ -530,6 +630,7 @@ def run(
                                     eps_actual=eps_act, revenue_estimate=rev_est,
                                     revenue_actual=rev_act, tier=tier,
                                     source_fingerprint=source_fingerprint,
+                                    hour_yf=hour_yf,
                                 )
                             except CalendarError as exc:
                                 logger.error(
@@ -542,11 +643,85 @@ def run(
                                 rev_actual=rev_act, reported=has_actuals,
                                 tier=tier, company_name=company_name,
                                 source_fingerprint=source_fingerprint,
+                                event_hour_yf=hour_yf,
                             )
                             updated_count += 1
                             continue
 
-                        # Date matches — safe to backfill DB only.
+                        # Date matches — but the calendar event itself may
+                        # be stale relative to current Finnhub state (hour
+                        # just got populated, actuals just came in, tier
+                        # reclassified, fingerprint missing). Decide whether
+                        # to patch in place or recreate based on the kind
+                        # of drift: 'shape' drift (all-day<->timed, or
+                        # bmo<->amc) requires delete+recreate because
+                        # update_calendar_event_description doesn't touch
+                        # start/end/reminders.
+                        exp_summary, exp_description, exp_props = expected_calendar_state(
+                            ticker, hour, eps_est, eps_act, rev_est, rev_act,
+                            quarter=quarter, tier=tier,
+                            source_fingerprint=source_fingerprint,
+                            hour_yf=hour_yf,
+                        )
+                        effective_hour = hour or hour_yf or ""
+                        drift = calendar_event_drift_kind(
+                            cal_event, exp_summary, exp_description, exp_props,
+                            effective_hour,
+                        )
+                        if drift == "shape":
+                            if not dry_run:
+                                try:
+                                    delete_calendar_event(
+                                        cal_service, GOOGLE_CALENDAR_ID, gcal_id
+                                    )
+                                    gcal_id = create_calendar_event(
+                                        cal_service, GOOGLE_CALENDAR_ID, ticker,
+                                        earnings_date, hour,
+                                        quarter=quarter, eps_estimate=eps_est,
+                                        eps_actual=eps_act, revenue_estimate=rev_est,
+                                        revenue_actual=rev_act, tier=tier,
+                                        source_fingerprint=source_fingerprint,
+                                        hour_yf=hour_yf,
+                                    )
+                                    logger.info(
+                                        f"Recreated calendar event for {ticker} "
+                                        f"{quarter} (shape drift): "
+                                        f"{cal_event.get('summary')!r} -> {exp_summary!r}"
+                                    )
+                                except CalendarError as exc:
+                                    logger.warning(
+                                        f"Could not recreate stale event for {ticker}: {exc}"
+                                    )
+                            else:
+                                logger.info(
+                                    f"  [dry-run] Would recreate {ticker} {quarter} "
+                                    f"(shape drift): {cal_event.get('summary')!r} -> {exp_summary!r}"
+                                )
+                        elif drift == "text":
+                            if not dry_run:
+                                try:
+                                    update_calendar_event_description(
+                                        cal_service, GOOGLE_CALENDAR_ID, gcal_id,
+                                        exp_summary, exp_description,
+                                        ticker=ticker, quarter=quarter,
+                                        source_fingerprint=source_fingerprint,
+                                        tier=tier,
+                                    )
+                                    logger.info(
+                                        f"Patched calendar event text for {ticker} "
+                                        f"{quarter}: "
+                                        f"{cal_event.get('summary')!r} -> {exp_summary!r}"
+                                    )
+                                except CalendarError as exc:
+                                    logger.warning(
+                                        f"Could not patch stale text for {ticker}: {exc}"
+                                    )
+                            else:
+                                logger.info(
+                                    f"  [dry-run] Would patch text for {ticker} {quarter}: "
+                                    f"{cal_event.get('summary')!r} -> {exp_summary!r}"
+                                )
+
                         upsert_event(
                             conn, ticker, earnings_date, hour, gcal_id,
                             quarter=quarter, eps_estimate=eps_est,
@@ -554,12 +729,13 @@ def run(
                             rev_actual=rev_act, reported=has_actuals,
                             tier=tier, company_name=company_name,
                             source_fingerprint=source_fingerprint,
+                            event_hour_yf=hour_yf,
                         )
                         logger.info(f"Backfilled DB from calendar for {ticker} {quarter}")
                         skip_count += 1
                         continue
 
-                logger.info(f"New earnings: {ticker} {quarter} on {earnings_date} ({hour or 'time TBD'}) [Tier {tier}]")
+                logger.info(f"New earnings: {ticker} {quarter} on {earnings_date} ({hour or hour_yf or 'time TBD'}) [Tier {tier}]")
 
                 if not dry_run and cal_service:
                     try:
@@ -570,6 +746,7 @@ def run(
                             eps_actual=eps_act, revenue_estimate=rev_est,
                             revenue_actual=rev_act, tier=tier,
                             source_fingerprint=source_fingerprint,
+                            hour_yf=hour_yf,
                         )
                     except CalendarError as exc:
                         logger.error(f"Failed to create calendar event for {ticker}: {exc}")
@@ -583,6 +760,7 @@ def run(
                 rev_estimate=rev_est, rev_actual=rev_act, reported=has_actuals,
                 tier=tier, company_name=company_name,
                 source_fingerprint=source_fingerprint,
+                event_hour_yf=hour_yf,
             )
             new_count += 1
 
@@ -1009,17 +1187,22 @@ def run_check_results(
         gcal_id = existing.get("gcal_id") if existing else None
         if tier <= 2 and gcal_id and cal_service:
             try:
-                new_summary = f"[REPORTED] {ticker} Earnings Release"
-                new_description = build_description(
-                    ticker, hour, eps_est, eps_act, rev_est, rev_act
+                quarter_for_event = (
+                    (existing.get("quarter") if existing else None)
+                    or date_to_quarter(event_date)
+                )
+                source_fingerprint = f"{ticker}:{event_date}"
+                new_summary, new_description, _ = expected_calendar_state(
+                    ticker, hour, eps_est, eps_act, rev_est, rev_act,
+                    quarter=quarter_for_event, tier=tier,
+                    source_fingerprint=source_fingerprint,
                 )
                 update_calendar_event_description(
                     cal_service, GOOGLE_CALENDAR_ID, gcal_id,
                     new_summary, new_description,
                     ticker=ticker,
-                    quarter=(existing.get("quarter") if existing else None)
-                            or date_to_quarter(event_date),
-                    source_fingerprint=f"{ticker}:{event_date}",
+                    quarter=quarter_for_event,
+                    source_fingerprint=source_fingerprint,
                     tier=tier,
                 )
                 logger.info(f"Calendar updated with actuals for {ticker}")
@@ -1144,6 +1327,7 @@ def run_reconcile_calendar(dry_run: bool = False):
         sys.exit(1)
 
     conn = init_db()
+    _alert_coverage_stale_if_needed(conn, compute_coverage_freshness())
 
     try:
         cal_service = get_calendar_service()
@@ -1247,9 +1431,23 @@ def run_reconcile_calendar(dry_run: bool = False):
         company_name = info.company_name if info else None
         source_fingerprint = f"{ticker}:{new_date}"
 
+        # yfinance hour fallback for upcoming events whose Finnhub hour is empty.
+        hour_yf = None
+        is_upcoming = (not has_actuals) and new_date >= today.isoformat()
+        if not hour and is_upcoming and tier <= 2:
+            try:
+                inferred = fetch_yfinance_hour_for_date(ticker, new_date)
+                if inferred:
+                    hour_yf = inferred
+                    logger.info(
+                        f"yfinance fallback timing for {ticker} {new_date}: {hour_yf}"
+                    )
+            except Exception as exc:
+                logger.debug(f"yfinance hour fallback failed for {ticker}: {exc}")
+
         if dry_run:
             logger.info(
-                f"  [dry-run] {ticker} (T{tier}): {old_date} -> {new_date} ({hour or 'TBD'})"
+                f"  [dry-run] {ticker} (T{tier}): {old_date} -> {new_date} ({hour or hour_yf or 'TBD'})"
             )
             fixed.append(DriftRow(
                 ticker=ticker, old_date=old_date, new_date=new_date,
@@ -1272,6 +1470,7 @@ def run_reconcile_calendar(dry_run: bool = False):
                 revenue_estimate=rev_est, revenue_actual=rev_act,
                 tier=tier,
                 source_fingerprint=source_fingerprint,
+                hour_yf=hour_yf,
             )
         except CalendarError as exc:
             logger.error(f"  Failed to recreate event for {ticker}: {exc}")
@@ -1285,6 +1484,7 @@ def run_reconcile_calendar(dry_run: bool = False):
             reported=has_actuals, tier=tier,
             company_name=company_name,
             source_fingerprint=source_fingerprint,
+            event_hour_yf=hour_yf,
         )
         logger.info(f"  Fixed {ticker} (T{tier}): {old_date} -> {new_date}")
         fixed.append(DriftRow(
@@ -1395,39 +1595,62 @@ def run_refresh_descriptions(dry_run: bool = False, days_ahead: int = 90):
             continue
 
         hour = db_row.get("event_hour")
+        hour_yf = db_row.get("event_hour_yf")
         eps_est = db_row.get("eps_estimate")
         eps_act = db_row.get("eps_actual")
         rev_est = db_row.get("rev_estimate")
         rev_act = db_row.get("rev_actual")
-        has_actuals = eps_act is not None or rev_act is not None
+        quarter_for_event = db_row.get("quarter")
+        tier_for_event = db_row.get("tier") or 3
+        source_fingerprint = f"{ticker}:{event_date}"
 
-        est_marker = "" if (has_actuals or _is_confirmed_hour(hour)) else " (est.)"
-        new_summary = (
-            f"{'[REPORTED]' if has_actuals else ''} {ticker} "
-            f"Earnings Release{est_marker}"
-        ).strip()
-        new_description = build_description(
-            ticker, hour, eps_est, eps_act, rev_est, rev_act
+        new_summary, new_description, exp_props = expected_calendar_state(
+            ticker, hour, eps_est, eps_act, rev_est, rev_act,
+            quarter=quarter_for_event, tier=tier_for_event,
+            source_fingerprint=source_fingerprint,
+            hour_yf=hour_yf,
         )
+        drift = calendar_event_drift_kind(
+            ev, new_summary, new_description, exp_props,
+            hour or hour_yf or "",
+        )
+        if drift == "fresh":
+            continue
 
         if dry_run:
-            if ev.get("summary") != new_summary:
-                logger.info(
-                    f"  [dry-run] {ticker} {event_date}: "
-                    f"'{ev.get('summary')}' -> '{new_summary}'"
-                )
-                updated += 1
+            verb = "recreate" if drift == "shape" else "patch"
+            logger.info(
+                f"  [dry-run] Would {verb} {ticker} {event_date} ({drift}): "
+                f"'{ev.get('summary')}' -> '{new_summary}'"
+            )
+            updated += 1
             continue
 
         try:
-            update_calendar_event_description(
-                cal_service, GOOGLE_CALENDAR_ID, ev["id"],
-                new_summary, new_description,
-                ticker=ticker,
-                quarter=db_row.get("quarter"),
-                source_fingerprint=f"{ticker}:{event_date}",
-                tier=db_row.get("tier"),
-            )
+            if drift == "shape":
+                # update_calendar_event_description doesn't touch start/end,
+                # so a TBD->amc/bmo or all-day<->timed transition needs a
+                # full recreate to get the right time block.
+                delete_calendar_event(cal_service, GOOGLE_CALENDAR_ID, ev["id"])
+                create_calendar_event(
+                    cal_service, GOOGLE_CALENDAR_ID, ticker,
+                    event_date, hour,
+                    quarter=quarter_for_event,
+                    eps_estimate=eps_est, eps_actual=eps_act,
+                    revenue_estimate=rev_est, revenue_actual=rev_act,
+                    tier=tier_for_event,
+                    source_fingerprint=source_fingerprint,
+                    hour_yf=hour_yf,
+                )
+            else:  # 'text'
+                update_calendar_event_description(
+                    cal_service, GOOGLE_CALENDAR_ID, ev["id"],
+                    new_summary, new_description,
+                    ticker=ticker,
+                    quarter=quarter_for_event,
+                    source_fingerprint=source_fingerprint,
+                    tier=tier_for_event,
+                )
             updated += 1
         except CalendarError as exc:
             logger.warning(f"  Failed to update {ticker} {event_date}: {exc}")

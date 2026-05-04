@@ -16,12 +16,20 @@ during the Coverage Manager Phase B->C migration window.
 import csv
 import json
 import logging
+from datetime import datetime, timezone
 from pathlib import Path
 from dataclasses import dataclass
 
 from config import COVERAGE_MANAGER_PATH, TIER_2_SECTORS, TICKERS_FILE
 
 logger = logging.getLogger("earnings_agent")
+
+
+# Coverage Manager publishes weekly (Friday Windows Task Scheduler). One
+# missed publish = 7d behind; alert at >7d so two consecutive misses are
+# loud. CM's manifest.json carries `generated_at` (ISO Z); fall back to
+# universe.csv mtime if the manifest is missing.
+COVERAGE_STALENESS_DAYS = 7
 
 
 @dataclass
@@ -32,6 +40,66 @@ class TickerInfo:
     sector: str
     subsector: str
     position: str = ""      # "Portfolio" | "Researching" | "" (Tier 2/3 leave empty)
+
+
+@dataclass
+class CoverageHealth:
+    """Result of compute_coverage_freshness — pure data, no side effects."""
+    stale: bool
+    age_days: float | None
+    source: str            # "manifest", "mtime", or "missing"
+    message: str           # human-readable summary for logs/Slack
+
+
+def compute_coverage_freshness() -> CoverageHealth:
+    """Inspect Coverage Manager exports for staleness. Pure read — no DB,
+    no Slack, no logger.warning side-effects (callers decide).
+
+    Preference order:
+      1. exports/manifest.json -> 'generated_at' field (canonical)
+      2. exports/universe.csv mtime (fallback if manifest absent or malformed)
+      3. neither -> stale=True, source='missing'
+    """
+    exports = Path(COVERAGE_MANAGER_PATH) / "exports"
+    manifest = exports / "manifest.json"
+    universe = exports / "universe.csv"
+    now = datetime.now(timezone.utc)
+
+    if manifest.exists():
+        try:
+            with open(manifest, encoding="utf-8") as f:
+                data = json.load(f)
+            ts = data.get("generated_at")
+            if ts:
+                # CM publishes "...Z" suffix; fromisoformat doesn't accept Z
+                # before Python 3.11. Normalize defensively.
+                ts_clean = ts.replace("Z", "+00:00") if ts.endswith("Z") else ts
+                generated = datetime.fromisoformat(ts_clean)
+                if generated.tzinfo is None:
+                    generated = generated.replace(tzinfo=timezone.utc)
+                age_days = (now - generated).total_seconds() / 86400
+                stale = age_days > COVERAGE_STALENESS_DAYS
+                msg = (
+                    f"Coverage Manager exports generated_at={ts}; "
+                    f"age={age_days:.1f}d (threshold {COVERAGE_STALENESS_DAYS}d)"
+                )
+                return CoverageHealth(stale=stale, age_days=age_days, source="manifest", message=msg)
+        except (json.JSONDecodeError, ValueError, OSError) as exc:
+            logger.debug(f"Manifest unparseable, falling back to mtime: {exc}")
+
+    if universe.exists():
+        age_days = (now.timestamp() - universe.stat().st_mtime) / 86400
+        stale = age_days > COVERAGE_STALENESS_DAYS
+        msg = (
+            f"Coverage Manager universe.csv mtime age={age_days:.1f}d "
+            f"(threshold {COVERAGE_STALENESS_DAYS}d) — manifest unavailable"
+        )
+        return CoverageHealth(stale=stale, age_days=age_days, source="mtime", message=msg)
+
+    return CoverageHealth(
+        stale=True, age_days=None, source="missing",
+        message=f"Coverage Manager exports not found at {exports}",
+    )
 
 
 def _read_position_json(exports_path: Path, filename: str) -> dict[str, dict]:

@@ -95,6 +95,117 @@ def _is_confirmed_hour(hour: str | None) -> bool:
     return (hour or "").lower() in ("bmo", "amc", "dmh")
 
 
+def expected_calendar_state(
+    ticker: str,
+    hour: str | None,
+    eps_estimate: float | None,
+    eps_actual: float | None,
+    revenue_estimate: float | None,
+    revenue_actual: float | None,
+    *,
+    quarter: str | None,
+    tier: int,
+    source_fingerprint: str | None = None,
+    hour_yf: str | None = None,
+) -> tuple[str, str, dict]:
+    """Render the canonical (summary, description, private-props) for an event.
+
+    Single source of truth for how we present an event on Calendar. All
+    create/update paths should derive their payload from this so drift between
+    the title (which encodes [REPORTED]/(est.)) and the description (which
+    carries Timing/EPS/Revenue) is impossible.
+
+    `hour` is the Finnhub-canonical timing. `hour_yf` is the yfinance-inferred
+    fallback used only when Finnhub's hour is empty. The chosen effective hour
+    drives both the time block (in create_calendar_event) and the (est.) /
+    confirmed marker. The description's `Status:` line distinguishes
+    "Confirmed" (Finnhub) from "Confirmed (yfinance)" so provenance is visible.
+
+    `date_confirmed` semantics in the DB are NOT affected by hour_yf — that
+    flag continues to derive from `hour` only, so cross-check verdict
+    messaging keeps its company-confirmed meaning.
+    """
+    effective_hour = hour or hour_yf or ""
+    used_yf = bool(hour_yf and not hour)
+
+    has_actuals = eps_actual is not None or revenue_actual is not None
+    est_marker = "" if (has_actuals or _is_confirmed_hour(effective_hour)) else " (est.)"
+    summary = (
+        f"{'[REPORTED]' if has_actuals else ''} {ticker} Earnings Release{est_marker}"
+    ).strip()
+    description = build_description(
+        ticker, effective_hour, eps_estimate, eps_actual,
+        revenue_estimate, revenue_actual,
+        hour_source=("yfinance" if used_yf else "finnhub"),
+    )
+    if source_fingerprint is None:
+        source_fingerprint = f"{ticker}:?"
+    props = {
+        "earningsAgent": "true",
+        "ticker": ticker,
+        "source_fingerprint": source_fingerprint,
+        "tier": str(tier),
+    }
+    if quarter:
+        props["quarter"] = quarter
+    if used_yf:
+        # Stamp provenance on the calendar event so it's visible to anyone
+        # inspecting the raw API payload (and to drift detection).
+        props["hour_source"] = "yfinance"
+    return summary, description, props
+
+
+def calendar_event_drift_kind(
+    cal_event: dict,
+    expected_summary: str,
+    expected_description: str,
+    expected_props: dict,
+    expected_hour: str | None,
+) -> str:
+    """Classify drift between cal_event and the expected state.
+
+    Returns one of:
+      'fresh' — calendar event matches expected state
+      'text'  — only summary/description/props differ; safe to patch in place
+      'shape' — timed-vs-all-day or bmo-vs-amc differ; must delete + recreate
+
+    `expected_hour` should be the EFFECTIVE hour (Finnhub if set, else the
+    yfinance fallback). The drift detector doesn't care which source —
+    only whether the calendar's current time block matches what we'd render
+    now. Callers pass `hour or hour_yf or ""`.
+
+    The shape distinction matters because update_calendar_event_description()
+    only patches summary/description/extendedProperties — it leaves start, end,
+    and reminders untouched. A TBD->amc transition needs the event to flip
+    from all-day to a 4:30 PM timed event; only delete+recreate does that.
+    """
+    cal_start = cal_event.get("start", {})
+    has_datetime = bool(cal_start.get("dateTime"))
+    expected_timed = (expected_hour or "").lower() in ("bmo", "amc")
+
+    # Timed vs all-day mismatch
+    if expected_timed != has_datetime:
+        return "shape"
+
+    # Both timed: check the wall-clock time portion (positions 11..16 = HH:MM)
+    if expected_timed:
+        existing_hm = (cal_start.get("dateTime") or "")[11:16]
+        expected_hm = "07:00" if expected_hour == "bmo" else "16:30"
+        if existing_hm != expected_hm:
+            return "shape"
+
+    # Shape OK — text/props
+    if (cal_event.get("summary") or "") != expected_summary:
+        return "text"
+    if (cal_event.get("description") or "") != expected_description:
+        return "text"
+    actual = cal_event.get("extendedProperties", {}).get("private", {})
+    for k, v in expected_props.items():
+        if actual.get(k) != v:
+            return "text"
+    return "fresh"
+
+
 def build_description(
     ticker: str,
     hour: str | None,
@@ -102,8 +213,15 @@ def build_description(
     eps_actual: float | None,
     revenue_estimate: float | None,
     revenue_actual: float | None,
+    hour_source: str = "finnhub",
 ) -> str:
-    """Build the calendar event description, including actuals if available."""
+    """Build the calendar event description, including actuals if available.
+
+    `hour_source` annotates provenance in the Status line: "Confirmed" when
+    Finnhub provided the timing, "Confirmed (yfinance)" when we fell back to
+    yfinance's earnings datetime, "Estimated (Finnhub has no timing)" when
+    neither source gave us anything.
+    """
     timing_str = TIMING_LABELS.get(hour, "Time TBD")
 
     lines = [
@@ -113,7 +231,10 @@ def build_description(
 
     has_actuals = eps_actual is not None or revenue_actual is not None
     if not has_actuals:
-        status = "Confirmed" if _is_confirmed_hour(hour) else "Estimated (Finnhub has no timing)"
+        if _is_confirmed_hour(hour):
+            status = "Confirmed (yfinance)" if hour_source == "yfinance" else "Confirmed"
+        else:
+            status = "Estimated (Finnhub has no timing)"
         lines.append(f"Status: {status}")
 
     # --- EPS section ---
@@ -246,35 +367,29 @@ def create_calendar_event(
     revenue_actual: float | None = None,
     tier: int = 3,
     source_fingerprint: str | None = None,
+    hour_yf: str | None = None,
 ) -> str | None:
     """
     Create an earnings event on Google Calendar.
     Returns the created event's Google Calendar ID.
-    """
-    has_actuals = eps_actual is not None or revenue_actual is not None
-    est_marker = "" if (has_actuals or _is_confirmed_hour(hour)) else " (est.)"
-    summary = (
-        f"{'[REPORTED]' if has_actuals else ''} {ticker} Earnings Release{est_marker}"
-    ).strip()
-    description = build_description(
-        ticker, hour, eps_estimate, eps_actual, revenue_estimate, revenue_actual
-    )
 
+    `hour_yf` provides a yfinance-inferred fallback used only when `hour`
+    is empty. It drives the time block (BMO 7am, AMC 4:30pm) so the event
+    is timed instead of all-day, and stamps `hour_source: yfinance` in
+    extendedProperties for provenance.
+    """
     if source_fingerprint is None:
         source_fingerprint = f"{ticker}:{earnings_date}"
 
-    extended_props = {
-        "private": {
-            "earningsAgent": "true",
-            "ticker": ticker,
-            "source_fingerprint": source_fingerprint,
-            "tier": str(tier),
-        }
-    }
-    if quarter:
-        extended_props["private"]["quarter"] = quarter
+    summary, description, props = expected_calendar_state(
+        ticker, hour, eps_estimate, eps_actual, revenue_estimate, revenue_actual,
+        quarter=quarter, tier=tier, source_fingerprint=source_fingerprint,
+        hour_yf=hour_yf,
+    )
+    extended_props = {"private": props}
+    effective_hour = hour or hour_yf or ""
 
-    if hour == "bmo":
+    if effective_hour == "bmo":
         event_body = {
             "summary": summary,
             "description": description,
@@ -283,7 +398,7 @@ def create_calendar_event(
             "reminders": {"useDefault": False, "overrides": [{"method": "popup", "minutes": 60}]},
             "extendedProperties": extended_props,
         }
-    elif hour == "amc":
+    elif effective_hour == "amc":
         event_body = {
             "summary": summary,
             "description": description,

@@ -12,7 +12,12 @@ import io
 import logging
 from contextlib import redirect_stderr, redirect_stdout
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta, timezone
+
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:  # pragma: no cover - py<3.9 fallback
+    ZoneInfo = None
 
 import yfinance as yf
 
@@ -222,3 +227,113 @@ def fetch_yfinance_earnings_date(ticker: str) -> list[date] | None:
             except (ValueError, TypeError):
                 continue
     return result or None
+
+
+def fetch_yfinance_earnings_datetime(ticker: str) -> list[datetime] | None:
+    """
+    Like `fetch_yfinance_earnings_date` but preserves time-of-day so callers
+    can infer pre-market vs post-market timing when Finnhub didn't populate
+    its `hour` field.
+
+    Returns a list of timezone-aware datetimes (typically America/New_York)
+    when yfinance has timed entries; None otherwise. yfinance occasionally
+    returns plain dates with no time — those are skipped here since they
+    carry no signal for BMO/AMC inference (the all-day fallback path
+    already handles them).
+    """
+    buf_out, buf_err = io.StringIO(), io.StringIO()
+    try:
+        with redirect_stdout(buf_out), redirect_stderr(buf_err):
+            cal = yf.Ticker(ticker).calendar
+    except Exception as exc:
+        logger.debug(f"yfinance calendar fetch failed for {ticker}: {exc}")
+        return None
+
+    if not cal:
+        return None
+
+    if isinstance(cal, dict):
+        raw = cal.get("Earnings Date")
+    elif hasattr(cal, "loc") and hasattr(cal, "index"):
+        if "Earnings Date" not in cal.index:
+            return None
+        try:
+            raw = cal.loc["Earnings Date"].values.tolist()
+        except Exception:
+            return None
+    else:
+        return None
+
+    if raw is None:
+        return None
+    if not isinstance(raw, (list, tuple)):
+        raw = [raw]
+
+    result: list[datetime] = []
+    for d in raw:
+        if isinstance(d, datetime):
+            # tz-naive datetime: assume yfinance Yahoo Finance is reporting
+            # in America/New_York (the default for US listings) and tag.
+            if d.tzinfo is None and ZoneInfo is not None:
+                d = d.replace(tzinfo=ZoneInfo("America/New_York"))
+            result.append(d)
+        # Plain dates (no time) and other shapes carry no BMO/AMC signal.
+
+    return result or None
+
+
+def infer_hour_from_datetime(dt: datetime) -> str | None:
+    """Classify a yfinance earnings datetime into 'bmo' / 'amc' / None
+    based on US market session boundaries.
+
+    Rule:
+      < 09:30 America/New_York  -> 'bmo'  (pre-market release)
+      >= 16:00 America/New_York -> 'amc'  (post-close release)
+      otherwise                  -> None  (mid-session, ambiguous)
+
+    The 09:30 / 16:00 boundaries are NYSE/NASDAQ regular hours. A common
+    pattern is press releases at 06:30 ET (BMO) or 16:05 ET (AMC); both
+    classify cleanly. The 8:30 ET pre-open release pattern that the
+    earlier <9 / >16 heuristic would have classified as None is now
+    correctly captured as 'bmo'.
+    """
+    if dt is None:
+        return None
+    if ZoneInfo is None:
+        return None
+    try:
+        et = dt.astimezone(ZoneInfo("America/New_York"))
+    except Exception:
+        return None
+    open_t = time(9, 30)
+    close_t = time(16, 0)
+    if et.time() < open_t:
+        return "bmo"
+    if et.time() >= close_t:
+        return "amc"
+    return None
+
+
+def fetch_yfinance_hour_for_date(ticker: str, earnings_date: str) -> str | None:
+    """Convenience wrapper: query yfinance, find a datetime matching
+    `earnings_date` (ISO YYYY-MM-DD), and infer 'bmo'/'amc' from its time.
+
+    Returns None if yfinance has nothing, has no entry for this date, or
+    the entry's time doesn't fall outside market hours. Safe to call from
+    daily sync — failures are logged at debug level only.
+    """
+    dts = fetch_yfinance_earnings_datetime(ticker)
+    if not dts:
+        return None
+    target = earnings_date
+    for dt in dts:
+        try:
+            if ZoneInfo is not None:
+                local = dt.astimezone(ZoneInfo("America/New_York"))
+            else:
+                local = dt
+            if local.date().isoformat() == target:
+                return infer_hour_from_datetime(dt)
+        except Exception:
+            continue
+    return None

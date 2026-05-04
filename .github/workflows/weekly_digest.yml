@@ -1,8 +1,8 @@
 # Weekly Earnings Digest
 #
-# Runs every Sunday at 12:00 PM ET (16:00 UTC in EST, 17:00 UTC in EDT).
-# We pick 16:00 UTC so the digest fires at noon ET during standard time and
-# 1 PM ET during daylight time — close enough for a weekly cadence.
+# Runs every Sunday at ~12:43 PM ET (16:43 UTC in EST, 17:43 UTC in EDT).
+# Off-peak minute deliberately — top-of-hour crons get delayed/skipped under
+# GitHub Actions load.
 #
 # Posts the week-ahead digest to Slack. The email draft is produced locally
 # via Gmail MCP; CI writes last_digest.html as an artifact for reference.
@@ -11,7 +11,7 @@ name: Weekly Earnings Digest
 
 on:
   schedule:
-    - cron: "0 16 * * 0"
+    - cron: "43 16 * * 0"
   workflow_dispatch:
 
 jobs:

@@ -7,6 +7,7 @@ that the new modular code preserves existing behavior.
 """
 
 import sqlite3
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch, call
 from pathlib import Path
 
@@ -47,9 +48,14 @@ def make_mock_calendar_service(existing_events=None):
 
 
 def make_in_memory_db():
-    """Create a fresh in-memory SQLite DB with the earnings schema."""
+    """Create a fresh in-memory SQLite DB with the earnings schema.
+
+    Mirrors storage.init_db's fresh-DB CREATE TABLE — every schema bump
+    must add the new column here too. Most modern tests should use
+    init_db(":memory:") instead of this fixture, which migrates from
+    scratch via _MIGRATIONS and is automatically forward-compatible.
+    """
     conn = sqlite3.connect(":memory:")
-    # Use the new schema with UNIQUE(ticker, event_date) but also keep quarter column
     conn.execute("""
         CREATE TABLE events (
             id              INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -74,6 +80,7 @@ def make_in_memory_db():
             last_xcheck_yf_dates TEXT,
             date_confirmed  INTEGER NOT NULL DEFAULT 0,
             announcement_url TEXT,
+            event_hour_yf   TEXT,
             created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
             updated_at      TEXT    NOT NULL DEFAULT (datetime('now')),
             UNIQUE(ticker, event_date)
@@ -538,6 +545,428 @@ def test_ticktick_quarter_list_name():
     print("PASS: TickTick quarterly list name generation correct")
 
 
+# ── expected_calendar_state / calendar_event_drift_kind ──────────────────
+
+
+def _make_cal_event(*, summary, description, start, props):
+    return {
+        "summary": summary,
+        "description": description,
+        "start": start,
+        "extendedProperties": {"private": props},
+    }
+
+
+def test_expected_state_confirmed_amc():
+    from calendar_sync import expected_calendar_state
+
+    summary, description, props = expected_calendar_state(
+        "AAPL", "amc", 1.50, None, 89e9, None,
+        quarter="2026Q1", tier=1, source_fingerprint="AAPL:2026-05-04",
+    )
+    assert summary == "AAPL Earnings Release"
+    assert "Status: Confirmed" in description
+    assert props == {
+        "earningsAgent": "true",
+        "ticker": "AAPL",
+        "source_fingerprint": "AAPL:2026-05-04",
+        "tier": "1",
+        "quarter": "2026Q1",
+    }
+
+
+def test_expected_state_estimated_no_hour():
+    from calendar_sync import expected_calendar_state
+
+    summary, description, _ = expected_calendar_state(
+        "UFPT", "", 0.5, None, 100e6, None,
+        quarter="2026Q1", tier=2, source_fingerprint="UFPT:2026-05-05",
+    )
+    assert summary == "UFPT Earnings Release (est.)"
+    assert "Status: Estimated" in description
+
+
+def test_expected_state_reported_drops_est_marker():
+    from calendar_sync import expected_calendar_state
+
+    summary, description, _ = expected_calendar_state(
+        "NVDA", "amc", 5.0, 5.20, 30e9, 32e9,
+        quarter="2026Q1", tier=1, source_fingerprint="NVDA:2026-05-20",
+    )
+    assert summary == "[REPORTED] NVDA Earnings Release"
+    assert "\nREPORTED" in description
+
+
+def test_drift_kind_fresh():
+    from calendar_sync import expected_calendar_state, calendar_event_drift_kind
+
+    s, d, p = expected_calendar_state(
+        "AAPL", "amc", 1.50, None, 89e9, None,
+        quarter="2026Q1", tier=1, source_fingerprint="AAPL:2026-05-04",
+    )
+    ev = _make_cal_event(
+        summary=s, description=d,
+        start={"dateTime": "2026-05-04T16:30:00-04:00", "timeZone": "America/New_York"},
+        props=p,
+    )
+    assert calendar_event_drift_kind(ev, s, d, p, "amc") == "fresh"
+
+
+def test_drift_kind_text_only_summary():
+    """Fingerprint or title backfill. Shape unchanged."""
+    from calendar_sync import expected_calendar_state, calendar_event_drift_kind
+
+    s, d, p = expected_calendar_state(
+        "AAPL", "amc", 1.50, None, 89e9, None,
+        quarter="2026Q1", tier=1, source_fingerprint="AAPL:2026-05-04",
+    )
+    ev = _make_cal_event(
+        summary="AAPL Earnings Release (est.)",  # stale est. marker
+        description=d,
+        start={"dateTime": "2026-05-04T16:30:00-04:00", "timeZone": "America/New_York"},
+        props=p,
+    )
+    assert calendar_event_drift_kind(ev, s, d, p, "amc") == "text"
+
+
+def test_drift_kind_text_only_props():
+    """Tier reclassification. Shape and visible text unchanged but private tier diff."""
+    from calendar_sync import expected_calendar_state, calendar_event_drift_kind
+
+    s, d, p = expected_calendar_state(
+        "AAPL", "amc", 1.50, None, 89e9, None,
+        quarter="2026Q1", tier=1, source_fingerprint="AAPL:2026-05-04",
+    )
+    stale_props = dict(p, tier="2")
+    ev = _make_cal_event(
+        summary=s, description=d,
+        start={"dateTime": "2026-05-04T16:30:00-04:00", "timeZone": "America/New_York"},
+        props=stale_props,
+    )
+    assert calendar_event_drift_kind(ev, s, d, p, "amc") == "text"
+
+
+def test_drift_kind_shape_all_day_to_amc():
+    """The bug at the heart of the calendar accuracy issue.
+
+    Event was created when Finnhub had no hour (all-day). Finnhub later
+    populated hour=amc. update_calendar_event_description wouldn't move the
+    event to 4:30 PM — it would only swap the title. Detect as 'shape' so
+    the fix path delete+recreates.
+    """
+    from calendar_sync import expected_calendar_state, calendar_event_drift_kind
+
+    s, d, p = expected_calendar_state(
+        "ARDT", "amc", 0.5, None, 200e6, None,
+        quarter="2026Q1", tier=2, source_fingerprint="ARDT:2026-05-05",
+    )
+    ev = _make_cal_event(
+        summary="ARDT Earnings Release (est.)",
+        description="...stale...",
+        start={"date": "2026-05-05"},  # all-day
+        props={**p, "tier": "2"},
+    )
+    assert calendar_event_drift_kind(ev, s, d, p, "amc") == "shape"
+
+
+def test_drift_kind_shape_bmo_to_amc():
+    """Confirmed-to-confirmed timing flip. Title is identical (no est. either
+    side); only the dateTime would differ. Reviewer's specific concern."""
+    from calendar_sync import expected_calendar_state, calendar_event_drift_kind
+
+    s, d, p = expected_calendar_state(
+        "AAPL", "amc", 1.50, None, 89e9, None,
+        quarter="2026Q1", tier=1, source_fingerprint="AAPL:2026-05-04",
+    )
+    ev = _make_cal_event(
+        summary=s,  # identical
+        description=d,  # build_description differs only in Timing: line — but
+                        # for this test we're proving the shape check fires
+                        # even when text didn't drift. Use the canonical
+                        # description for the bmo case.
+        start={"dateTime": "2026-05-04T07:00:00-04:00", "timeZone": "America/New_York"},
+        props=p,
+    )
+    # We expect amc but event is at bmo time -> shape drift
+    assert calendar_event_drift_kind(ev, s, d, p, "amc") == "shape"
+
+
+def test_drift_kind_shape_amc_to_all_day():
+    """Reverse of the all-day->amc case; e.g. Finnhub revoked timing."""
+    from calendar_sync import expected_calendar_state, calendar_event_drift_kind
+
+    s, d, p = expected_calendar_state(
+        "FOO", "", 0.5, None, 100e6, None,
+        quarter="2026Q1", tier=2, source_fingerprint="FOO:2026-05-05",
+    )
+    ev = _make_cal_event(
+        summary="FOO Earnings Release",
+        description="...",
+        start={"dateTime": "2026-05-05T16:30:00-04:00", "timeZone": "America/New_York"},
+        props=p,
+    )
+    assert calendar_event_drift_kind(ev, s, d, p, "") == "shape"
+
+
+# ── Coverage staleness ────────────────────────────────────────────────────
+
+
+def test_coverage_freshness_manifest_fresh(tmp_path, monkeypatch):
+    import coverage
+    exports = tmp_path / "exports"
+    exports.mkdir()
+    (exports / "manifest.json").write_text(
+        '{"schema_version": 2, "generated_at": "%s"}' %
+        datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    )
+    monkeypatch.setattr(coverage, "COVERAGE_MANAGER_PATH", str(tmp_path))
+    h = coverage.compute_coverage_freshness()
+    assert not h.stale
+    assert h.source == "manifest"
+    assert h.age_days < 1
+
+
+def test_coverage_freshness_manifest_stale(tmp_path, monkeypatch):
+    import coverage
+    exports = tmp_path / "exports"
+    exports.mkdir()
+    old = (datetime.now(timezone.utc) - timedelta(days=10))
+    (exports / "manifest.json").write_text(
+        '{"schema_version": 2, "generated_at": "%s"}' %
+        old.strftime("%Y-%m-%dT%H:%M:%SZ")
+    )
+    monkeypatch.setattr(coverage, "COVERAGE_MANAGER_PATH", str(tmp_path))
+    h = coverage.compute_coverage_freshness()
+    assert h.stale
+    assert h.source == "manifest"
+    assert h.age_days > 7
+
+
+def test_coverage_freshness_falls_back_to_mtime(tmp_path, monkeypatch):
+    import coverage, os, time
+    exports = tmp_path / "exports"
+    exports.mkdir()
+    (exports / "universe.csv").write_text("Ticker\nABC\n")
+    # No manifest. Should fall back to mtime (which is now).
+    monkeypatch.setattr(coverage, "COVERAGE_MANAGER_PATH", str(tmp_path))
+    h = coverage.compute_coverage_freshness()
+    assert not h.stale
+    assert h.source == "mtime"
+
+
+def test_coverage_freshness_missing(tmp_path, monkeypatch):
+    import coverage
+    monkeypatch.setattr(coverage, "COVERAGE_MANAGER_PATH", str(tmp_path / "nonexistent"))
+    h = coverage.compute_coverage_freshness()
+    assert h.stale
+    assert h.source == "missing"
+    assert h.age_days is None
+
+
+def test_coverage_alert_deduplicates_per_day(tmp_path, monkeypatch):
+    """Verify kv_store dedup so we don't spam Slack across multiple runs."""
+    import main, coverage
+    from storage import init_db, kv_get
+    from datetime import date as _date
+
+    conn = init_db(":memory:")
+    health = coverage.CoverageHealth(
+        stale=True, age_days=10.0, source="manifest",
+        message="test stale",
+    )
+
+    posted = []
+    def fake_post(*args, **kwargs):
+        posted.append(args)
+        class R:
+            def read(self): return b""
+        return R()
+
+    # Force webhook present + intercept the network call
+    monkeypatch.setattr(main, "SLACK_WEBHOOK_STATUS", "https://example.invalid/webhook")
+    monkeypatch.setattr(main, "SLACK_WEBHOOK_EARNINGS", None)
+    import urllib.request
+    monkeypatch.setattr(urllib.request, "urlopen", fake_post)
+
+    # First call: posts and writes dedup key
+    main._alert_coverage_stale_if_needed(conn, health)
+    assert len(posted) == 1
+    today = _date.today().isoformat()
+    assert kv_get(conn, f"coverage_stale_alerted:{today}") == "alerted"
+
+    # Second call same day: no additional post
+    main._alert_coverage_stale_if_needed(conn, health)
+    assert len(posted) == 1
+
+
+# ── yfinance hour fallback ────────────────────────────────────────────────
+
+
+def test_infer_hour_bmo_at_8_30_et():
+    """The market-session boundary catches 8:30 ET releases as BMO,
+    which the original <9 / >16 heuristic would have classified as None."""
+    from market_data import infer_hour_from_datetime
+    from zoneinfo import ZoneInfo
+    dt = datetime(2026, 5, 5, 8, 30, tzinfo=ZoneInfo("America/New_York"))
+    assert infer_hour_from_datetime(dt) == "bmo"
+
+
+def test_infer_hour_bmo_at_6_30_et():
+    from market_data import infer_hour_from_datetime
+    from zoneinfo import ZoneInfo
+    dt = datetime(2026, 5, 5, 6, 30, tzinfo=ZoneInfo("America/New_York"))
+    assert infer_hour_from_datetime(dt) == "bmo"
+
+
+def test_infer_hour_amc_at_4_05_et():
+    from market_data import infer_hour_from_datetime
+    from zoneinfo import ZoneInfo
+    dt = datetime(2026, 5, 5, 16, 5, tzinfo=ZoneInfo("America/New_York"))
+    assert infer_hour_from_datetime(dt) == "amc"
+
+
+def test_infer_hour_midsession_returns_none():
+    """Mid-session times fall outside both windows -> None
+    (don't make confident BMO/AMC calls for unusual release times)."""
+    from market_data import infer_hour_from_datetime
+    from zoneinfo import ZoneInfo
+    dt = datetime(2026, 5, 5, 11, 0, tzinfo=ZoneInfo("America/New_York"))
+    assert infer_hour_from_datetime(dt) is None
+
+
+def test_infer_hour_boundary_at_9_30_et_is_not_bmo():
+    """09:30 ET is market open; treat as not-pre-market."""
+    from market_data import infer_hour_from_datetime
+    from zoneinfo import ZoneInfo
+    dt = datetime(2026, 5, 5, 9, 30, tzinfo=ZoneInfo("America/New_York"))
+    assert infer_hour_from_datetime(dt) is None
+
+
+def test_infer_hour_boundary_at_4_00_et_is_amc():
+    """16:00 ET is market close; treat as post-market."""
+    from market_data import infer_hour_from_datetime
+    from zoneinfo import ZoneInfo
+    dt = datetime(2026, 5, 5, 16, 0, tzinfo=ZoneInfo("America/New_York"))
+    assert infer_hour_from_datetime(dt) == "amc"
+
+
+def test_expected_state_yfinance_provenance():
+    """When hour_yf provides timing and Finnhub didn't, the description's
+    Status: line shows 'Confirmed (yfinance)' and ext-props gain hour_source."""
+    from calendar_sync import expected_calendar_state
+    summary, description, props = expected_calendar_state(
+        "UFPT", None, 0.5, None, 100e6, None,
+        quarter="2026Q1", tier=2,
+        source_fingerprint="UFPT:2026-05-05",
+        hour_yf="amc",
+    )
+    assert summary == "UFPT Earnings Release", summary
+    assert "Status: Confirmed (yfinance)" in description
+    assert props["hour_source"] == "yfinance"
+
+
+def test_expected_state_finnhub_wins_over_yfinance():
+    """When both Finnhub and yfinance have hour, Finnhub wins and
+    description says plain 'Confirmed' (no provenance suffix)."""
+    from calendar_sync import expected_calendar_state
+    summary, description, props = expected_calendar_state(
+        "AAPL", "amc", 1.5, None, 89e9, None,
+        quarter="2026Q1", tier=1,
+        source_fingerprint="AAPL:2026-05-04",
+        hour_yf="bmo",  # disagreement; Finnhub takes priority
+    )
+    assert "Status: Confirmed" in description
+    assert "yfinance" not in description
+    assert "hour_source" not in props
+
+
+def test_drift_kind_yf_fallback_recreates_all_day_event():
+    """The UFPT fix scenario end-to-end at the helper level:
+    existing all-day event, yfinance now says amc -> shape drift,
+    delete+recreate path will get the right time block."""
+    from calendar_sync import expected_calendar_state, calendar_event_drift_kind
+
+    s, d, p = expected_calendar_state(
+        "UFPT", None, 0.5, None, 100e6, None,
+        quarter="2026Q1", tier=2,
+        source_fingerprint="UFPT:2026-05-05",
+        hour_yf="amc",
+    )
+    ev = _make_cal_event(
+        summary="UFPT Earnings Release (est.)",
+        description="...stale...",
+        start={"date": "2026-05-05"},  # all-day, what we'd have created
+        props={"earningsAgent": "true", "ticker": "UFPT",
+               "source_fingerprint": "UFPT:2026-05-05", "tier": "2",
+               "quarter": "2026Q1"},
+    )
+    effective_hour = None or "amc"
+    assert calendar_event_drift_kind(ev, s, d, p, effective_hour) == "shape"
+
+
+# ── Schema invariant: fresh-DB CREATE matches end of migrations ───────────
+
+
+def test_fresh_db_schema_matches_migration_path():
+    """Catches schema bumps where someone updates the migration list but
+    forgets to add the column to the fresh-DB CREATE TABLE (or vice versa).
+    """
+    from storage import init_db, _MIGRATIONS
+
+    # Path A: fresh DB
+    fresh_conn = init_db(":memory:")
+    fresh_cols = {row[1] for row in fresh_conn.execute("PRAGMA table_info(events)")}
+
+    # Path B: simulate an old DB and migrate up. Use the v2 baseline shape.
+    old_conn = sqlite3.connect(":memory:")
+    old_conn.execute("""
+        CREATE TABLE events (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            ticker          TEXT    NOT NULL,
+            quarter         TEXT,
+            event_date      TEXT    NOT NULL,
+            event_hour      TEXT,
+            gcal_id         TEXT,
+            eps_estimate    REAL,
+            eps_actual      REAL,
+            rev_estimate    REAL,
+            rev_actual      REAL,
+            reported        INTEGER NOT NULL DEFAULT 0,
+            tier            INTEGER NOT NULL DEFAULT 3,
+            source_fingerprint TEXT,
+            company_name    TEXT,
+            ir_url          TEXT,
+            call_url        TEXT,
+            ticktick_task_id TEXT,
+            created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
+            updated_at      TEXT    NOT NULL DEFAULT (datetime('now')),
+            UNIQUE(ticker, event_date)
+        )
+    """)
+    # Apply ALL migrations in version order
+    for version in sorted(_MIGRATIONS.keys()):
+        for sql in _MIGRATIONS[version]:
+            try:
+                old_conn.execute(sql)
+            except sqlite3.OperationalError:
+                # Some migrations are CREATE TABLE for separate tables
+                # and may already exist; skip.
+                pass
+    migrated_cols = {row[1] for row in old_conn.execute("PRAGMA table_info(events)")}
+
+    missing_in_fresh = migrated_cols - fresh_cols
+    missing_in_migration = fresh_cols - migrated_cols
+
+    assert not missing_in_fresh, (
+        f"Columns missing from fresh-DB CREATE TABLE but present after migrations: "
+        f"{missing_in_fresh}. Update storage.init_db's CREATE TABLE."
+    )
+    assert not missing_in_migration, (
+        f"Columns in fresh-DB CREATE TABLE but no migration adds them: "
+        f"{missing_in_migration}. Add an ALTER TABLE migration."
+    )
+
+
 # ── Run all tests ─────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
@@ -554,4 +983,13 @@ if __name__ == "__main__":
     test_ticktick_task_content()
     test_ticktick_dedup_skips_existing()
     test_ticktick_quarter_list_name()
-    print("\nAll 13 tests passed!")
+    test_expected_state_confirmed_amc()
+    test_expected_state_estimated_no_hour()
+    test_expected_state_reported_drops_est_marker()
+    test_drift_kind_fresh()
+    test_drift_kind_text_only_summary()
+    test_drift_kind_text_only_props()
+    test_drift_kind_shape_all_day_to_amc()
+    test_drift_kind_shape_bmo_to_amc()
+    test_drift_kind_shape_amc_to_all_day()
+    print("\nAll 21 tests passed!")

@@ -18,9 +18,19 @@ logger = logging.getLogger("earnings_agent")
 # Schema version tracking
 # ---------------------------------------------------------------------------
 
-CURRENT_SCHEMA_VERSION = 10  # Bump when adding migrations
+CURRENT_SCHEMA_VERSION = 11  # Bump when adding migrations
 
 _MIGRATIONS = {
+    # Version 10 → 11: yfinance-sourced hour fallback. When Finnhub
+    # returns event_hour='' for an upcoming event, we infer 'bmo'/'amc'
+    # from yfinance's earnings datetime time-of-day and persist it here.
+    # event_hour stays Finnhub-canonical so date_confirmed semantics
+    # (notifications.py:765 cross-check verdict) are unchanged. Calendar
+    # rendering uses (event_hour or event_hour_yf) for the time block.
+    11: [
+        "ALTER TABLE events ADD COLUMN event_hour_yf TEXT",
+    ],
+
     # Version 9 → 10: Track which Slack channel each open-question thread
     # lives in. Cross-check / unseen / reconcile alerts now post to the
     # status-reports channel instead of the earnings channel; the reply
@@ -284,6 +294,7 @@ def init_db(db_path: Path = DB_PATH) -> sqlite3.Connection:
                 question_snooze_until TEXT,
                 question_first_seen TEXT,
                 slack_channel_id TEXT,
+                event_hour_yf   TEXT,
                 created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
                 updated_at      TEXT    NOT NULL DEFAULT (datetime('now')),
                 UNIQUE(ticker, event_date)
@@ -320,7 +331,8 @@ def find_existing_event(conn: sqlite3.Connection, ticker: str, event_date: str) 
     cur = conn.execute(
         "SELECT id, ticker, quarter, event_date, event_hour, gcal_id, "
         "eps_estimate, eps_actual, rev_estimate, rev_actual, reported, "
-        "tier, company_name, ticktick_task_id, date_locked, date_confirmed "
+        "tier, company_name, ticktick_task_id, date_locked, date_confirmed, "
+        "event_hour_yf "
         "FROM events WHERE ticker = ? AND event_date = ?",
         (ticker, event_date),
     )
@@ -335,6 +347,7 @@ def find_existing_event(conn: sqlite3.Connection, ticker: str, event_date: str) 
             "company_name": row[12], "ticktick_task_id": row[13],
             "date_locked": bool(row[14]),
             "date_confirmed": bool(row[15]),
+            "event_hour_yf": row[16],
         }
     return None
 
@@ -369,7 +382,7 @@ def find_event_for_ticker_near_date(
     cur = conn.execute(
         "SELECT id, ticker, quarter, event_date, event_hour, gcal_id, "
         "eps_estimate, eps_actual, rev_estimate, rev_actual, reported, tier, "
-        "date_locked "
+        "date_locked, event_hour_yf "
         "FROM events WHERE ticker = ? "
         "AND julianday(event_date) BETWEEN julianday(?) - ? AND julianday(?) + ? "
         "ORDER BY ABS(julianday(event_date) - julianday(?)) LIMIT 1",
@@ -384,6 +397,7 @@ def find_event_for_ticker_near_date(
             "rev_estimate": row[8], "rev_actual": row[9],
             "reported": bool(row[10]), "tier": row[11],
             "date_locked": bool(row[12]),
+            "event_hour_yf": row[13],
         }
     return None
 
@@ -404,13 +418,24 @@ def upsert_event(
     tier: int = 3,
     company_name: str | None = None,
     source_fingerprint: str | None = None,
+    event_hour_yf: str | None = None,
 ):
     """
     Insert or update an event, keyed on (ticker, event_date).
 
-    The `date_confirmed` column is derived from `event_hour`: Finnhub
-    populates `bmo`/`amc`/`dmh` only when the company has announced
+    The `date_confirmed` column is derived from `event_hour` (Finnhub-only):
+    Finnhub populates `bmo`/`amc`/`dmh` when the company has announced
     timing, which in practice signals the date is confirmed.
+
+    `event_hour_yf` is a separate column carrying yfinance-inferred timing
+    used as a render fallback when Finnhub's `event_hour` is empty. It does
+    NOT flip `date_confirmed` — that flag stays Finnhub-canonical so
+    downstream cross-check messaging (notifications.py:_xcheck_verdict)
+    keeps "company-confirmed" semantics.
+
+    Pass `event_hour_yf=""` to explicitly clear it; pass `None` to leave
+    the existing value untouched (COALESCE preserves prior yfinance hits
+    across runs where yfinance has a transient failure).
     """
     if source_fingerprint is None:
         source_fingerprint = f"{ticker}:{event_date}"
@@ -429,6 +454,7 @@ def upsert_event(
             """
             UPDATE events SET
                 event_hour       = ?,
+                event_hour_yf    = COALESCE(?, event_hour_yf),
                 gcal_id          = COALESCE(?, gcal_id),
                 quarter          = COALESCE(?, quarter),
                 eps_estimate     = COALESCE(?, eps_estimate),
@@ -443,7 +469,7 @@ def upsert_event(
                 updated_at       = datetime('now')
             WHERE ticker = ? AND event_date = ?
             """,
-            (event_hour, gcal_id, quarter,
+            (event_hour, event_hour_yf, gcal_id, quarter,
              eps_estimate, eps_actual, rev_estimate, rev_actual,
              int(reported), tier, company_name, source_fingerprint,
              date_confirmed,
@@ -459,13 +485,14 @@ def upsert_event(
             )
         conn.execute(
             """
-            INSERT INTO events (ticker, event_date, event_hour, gcal_id, quarter,
+            INSERT INTO events (ticker, event_date, event_hour, event_hour_yf,
+                                gcal_id, quarter,
                                 eps_estimate, eps_actual, rev_estimate, rev_actual,
                                 reported, tier, company_name, source_fingerprint,
                                 date_confirmed)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (ticker, event_date, event_hour, gcal_id, quarter,
+            (ticker, event_date, event_hour, event_hour_yf, gcal_id, quarter,
              eps_estimate, eps_actual, rev_estimate, rev_actual,
              int(reported), tier, company_name, source_fingerprint,
              date_confirmed),

@@ -1,0 +1,141 @@
+# .github/workflows/watchdog.yml
+#
+# Detects stale sibling workflows and recovers them.
+#
+# GitHub Actions can silently skip scheduled crons under load — workflows
+# stay "active" but never fire. This watchdog runs three times a day at
+# off-peak minutes, checks the last successful run for each operational
+# workflow, and:
+#
+#   1. Posts a Slack alert to #status-reports listing what's stale.
+#   2. Auto-dispatches a fresh run for each stale workflow as a backup.
+#
+# Thresholds account for weekend gaps (reconcile/post-earnings only run
+# weekdays). When a workflow is genuinely overdue, the watchdog dispatches
+# it via gh CLI; the recovered run then updates the last-success timestamp,
+# so subsequent watchdog ticks see fresh state and don't loop.
+
+name: Workflow Watchdog
+
+on:
+  schedule:
+    # Three checks per day, off-peak minutes.
+    - cron: "37 13,17,21 * * *"
+  workflow_dispatch:
+
+permissions:
+  actions: write   # required for `gh workflow run` to dispatch sibling workflows
+  contents: read
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check freshness, alert, and auto-dispatch recovery
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          SLACK_WEBHOOK_STATUS: ${{ secrets.SLACK_WEBHOOK_STATUS }}
+          SLACK_WEBHOOK_EARNINGS: ${{ secrets.SLACK_WEBHOOK_EARNINGS }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+
+          WEBHOOK="${SLACK_WEBHOOK_STATUS:-$SLACK_WEBHOOK_EARNINGS}"
+          NOW_EPOCH=$(date +%s)
+
+          # label | workflow_file | max_age_hours | recent_failure_window_hours
+          # max_age_hours: alert when last successful run is older than this
+          # recent_failure_window_hours: if there's a failure newer than the
+          #   last success and within this window, do NOT auto-dispatch (the
+          #   workflow is broken, not skipped — let its own failure alert
+          #   drive triage instead of looping recovery dispatches).
+          WORKFLOWS=(
+            "Daily Earnings Check|daily_earnings_check.yml|27|24"
+            "Reconcile Calendar|reconcile_calendar.yml|70|24"
+            "Post-Earnings Results Check|post_earnings_check.yml|75|24"
+            "Weekly Earnings Digest|weekly_digest.yml|192|168"
+          )
+
+          stale_lines=()
+          for entry in "${WORKFLOWS[@]}"; do
+            IFS='|' read -r label file max_hours fail_window <<< "$entry"
+
+            last=$(gh run list -R "$REPO" -w "$file" -s success -L 1 --json createdAt --jq '.[0].createdAt // ""')
+            last_failure=$(gh run list -R "$REPO" -w "$file" -s failure -L 1 --json createdAt --jq '.[0].createdAt // ""')
+
+            if [ -z "$last" ]; then
+              age_str="never"
+              age_h=999999
+              last_epoch=0
+            else
+              last_epoch=$(date -d "$last" +%s)
+              age_h=$(( (NOW_EPOCH - last_epoch) / 3600 ))
+              age_str="${age_h}h ago (${last})"
+            fi
+
+            # Detect "broken, not skipped": failure newer than last success
+            # AND within the per-workflow recent-failure window.
+            broken=false
+            if [ -n "$last_failure" ]; then
+              fail_epoch=$(date -d "$last_failure" +%s)
+              if [ "$fail_epoch" -gt "$last_epoch" ]; then
+                fail_age_h=$(( (NOW_EPOCH - fail_epoch) / 3600 ))
+                if [ "$fail_age_h" -lt "$fail_window" ]; then
+                  broken=true
+                  broken_str="last failure ${fail_age_h}h ago"
+                fi
+              fi
+            fi
+
+            if [ "$age_h" -gt "$max_hours" ]; then
+              echo "STALE: $label — $age_str (threshold ${max_hours}h)"
+              if $broken; then
+                echo "  -> $broken_str within ${fail_window}h window; NOT dispatching"
+                stale_lines+=("• \`$label\` — last success $age_str (threshold ${max_hours}h). :no_entry: ${broken_str}; not dispatching (workflow is broken, see its own failure alert).")
+              elif gh workflow run "$file" -R "$REPO" --ref main; then
+                stale_lines+=("• \`$label\` — last success $age_str (threshold ${max_hours}h). :arrows_counterclockwise: Recovery dispatched.")
+              else
+                stale_lines+=("• \`$label\` — last success $age_str (threshold ${max_hours}h). :warning: Recovery dispatch FAILED.")
+              fi
+            else
+              echo "OK: $label — last success $age_str"
+            fi
+          done
+
+          if [ ${#stale_lines[@]} -eq 0 ]; then
+            echo "All watched workflows are fresh."
+            exit 0
+          fi
+
+          if [ -z "$WEBHOOK" ]; then
+            echo "No Slack webhook configured; skipping alert."
+            exit 0
+          fi
+
+          # Build a single Slack message via jq for safe escaping.
+          body_text=$(printf '%s\n' "${stale_lines[@]}")
+          payload=$(jq -nc \
+            --arg header ":alarm_clock: *Workflow watchdog* — stale workflows detected" \
+            --arg body "$body_text" \
+            --arg footer "Watchdog run: $RUN_URL" \
+            '{text: ($header + "\n" + $body + "\n" + $footer)}')
+
+          curl -sS -X POST -H 'Content-Type: application/json' \
+            --data "$payload" \
+            "$WEBHOOK" >/dev/null
+
+      - name: Notify Slack on watchdog failure
+        if: failure()
+        env:
+          SLACK_WEBHOOK_STATUS: ${{ secrets.SLACK_WEBHOOK_STATUS }}
+          SLACK_WEBHOOK_EARNINGS: ${{ secrets.SLACK_WEBHOOK_EARNINGS }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          WEBHOOK="${SLACK_WEBHOOK_STATUS:-$SLACK_WEBHOOK_EARNINGS}"
+          if [ -n "$WEBHOOK" ]; then
+            curl -sS -X POST -H 'Content-Type: application/json' \
+              --data "{\"text\":\":rotating_light: *Workflow Watchdog* itself failed — <${RUN_URL}|run details>. Sibling workflow staleness is no longer being checked.\"}" \
+              "$WEBHOOK"
+          fi

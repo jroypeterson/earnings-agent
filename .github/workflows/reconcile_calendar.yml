@@ -4,10 +4,10 @@
 # market hours on weekdays to catch Finnhub date changes between
 # daily sync runs.
 #
-# Cron times in UTC:
-#   14:00 UTC = 10 AM EDT / 9 AM EST
-#   17:00 UTC = 1 PM EDT  / 12 PM EST
-#   20:00 UTC = 4 PM EDT  / 3 PM EST
+# Cron times in UTC (offset off :00 to avoid GitHub-wide top-of-hour skips):
+#   14:09 UTC ≈ 10 AM EDT / 9 AM EST
+#   17:09 UTC ≈ 1 PM EDT  / 12 PM EST
+#   20:09 UTC ≈ 4 PM EDT  / 3 PM EST
 #
 # Slack posts only when drift was detected and fixed (silent no-op
 # otherwise), so running three times a day is safe.
@@ -16,7 +16,7 @@ name: Reconcile Calendar
 
 on:
   schedule:
-    - cron: "0 14,17,20 * * 1-5"
+    - cron: "9 14,17,20 * * 1-5"
   workflow_dispatch:
 
 # Shares the earnings-db artifact with daily_earnings_check and
@@ -51,12 +51,38 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
+      # actions/download-artifact@v4 only sees artifacts from the same run,
+      # which silently produced fresh-DB runs every time and erased locks,
+      # Slack-reply state, unseen counters, kv_store, etc. Use a cross-run
+      # downloader pinned to a commit SHA. Fail loudly post-bootstrap so
+      # missing state is never silent.
       - name: Restore earnings database
-        uses: actions/download-artifact@v4
+        id: restore_db
+        uses: dawidd6/action-download-artifact@bf251b5aa9c2f7eeb574a96ee720e24f801b7c11  # v6
         with:
           name: earnings-db
+          workflow_search: true
+          workflow_conclusion: success
+          # Scope to main so a feature-branch run never pollutes the
+          # persistent SQLite artifact for the production pipeline.
+          branch: main
+          if_no_artifact_found: warn
           path: .
-        continue-on-error: true
+
+      - name: Abort if DB artifact missing post-bootstrap
+        if: vars.EA_DB_BOOTSTRAPPED == 'true' && hashFiles('earnings_events.db') == ''
+        env:
+          WEBHOOK_STATUS: ${{ secrets.SLACK_WEBHOOK_STATUS }}
+          WEBHOOK_EARNINGS: ${{ secrets.SLACK_WEBHOOK_EARNINGS }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          WEBHOOK="${WEBHOOK_STATUS:-$WEBHOOK_EARNINGS}"
+          if [ -n "$WEBHOOK" ]; then
+            curl -sS -X POST -H 'Content-Type: application/json' \
+              --data "{\"text\":\":rotating_light: *earnings-db artifact missing* — aborting fresh-DB run. Locks, Slack threads, unseen counters, kv_store would all be lost. <${RUN_URL}|run details>\"}" \
+              "$WEBHOOK"
+          fi
+          exit 1
 
       - name: Write Google credentials
         run: echo '${{ secrets.GOOGLE_CREDENTIALS_JSON }}' > credentials.json
@@ -86,8 +112,10 @@ jobs:
           GOOGLE_CREDENTIALS_PATH: credentials.json
         run: python main.py --check-replies
 
+      # Only main-branch runs upload — otherwise a feature-branch test
+      # could leave a tainted artifact for the next mainline restore.
       - name: Save earnings database
-        if: always()
+        if: always() && github.ref == 'refs/heads/main'
         uses: actions/upload-artifact@v4
         with:
           name: earnings-db
