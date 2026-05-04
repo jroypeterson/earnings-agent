@@ -229,28 +229,57 @@ def fetch_yfinance_earnings_date(ticker: str) -> list[date] | None:
     return result or None
 
 
-def fetch_yfinance_earnings_datetime(ticker: str) -> list[datetime] | None:
+@dataclass
+class YfinanceEarningsTimestamps:
+    """yfinance earnings-timing fields, distinguished by event type.
+
+    The press release and the conference call are distinct events that
+    sometimes happen on different calendar days (e.g. UFPT: AMC release
+    on Monday, BMO call on Tuesday). The calendar tracks the press
+    release; the call is descriptive context. Keep them separate so
+    callers don't conflate them.
     """
-    Return a list of UTC tz-aware datetimes for yfinance's known earnings
-    timestamps for `ticker`, with time-of-day preserved so callers can
-    infer pre-market vs post-market timing when Finnhub didn't populate
-    its `hour` field.
+    release_candidates: list[datetime]   # earningsTimestamp / Start / End
+    call_candidates: list[datetime]      # earningsCallTimestampStart / End
+    is_estimate: bool | None             # isEarningsDateEstimate; None = absent
+
+
+def _coerce_unix_seconds_to_utc(ts) -> datetime | None:
+    """Convert a Yahoo Unix-seconds value to a UTC datetime, or None if junk."""
+    if not isinstance(ts, (int, float)):
+        return None
+    ts_int = int(ts)
+    # sanity-bound to roughly 2001..2128
+    if ts_int < 1_000_000_000 or ts_int > 5_000_000_000:
+        return None
+    try:
+        return datetime.fromtimestamp(ts_int, tz=timezone.utc)
+    except (ValueError, OSError):
+        return None
+
+
+def fetch_yfinance_earnings_timestamps(ticker: str) -> YfinanceEarningsTimestamps | None:
+    """
+    Read yfinance Ticker.info and return distinct release vs call timestamps
+    plus the isEarningsDateEstimate flag. Returns None if the ticker has
+    no usable info (network failure, empty dict, etc.).
 
     Reads from `Ticker.info`, NOT `Ticker.calendar`. The high-level
     `Ticker.calendar` and `Ticker.get_earnings_dates()` accessors
-    normalize to plain dates (their wrapper code strips time-of-day),
-    making them unusable for BMO/AMC inference. The Yahoo quoteSummary
-    fields exposed via `info` retain Unix-second precision.
+    normalize to plain dates (their wrapper code strips time-of-day).
+    The Yahoo quoteSummary fields exposed via `info` retain Unix-second
+    precision.
 
     Fields read (each a Unix timestamp in seconds):
-      * `earningsTimestamp`       — most recent release (past or imminent)
-      * `earningsTimestampStart`  — next upcoming release (often estimated)
-      * `earningsTimestampEnd`    — usually equal to Start
-
-    For tickers reporting imminently, all three coincide. For tickers in
-    a between-quarters state, `earningsTimestamp` is the past quarter
-    and Start/End is the next-quarter estimate. Callers do per-date
-    matching to find the relevant timestamp.
+      Release timestamps:
+        * earningsTimestamp       — most recent release (past or imminent)
+        * earningsTimestampStart  — next upcoming release (often estimated)
+        * earningsTimestampEnd    — usually equal to Start
+      Call timestamps:
+        * earningsCallTimestampStart — conference call start
+        * earningsCallTimestampEnd   — conference call end
+      Estimate flag:
+        * isEarningsDateEstimate   — Yahoo's confidence in the upcoming date
     """
     buf_out, buf_err = io.StringIO(), io.StringIO()
     try:
@@ -263,26 +292,52 @@ def fetch_yfinance_earnings_datetime(ticker: str) -> list[datetime] | None:
     if not info:
         return None
 
-    candidates: list[datetime] = []
-    seen: set[int] = set()
-    for key in ("earningsTimestamp", "earningsTimestampStart", "earningsTimestampEnd"):
-        ts = info.get(key)
-        # Yahoo uses Unix seconds; sanity-bound to roughly 2001..2128 to
-        # reject garbage (-1, 0, ms-precision values, strings, etc.).
-        if not isinstance(ts, (int, float)):
-            continue
-        ts_int = int(ts)
-        if ts_int < 1_000_000_000 or ts_int > 5_000_000_000:
-            continue
-        if ts_int in seen:
-            continue
-        seen.add(ts_int)
-        try:
-            candidates.append(datetime.fromtimestamp(ts_int, tz=timezone.utc))
-        except (ValueError, OSError):
-            continue
+    def _collect(keys: tuple[str, ...]) -> list[datetime]:
+        out: list[datetime] = []
+        seen: set[int] = set()
+        for k in keys:
+            dt = _coerce_unix_seconds_to_utc(info.get(k))
+            if dt is None:
+                continue
+            ts_key = int(dt.timestamp())
+            if ts_key in seen:
+                continue
+            seen.add(ts_key)
+            out.append(dt)
+        return out
 
-    return candidates or None
+    release = _collect((
+        "earningsTimestamp", "earningsTimestampStart", "earningsTimestampEnd",
+    ))
+    call = _collect((
+        "earningsCallTimestampStart", "earningsCallTimestampEnd",
+    ))
+    is_est = info.get("isEarningsDateEstimate")
+    if not isinstance(is_est, bool):
+        is_est = None
+
+    if not release and not call and is_est is None:
+        return None
+
+    return YfinanceEarningsTimestamps(
+        release_candidates=release,
+        call_candidates=call,
+        is_estimate=is_est,
+    )
+
+
+def fetch_yfinance_earnings_datetime(ticker: str) -> list[datetime] | None:
+    """Backward-compat wrapper returning only release-timestamp candidates.
+
+    Kept so the existing fetch_yfinance_hour_for_date implementation and
+    any external callers of this name keep working without change.
+    Internally just unwraps the release_candidates from the new
+    fetch_yfinance_earnings_timestamps shape.
+    """
+    bundle = fetch_yfinance_earnings_timestamps(ticker)
+    if bundle is None:
+        return None
+    return bundle.release_candidates or None
 
 
 def infer_hour_from_datetime(dt: datetime) -> str | None:
@@ -318,31 +373,67 @@ def infer_hour_from_datetime(dt: datetime) -> str | None:
 
 
 def fetch_yfinance_hour_for_date(ticker: str, earnings_date: str) -> str | None:
-    """Convenience wrapper: query yfinance, find a timestamp whose local
-    America/New_York date matches `earnings_date` (ISO YYYY-MM-DD), and
-    infer 'bmo'/'amc' from its time-of-day.
+    """Convenience wrapper: match a release-timestamp candidate to the
+    target press-release date and infer 'bmo'/'amc' from its time-of-day.
 
-    Date matching is done in America/New_York so a Yahoo timestamp like
-    2026-05-04T20:00 UTC (= 16:00 ET) correctly matches earnings_date
-    "2026-05-04" — not the UTC date, which on a midnight-UTC boundary
-    could be a different calendar day.
+    Reads release candidates only (earningsTimestamp / Start / End). Call
+    timestamps go through fetch_yfinance_call_for_date.
 
-    Returns None if yfinance has nothing for this ticker, no candidate
-    matches the target date, or the matching candidate's time falls
-    inside market hours (mid-session releases are ambiguous). Safe to
-    call from daily sync — failures are logged at debug level only.
+    Returns None if yfinance has nothing for this ticker, no release
+    candidate matches the target date, or the matching candidate's time
+    falls inside market hours (mid-session releases are ambiguous).
     """
-    dts = fetch_yfinance_earnings_datetime(ticker)
-    if not dts:
+    bundle = fetch_yfinance_earnings_timestamps(ticker)
+    if bundle is None or not bundle.release_candidates:
         return None
     if ZoneInfo is None:
         return None
     tz = ZoneInfo("America/New_York")
-    for dt in dts:
+    for dt in bundle.release_candidates:
         try:
             local = dt.astimezone(tz)
         except Exception:
             continue
         if local.date().isoformat() == earnings_date:
             return infer_hour_from_datetime(dt)
+    return None
+
+
+def fetch_yfinance_call_for_date(ticker: str, earnings_date: str) -> datetime | None:
+    """Match a call-timestamp candidate to the target press-release date.
+
+    A "match" here is loose because the call commonly happens the
+    business day AFTER an AMC release (UFPT pattern: release Mon AMC,
+    call Tue BMO). We accept any call candidate whose local America/
+    New_York date is in {earnings_date, earnings_date + 1 business day}.
+
+    Returns the UTC tz-aware datetime of the matching call candidate,
+    or None if no plausible match exists. Callers render the result
+    via the description's "Conference call: ..." line.
+    """
+    bundle = fetch_yfinance_earnings_timestamps(ticker)
+    if bundle is None or not bundle.call_candidates:
+        return None
+    if ZoneInfo is None:
+        return None
+    tz = ZoneInfo("America/New_York")
+    try:
+        target = date.fromisoformat(earnings_date)
+    except ValueError:
+        return None
+
+    # Allow today, today+1 (next-day call), and today+next-business-day
+    # (skip weekend if release is Friday). Conservative window — ±1
+    # business day from the release.
+    next_day = target + timedelta(days=1)
+    skip_weekend = target + timedelta(days=3 if target.weekday() == 4 else 1)
+    valid_dates = {target.isoformat(), next_day.isoformat(), skip_weekend.isoformat()}
+
+    for dt in bundle.call_candidates:
+        try:
+            local_date = dt.astimezone(tz).date().isoformat()
+        except Exception:
+            continue
+        if local_date in valid_dates:
+            return dt
     return None

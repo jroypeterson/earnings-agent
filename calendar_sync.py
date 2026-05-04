@@ -6,7 +6,7 @@ earnings events with retry logic and pagination.
 import re
 import time
 import logging
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
@@ -107,6 +107,8 @@ def expected_calendar_state(
     tier: int,
     source_fingerprint: str | None = None,
     hour_yf: str | None = None,
+    earnings_date: str | None = None,
+    call_datetime_utc: str | None = None,
 ) -> tuple[str, str, dict]:
     """Render the canonical (summary, description, private-props) for an event.
 
@@ -137,6 +139,8 @@ def expected_calendar_state(
         ticker, effective_hour, eps_estimate, eps_actual,
         revenue_estimate, revenue_actual,
         hour_source=("yfinance" if used_yf else "finnhub"),
+        earnings_date=earnings_date,
+        call_datetime_utc=call_datetime_utc,
     )
     if source_fingerprint is None:
         source_fingerprint = f"{ticker}:?"
@@ -206,6 +210,50 @@ def calendar_event_drift_kind(
     return "fresh"
 
 
+def _render_call_line(
+    earnings_date: str | None,
+    call_dt_iso: str | None,
+) -> str | None:
+    """Format the 'Conference call: ...' line for the calendar description.
+
+    `earnings_date` is the press-release date (the calendar event's anchor).
+    `call_dt_iso` is the call's ISO-8601 datetime with offset, or None.
+
+    Returns:
+      * None when call_dt_iso is missing (caller omits the line entirely)
+      * "<weekday> <Mon DD> <H:MM AM/PM> ET" when call is on a different
+        calendar day than the press release (split-day pattern; spell out
+        the weekday so the date is unambiguous)
+      * "<H:MM AM/PM> ET (same day)" when call is the same day as release
+    """
+    if not call_dt_iso:
+        return None
+    try:
+        # fromisoformat handles "+00:00" but not "Z" prior to py3.11
+        normalized = call_dt_iso.replace("Z", "+00:00") if call_dt_iso.endswith("Z") else call_dt_iso
+        call_dt = datetime.fromisoformat(normalized)
+    except (ValueError, TypeError):
+        return None
+
+    try:
+        from zoneinfo import ZoneInfo
+        local = call_dt.astimezone(ZoneInfo("America/New_York"))
+    except Exception:
+        return None
+
+    # Manual time formatting — strftime("%-I"/"%-d") doesn't work on Windows.
+    hour12 = local.hour % 12 or 12
+    ampm = "AM" if local.hour < 12 else "PM"
+    time_str = f"{hour12}:{local.strftime('%M')} {ampm} ET"
+
+    if earnings_date and local.date().isoformat() == earnings_date:
+        return f"Conference call: {time_str} (same day)"
+
+    weekday = local.strftime("%a")           # e.g. "Tue"
+    month = local.strftime("%b")             # e.g. "May"
+    return f"Conference call: {weekday} {month} {local.day} {time_str}"
+
+
 def build_description(
     ticker: str,
     hour: str | None,
@@ -214,6 +262,8 @@ def build_description(
     revenue_estimate: float | None,
     revenue_actual: float | None,
     hour_source: str = "finnhub",
+    earnings_date: str | None = None,
+    call_datetime_utc: str | None = None,
 ) -> str:
     """Build the calendar event description, including actuals if available.
 
@@ -221,13 +271,26 @@ def build_description(
     Finnhub provided the timing, "Confirmed (yfinance)" when we fell back to
     yfinance's earnings datetime, "Estimated (Finnhub has no timing)" when
     neither source gave us anything.
+
+    `earnings_date` and `call_datetime_utc` together drive the
+    "Press release:" / "Conference call:" pair of lines. The calendar
+    event itself anchors to the press-release date; the call line is
+    descriptive context. Both are optional — when call_datetime_utc is
+    None the conference-call line is omitted entirely.
     """
     timing_str = TIMING_LABELS.get(hour, "Time TBD")
 
-    lines = [
-        f"Ticker: {ticker}",
-        f"Timing: {timing_str}",
-    ]
+    lines = [f"Ticker: {ticker}"]
+
+    # Press release / Conference call lines. When we have call info,
+    # label the timing as "Press release:" so the reader knows which
+    # event the calendar tracks. Otherwise use the legacy "Timing:" label.
+    call_line = _render_call_line(earnings_date, call_datetime_utc)
+    if call_line is not None:
+        lines.append(f"Press release: {timing_str}")
+        lines.append(call_line)
+    else:
+        lines.append(f"Timing: {timing_str}")
 
     has_actuals = eps_actual is not None or revenue_actual is not None
     if not has_actuals:
@@ -368,6 +431,7 @@ def create_calendar_event(
     tier: int = 3,
     source_fingerprint: str | None = None,
     hour_yf: str | None = None,
+    call_datetime_utc: str | None = None,
 ) -> str | None:
     """
     Create an earnings event on Google Calendar.
@@ -385,6 +449,8 @@ def create_calendar_event(
         ticker, hour, eps_estimate, eps_actual, revenue_estimate, revenue_actual,
         quarter=quarter, tier=tier, source_fingerprint=source_fingerprint,
         hour_yf=hour_yf,
+        earnings_date=earnings_date,
+        call_datetime_utc=call_datetime_utc,
     )
     extended_props = {"private": props}
     effective_hour = hour or hour_yf or ""

@@ -601,7 +601,7 @@ class DisagreementRow:
     ticker: str
     company_name: str
     finnhub_date: str
-    yf_dates: list  # list[date] from yfinance
+    yf_dates: list  # list[date] from yfinance (release timestamps)
     tier: int
     # True when Finnhub's `hour` field was populated (bmo/amc/dmh),
     # which signals the company has announced timing. Empty hour is
@@ -613,6 +613,12 @@ class DisagreementRow:
     edgar_ref_date: str | None = None
     edgar_finnhub_offset: int | None = None
     edgar_yf_offset: int | None = None
+    # Set when Finnhub and yfinance disagree on date but yfinance's
+    # conference-call timestamp lands on Finnhub's date — indicating a
+    # release/call split-day pattern (UFPT: AMC release Mon, BMO call Tue)
+    # rather than a true source conflict. Downstream messaging downgrades
+    # the alert tone when this is True.
+    split_day_call_date: str | None = None
 
 
 def _fmt_yf_dates(yf_dates: list) -> str:
@@ -767,6 +773,17 @@ def _xcheck_verdict(r: DisagreementRow) -> str:
     Tentative read on which source is right, given Finnhub's confirmed
     flag and the EDGAR cadence offsets.
     """
+    # Split-day pattern: not a true source disagreement. Companies that
+    # release post-close and hold the call the next morning legitimately
+    # appear at two different dates depending on which event a vendor
+    # tracks. Calendar event is anchored to the press release; this is
+    # informational, not a conflict to resolve.
+    if r.split_day_call_date:
+        return (
+            f"Release/call split-day pattern — yfinance shows the press release "
+            f"on a different day than the call ({r.split_day_call_date}). "
+            f"Calendar tracks the press release; no action needed."
+        )
     fh_off = r.edgar_finnhub_offset
     yf_off = r.edgar_yf_offset
     if r.finnhub_confirmed:
@@ -785,29 +802,44 @@ def _xcheck_verdict(r: DisagreementRow) -> str:
 def build_crosscheck_summary_blocks(
     rows: list[DisagreementRow], as_of: date
 ) -> list[dict]:
-    """Short header summarising how many disagreements were detected."""
+    """Short header summarising how many disagreements were detected.
+
+    Split-day rows (release/call pattern, not a true source conflict) are
+    counted in the header but called out separately so the alert is honest
+    about how many actually need attention.
+    """
     t1 = sum(1 for r in rows if r.tier == 1)
     t2 = sum(1 for r in rows if r.tier == 2)
+    splits = sum(1 for r in rows if r.split_day_call_date)
+    real_conflicts = len(rows) - splits
+
+    if real_conflicts == 0:
+        header = (
+            f":mag: Release/call split-day pattern detected "
+            f"({len(rows)} event{'s' if len(rows) != 1 else ''}) — informational"
+        )
+    else:
+        header = (
+            f":mag: Source disagreement: Finnhub vs yfinance "
+            f"({real_conflicts} event{'s' if real_conflicts != 1 else ''})"
+        )
+        if splits:
+            header += f"  +{splits} release/call split-day"
+
+    context_text = f"Tier 1: {t1}  ·  Tier 2: {t2}"
+    if real_conflicts:
+        context_text += "  ·  see threads below — reply in any thread to resolve."
+    elif splits:
+        context_text += "  ·  no action needed — calendar already tracks press release."
+
     return [
         {
             "type": "header",
-            "text": {
-                "type": "plain_text",
-                "text": (
-                    f":mag: Source disagreement: Finnhub vs yfinance "
-                    f"({len(rows)} event{'s' if len(rows) != 1 else ''})"
-                ),
-            },
+            "text": {"type": "plain_text", "text": header},
         },
         {
             "type": "context",
-            "elements": [{
-                "type": "mrkdwn",
-                "text": (
-                    f"Tier 1: {t1}  ·  Tier 2: {t2}  ·  "
-                    "see threads below — reply in any thread to resolve."
-                ),
-            }],
+            "elements": [{"type": "mrkdwn", "text": context_text}],
         },
     ]
 

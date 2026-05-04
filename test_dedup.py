@@ -81,6 +81,8 @@ def make_in_memory_db():
             date_confirmed  INTEGER NOT NULL DEFAULT 0,
             announcement_url TEXT,
             event_hour_yf   TEXT,
+            call_datetime_utc TEXT,
+            call_source     TEXT,
             created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
             updated_at      TEXT    NOT NULL DEFAULT (datetime('now')),
             UNIQUE(ticker, event_date)
@@ -965,6 +967,106 @@ def test_fresh_db_schema_matches_migration_path():
         f"Columns in fresh-DB CREATE TABLE but no migration adds them: "
         f"{missing_in_migration}. Add an ALTER TABLE migration."
     )
+
+
+# ── Press release vs Conference call rendering ───────────────────────────
+
+
+def test_description_no_call_uses_legacy_timing_label():
+    """Back-compat: when no call info, description uses 'Timing:' label."""
+    from calendar_sync import build_description
+    desc = build_description("XYZ", "amc", 1.0, None, 1e9, None,
+                             earnings_date="2026-05-15", call_datetime_utc=None)
+    assert "Timing: After Market Close" in desc
+    assert "Press release:" not in desc
+    assert "Conference call:" not in desc
+
+
+def test_description_same_day_call_renders_compactly():
+    """Same-day case: 'Conference call: 5:00 PM ET (same day)'."""
+    from calendar_sync import build_description
+    desc = build_description("NVDA", "amc", 5.0, None, 30e9, None,
+                             earnings_date="2026-05-20",
+                             call_datetime_utc="2026-05-20T21:00:00+00:00")
+    assert "Press release: After Market Close" in desc
+    assert "Conference call: 5:00 PM ET (same day)" in desc
+
+
+def test_description_split_day_call_includes_weekday_and_date():
+    """Split-day case (UFPT): 'Conference call: Tue May 5 8:30 AM ET'."""
+    from calendar_sync import build_description
+    desc = build_description("UFPT", "amc", 0.5, None, 1e8, None,
+                             hour_source="yfinance",
+                             earnings_date="2026-05-04",
+                             call_datetime_utc="2026-05-05T12:30:00+00:00")
+    assert "Press release: After Market Close" in desc
+    assert "Conference call: Tue May 5 8:30 AM ET" in desc
+    assert "Status: Confirmed (yfinance)" in desc
+
+
+def test_description_unparseable_call_omits_line():
+    """Junk in call_datetime_utc -> no call line, no exception."""
+    from calendar_sync import build_description
+    desc = build_description("XYZ", "amc", 1.0, None, 1e9, None,
+                             earnings_date="2026-05-15",
+                             call_datetime_utc="not-a-datetime")
+    assert "Conference call:" not in desc
+    # Falls back to legacy "Timing:" label since call_line returned None
+    assert "Timing: After Market Close" in desc
+
+
+# ── Cross-check split-day detection ───────────────────────────────────────
+
+
+def test_split_day_disagreement_routes_to_split_day_verdict():
+    """When split_day_call_date is set, verdict text says split-day, not conflict."""
+    from notifications import DisagreementRow, _xcheck_verdict
+    from datetime import date as _date
+    r = DisagreementRow(
+        ticker="UFPT",
+        company_name="UFP Technologies",
+        finnhub_date="2026-05-05",
+        yf_dates=[_date(2026, 5, 4)],
+        tier=2,
+        finnhub_confirmed=False,
+        split_day_call_date="2026-05-05",
+    )
+    verdict = _xcheck_verdict(r)
+    assert "split-day" in verdict.lower()
+    assert "no action needed" in verdict.lower()
+
+
+def test_normal_disagreement_keeps_conflict_verdict():
+    """Without split_day_call_date, the verdict logic falls through to the
+    original Finnhub-vs-yfinance conflict messaging."""
+    from notifications import DisagreementRow, _xcheck_verdict
+    from datetime import date as _date
+    r = DisagreementRow(
+        ticker="XYZ",
+        company_name="XYZ Corp",
+        finnhub_date="2026-05-05",
+        yf_dates=[_date(2026, 5, 12)],  # week off, not a split-day pattern
+        tier=2,
+        finnhub_confirmed=True,
+    )
+    verdict = _xcheck_verdict(r)
+    assert "split-day" not in verdict.lower()
+    assert "Finnhub" in verdict
+
+
+def test_split_day_summary_header_softens_messaging():
+    """All-split-day case: header says 'informational', not 'disagreement'."""
+    from notifications import DisagreementRow, build_crosscheck_summary_blocks
+    from datetime import date as _date
+    r = DisagreementRow(
+        ticker="UFPT", company_name="", finnhub_date="2026-05-05",
+        yf_dates=[_date(2026, 5, 4)], tier=2,
+        split_day_call_date="2026-05-05",
+    )
+    blocks = build_crosscheck_summary_blocks([r], _date(2026, 5, 4))
+    header_text = blocks[0]["text"]["text"]
+    assert "split-day" in header_text.lower()
+    assert "informational" in header_text.lower()
 
 
 # ── Run all tests ─────────────────────────────────────────────────────────

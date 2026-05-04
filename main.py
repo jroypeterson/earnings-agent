@@ -136,6 +136,7 @@ from market_data import (
     fetch_post_earnings_move,
     fetch_yfinance_earnings_date,
     fetch_yfinance_hour_for_date,
+    fetch_yfinance_call_for_date,
 )
 from edgar_client import infer_cadence_signal
 
@@ -408,6 +409,8 @@ def run(
         # yfinance on every sync. Does NOT touch event_hour or date_confirmed
         # — keeps Finnhub-canonical semantics intact.
         hour_yf: str | None = None
+        call_dt_iso: str | None = None
+        call_source_val: str | None = None
         is_upcoming = (not has_actuals) and earnings_date >= today.isoformat()
         if not hour and is_upcoming and tier <= 2:
             cached_yf = (existing or {}).get("event_hour_yf") if existing else None
@@ -423,6 +426,29 @@ def run(
                         )
                 except Exception as exc:
                     logger.debug(f"yfinance hour fallback failed for {ticker}: {exc}")
+
+        # Conference call timestamp — descriptive context for the calendar
+        # event description. Anchored to the press-release earnings_date;
+        # the call may be the same day (common) or the next business day
+        # (UFPT pattern: AMC release Mon, BMO call Tue). Fetched for
+        # upcoming Tier 1/2 events only. Cached in DB to avoid re-querying.
+        if is_upcoming and tier <= 2:
+            cached_call = (existing or {}).get("call_datetime_utc") if existing else None
+            if cached_call:
+                call_dt_iso = cached_call
+                call_source_val = (existing or {}).get("call_source")
+            else:
+                try:
+                    call_dt = fetch_yfinance_call_for_date(ticker, earnings_date)
+                    if call_dt is not None:
+                        call_dt_iso = call_dt.isoformat()
+                        call_source_val = "yfinance"
+                        logger.info(
+                            f"yfinance call timestamp for {ticker} "
+                            f"(release {earnings_date}): {call_dt_iso}"
+                        )
+                except Exception as exc:
+                    logger.debug(f"yfinance call fetch failed for {ticker}: {exc}")
 
         if existing:
             # --- Check if actuals just came in ---
@@ -442,6 +468,8 @@ def run(
                             ticker, hour, eps_est, eps_act, rev_est, rev_act,
                             quarter=quarter, tier=tier,
                             source_fingerprint=source_fingerprint,
+                            earnings_date=earnings_date,
+                            call_datetime_utc=call_dt_iso,
                         )
                         update_calendar_event_description(
                             cal_service, GOOGLE_CALENDAR_ID,
@@ -461,6 +489,8 @@ def run(
                     tier=tier, company_name=company_name,
                     source_fingerprint=source_fingerprint,
                     event_hour_yf=hour_yf,
+                    call_datetime_utc=call_dt_iso,
+                    call_source=call_source_val,
                 )
                 actuals_count += 1
 
@@ -568,6 +598,7 @@ def run(
                             revenue_actual=rev_act, tier=tier,
                             source_fingerprint=source_fingerprint,
                             hour_yf=hour_yf,
+                            call_datetime_utc=call_dt_iso,
                         )
                     except CalendarError as exc:
                         logger.error(f"Failed to create updated event for {ticker}: {exc}")
@@ -583,6 +614,8 @@ def run(
                 tier=tier, company_name=company_name,
                 source_fingerprint=source_fingerprint,
                 event_hour_yf=hour_yf,
+                call_datetime_utc=call_dt_iso,
+                call_source=call_source_val,
             )
             updated_count += 1
 
@@ -631,6 +664,7 @@ def run(
                                     revenue_actual=rev_act, tier=tier,
                                     source_fingerprint=source_fingerprint,
                                     hour_yf=hour_yf,
+                                    call_datetime_utc=call_dt_iso,
                                 )
                             except CalendarError as exc:
                                 logger.error(
@@ -644,6 +678,8 @@ def run(
                                 tier=tier, company_name=company_name,
                                 source_fingerprint=source_fingerprint,
                                 event_hour_yf=hour_yf,
+                                call_datetime_utc=call_dt_iso,
+                                call_source=call_source_val,
                             )
                             updated_count += 1
                             continue
@@ -662,6 +698,8 @@ def run(
                             quarter=quarter, tier=tier,
                             source_fingerprint=source_fingerprint,
                             hour_yf=hour_yf,
+                            earnings_date=earnings_date,
+                            call_datetime_utc=call_dt_iso,
                         )
                         effective_hour = hour or hour_yf or ""
                         drift = calendar_event_drift_kind(
@@ -682,6 +720,7 @@ def run(
                                         revenue_actual=rev_act, tier=tier,
                                         source_fingerprint=source_fingerprint,
                                         hour_yf=hour_yf,
+                                        call_datetime_utc=call_dt_iso,
                                     )
                                     logger.info(
                                         f"Recreated calendar event for {ticker} "
@@ -730,6 +769,8 @@ def run(
                             tier=tier, company_name=company_name,
                             source_fingerprint=source_fingerprint,
                             event_hour_yf=hour_yf,
+                            call_datetime_utc=call_dt_iso,
+                            call_source=call_source_val,
                         )
                         logger.info(f"Backfilled DB from calendar for {ticker} {quarter}")
                         skip_count += 1
@@ -747,6 +788,7 @@ def run(
                             revenue_actual=rev_act, tier=tier,
                             source_fingerprint=source_fingerprint,
                             hour_yf=hour_yf,
+                            call_datetime_utc=call_dt_iso,
                         )
                     except CalendarError as exc:
                         logger.error(f"Failed to create calendar event for {ticker}: {exc}")
@@ -761,6 +803,8 @@ def run(
                 tier=tier, company_name=company_name,
                 source_fingerprint=source_fingerprint,
                 event_hour_yf=hour_yf,
+                call_datetime_utc=call_dt_iso,
+                call_source=call_source_val,
             )
             new_count += 1
 
@@ -1192,10 +1236,13 @@ def run_check_results(
                     or date_to_quarter(event_date)
                 )
                 source_fingerprint = f"{ticker}:{event_date}"
+                cached_call = (existing.get("call_datetime_utc") if existing else None)
                 new_summary, new_description, _ = expected_calendar_state(
                     ticker, hour, eps_est, eps_act, rev_est, rev_act,
                     quarter=quarter_for_event, tier=tier,
                     source_fingerprint=source_fingerprint,
+                    earnings_date=event_date,
+                    call_datetime_utc=cached_call,
                 )
                 update_calendar_event_description(
                     cal_service, GOOGLE_CALENDAR_ID, gcal_id,
@@ -1433,6 +1480,8 @@ def run_reconcile_calendar(dry_run: bool = False):
 
         # yfinance hour fallback for upcoming events whose Finnhub hour is empty.
         hour_yf = None
+        call_dt_iso: str | None = None
+        call_source_val: str | None = None
         is_upcoming = (not has_actuals) and new_date >= today.isoformat()
         if not hour and is_upcoming and tier <= 2:
             try:
@@ -1444,6 +1493,14 @@ def run_reconcile_calendar(dry_run: bool = False):
                     )
             except Exception as exc:
                 logger.debug(f"yfinance hour fallback failed for {ticker}: {exc}")
+        if is_upcoming and tier <= 2:
+            try:
+                call_dt = fetch_yfinance_call_for_date(ticker, new_date)
+                if call_dt is not None:
+                    call_dt_iso = call_dt.isoformat()
+                    call_source_val = "yfinance"
+            except Exception as exc:
+                logger.debug(f"yfinance call fetch failed for {ticker}: {exc}")
 
         if dry_run:
             logger.info(
@@ -1471,6 +1528,7 @@ def run_reconcile_calendar(dry_run: bool = False):
                 tier=tier,
                 source_fingerprint=source_fingerprint,
                 hour_yf=hour_yf,
+                call_datetime_utc=call_dt_iso,
             )
         except CalendarError as exc:
             logger.error(f"  Failed to recreate event for {ticker}: {exc}")
@@ -1485,6 +1543,8 @@ def run_reconcile_calendar(dry_run: bool = False):
             company_name=company_name,
             source_fingerprint=source_fingerprint,
             event_hour_yf=hour_yf,
+            call_datetime_utc=call_dt_iso,
+            call_source=call_source_val,
         )
         logger.info(f"  Fixed {ticker} (T{tier}): {old_date} -> {new_date}")
         fixed.append(DriftRow(
@@ -1596,6 +1656,7 @@ def run_refresh_descriptions(dry_run: bool = False, days_ahead: int = 90):
 
         hour = db_row.get("event_hour")
         hour_yf = db_row.get("event_hour_yf")
+        call_dt_iso = db_row.get("call_datetime_utc")
         eps_est = db_row.get("eps_estimate")
         eps_act = db_row.get("eps_actual")
         rev_est = db_row.get("rev_estimate")
@@ -1609,6 +1670,8 @@ def run_refresh_descriptions(dry_run: bool = False, days_ahead: int = 90):
             quarter=quarter_for_event, tier=tier_for_event,
             source_fingerprint=source_fingerprint,
             hour_yf=hour_yf,
+            earnings_date=event_date,
+            call_datetime_utc=call_dt_iso,
         )
         drift = calendar_event_drift_kind(
             ev, new_summary, new_description, exp_props,
@@ -1641,6 +1704,7 @@ def run_refresh_descriptions(dry_run: bool = False, days_ahead: int = 90):
                     tier=tier_for_event,
                     source_fingerprint=source_fingerprint,
                     hour_yf=hour_yf,
+                    call_datetime_utc=call_dt_iso,
                 )
             else:  # 'text'
                 update_calendar_event_description(
@@ -1903,6 +1967,22 @@ def run_cross_check(dry_run: bool = False, days_ahead: int = 14):
         except Exception as exc:
             logger.debug(f"EDGAR cadence lookup failed for {ticker}: {exc}")
 
+        # Split-day detection: if yfinance's CALL timestamp lands on
+        # Finnhub's date (while the release timestamp lands on a
+        # different day), this is a release/call split-day pattern, not
+        # a true source conflict. UFPT pattern: AMC release Mon (yf
+        # release date), BMO call Tue (yf call date == Finnhub date).
+        split_day_call: str | None = None
+        try:
+            from zoneinfo import ZoneInfo
+            call_dt = fetch_yfinance_call_for_date(ticker, event_date)
+            if call_dt is not None:
+                local_call_date = call_dt.astimezone(ZoneInfo("America/New_York")).date().isoformat()
+                if local_call_date == event_date:
+                    split_day_call = local_call_date
+        except Exception as exc:
+            logger.debug(f"split-day detection failed for {ticker}: {exc}")
+
         new_disagreements.append((DisagreementRow(
             ticker=ticker,
             company_name=company_name or "",
@@ -1913,6 +1993,7 @@ def run_cross_check(dry_run: bool = False, days_ahead: int = 14):
             edgar_ref_date=edgar_ref,
             edgar_finnhub_offset=edgar_fh_offset,
             edgar_yf_offset=edgar_yf_offset,
+            split_day_call_date=split_day_call,
         ), current_sig))
 
     logger.info(

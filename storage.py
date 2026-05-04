@@ -18,9 +18,21 @@ logger = logging.getLogger("earnings_agent")
 # Schema version tracking
 # ---------------------------------------------------------------------------
 
-CURRENT_SCHEMA_VERSION = 11  # Bump when adding migrations
+CURRENT_SCHEMA_VERSION = 12  # Bump when adding migrations
 
 _MIGRATIONS = {
+    # Version 11 → 12: track the earnings conference call timestamp
+    # alongside the press-release date. The calendar event itself is
+    # anchored to the press release (event_date / event_hour); the call
+    # is descriptive context shown in the description. yfinance's
+    # earningsCallTimestampStart/End are the primary source. Stored as
+    # ISO-8601 with offset (full instant); call_source records which
+    # source provided it ('yfinance' for now; 'ir_rss' future).
+    12: [
+        "ALTER TABLE events ADD COLUMN call_datetime_utc TEXT",
+        "ALTER TABLE events ADD COLUMN call_source TEXT",
+    ],
+
     # Version 10 → 11: yfinance-sourced hour fallback. When Finnhub
     # returns event_hour='' for an upcoming event, we infer 'bmo'/'amc'
     # from yfinance's earnings datetime time-of-day and persist it here.
@@ -295,6 +307,8 @@ def init_db(db_path: Path = DB_PATH) -> sqlite3.Connection:
                 question_first_seen TEXT,
                 slack_channel_id TEXT,
                 event_hour_yf   TEXT,
+                call_datetime_utc TEXT,
+                call_source     TEXT,
                 created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
                 updated_at      TEXT    NOT NULL DEFAULT (datetime('now')),
                 UNIQUE(ticker, event_date)
@@ -332,7 +346,7 @@ def find_existing_event(conn: sqlite3.Connection, ticker: str, event_date: str) 
         "SELECT id, ticker, quarter, event_date, event_hour, gcal_id, "
         "eps_estimate, eps_actual, rev_estimate, rev_actual, reported, "
         "tier, company_name, ticktick_task_id, date_locked, date_confirmed, "
-        "event_hour_yf "
+        "event_hour_yf, call_datetime_utc, call_source "
         "FROM events WHERE ticker = ? AND event_date = ?",
         (ticker, event_date),
     )
@@ -348,6 +362,8 @@ def find_existing_event(conn: sqlite3.Connection, ticker: str, event_date: str) 
             "date_locked": bool(row[14]),
             "date_confirmed": bool(row[15]),
             "event_hour_yf": row[16],
+            "call_datetime_utc": row[17],
+            "call_source": row[18],
         }
     return None
 
@@ -419,6 +435,8 @@ def upsert_event(
     company_name: str | None = None,
     source_fingerprint: str | None = None,
     event_hour_yf: str | None = None,
+    call_datetime_utc: str | None = None,
+    call_source: str | None = None,
 ):
     """
     Insert or update an event, keyed on (ticker, event_date).
@@ -453,23 +471,26 @@ def upsert_event(
         conn.execute(
             """
             UPDATE events SET
-                event_hour       = ?,
-                event_hour_yf    = COALESCE(?, event_hour_yf),
-                gcal_id          = COALESCE(?, gcal_id),
-                quarter          = COALESCE(?, quarter),
-                eps_estimate     = COALESCE(?, eps_estimate),
-                eps_actual       = COALESCE(?, eps_actual),
-                rev_estimate     = COALESCE(?, rev_estimate),
-                rev_actual       = COALESCE(?, rev_actual),
-                reported         = ?,
-                tier             = ?,
-                company_name     = COALESCE(?, company_name),
+                event_hour        = ?,
+                event_hour_yf     = COALESCE(?, event_hour_yf),
+                call_datetime_utc = COALESCE(?, call_datetime_utc),
+                call_source       = COALESCE(?, call_source),
+                gcal_id           = COALESCE(?, gcal_id),
+                quarter           = COALESCE(?, quarter),
+                eps_estimate      = COALESCE(?, eps_estimate),
+                eps_actual        = COALESCE(?, eps_actual),
+                rev_estimate      = COALESCE(?, rev_estimate),
+                rev_actual        = COALESCE(?, rev_actual),
+                reported          = ?,
+                tier              = ?,
+                company_name      = COALESCE(?, company_name),
                 source_fingerprint = ?,
-                date_confirmed   = ?,
-                updated_at       = datetime('now')
+                date_confirmed    = ?,
+                updated_at        = datetime('now')
             WHERE ticker = ? AND event_date = ?
             """,
-            (event_hour, event_hour_yf, gcal_id, quarter,
+            (event_hour, event_hour_yf, call_datetime_utc, call_source,
+             gcal_id, quarter,
              eps_estimate, eps_actual, rev_estimate, rev_actual,
              int(reported), tier, company_name, source_fingerprint,
              date_confirmed,
@@ -486,13 +507,16 @@ def upsert_event(
         conn.execute(
             """
             INSERT INTO events (ticker, event_date, event_hour, event_hour_yf,
+                                call_datetime_utc, call_source,
                                 gcal_id, quarter,
                                 eps_estimate, eps_actual, rev_estimate, rev_actual,
                                 reported, tier, company_name, source_fingerprint,
                                 date_confirmed)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (ticker, event_date, event_hour, event_hour_yf, gcal_id, quarter,
+            (ticker, event_date, event_hour, event_hour_yf,
+             call_datetime_utc, call_source,
+             gcal_id, quarter,
              eps_estimate, eps_actual, rev_estimate, rev_actual,
              int(reported), tier, company_name, source_fingerprint,
              date_confirmed),
