@@ -595,8 +595,24 @@ def test_expected_state_reported_drops_est_marker():
         "NVDA", "amc", 5.0, 5.20, 30e9, 32e9,
         quarter="2026Q1", tier=1, source_fingerprint="NVDA:2026-05-20",
     )
-    assert summary == "[REPORTED] NVDA Earnings Release"
+    assert summary == "NVDA Rpt'd Earnings"
     assert "\nREPORTED" in description
+
+
+def test_parse_ticker_handles_both_title_formats():
+    """Reported title shortened from '[REPORTED] X Earnings Release' to
+    'X Rpt'd Earnings' — parser must accept both during the transition."""
+    from calendar_sync import parse_ticker_from_summary
+    # New compact form
+    assert parse_ticker_from_summary("NVDA Rpt'd Earnings") == "NVDA"
+    # Legacy upcoming form
+    assert parse_ticker_from_summary("AAPL Earnings Release") == "AAPL"
+    # Legacy upcoming + estimated marker
+    assert parse_ticker_from_summary("UFPT Earnings Release (est.)") == "UFPT"
+    # Legacy reported form
+    assert parse_ticker_from_summary("[REPORTED] MSFT Earnings Release") == "MSFT"
+    # Non-matching summary
+    assert parse_ticker_from_summary("Daily standup") is None
 
 
 def test_drift_kind_fresh():

@@ -132,9 +132,12 @@ def expected_calendar_state(
 
     has_actuals = eps_actual is not None or revenue_actual is not None
     est_marker = "" if (has_actuals or _is_confirmed_hour(effective_hour)) else " (est.)"
-    summary = (
-        f"{'[REPORTED]' if has_actuals else ''} {ticker} Earnings Release{est_marker}"
-    ).strip()
+    if has_actuals:
+        # Compact title once results are in — the calendar event is now
+        # historical context, no need for a verbose "[REPORTED] ... Release".
+        summary = f"{ticker} Rpt'd Earnings"
+    else:
+        summary = f"{ticker} Earnings Release{est_marker}"
     description = build_description(
         ticker, effective_hour, eps_estimate, eps_actual,
         revenue_estimate, revenue_actual,
@@ -537,7 +540,19 @@ def delete_calendar_event(service, calendar_id: str, gcal_id: str):
 
 
 def parse_ticker_from_summary(summary: str) -> str | None:
-    """Extract ticker from event summaries like '[REPORTED] AAPL Earnings Release'."""
+    """Extract ticker from event summaries.
+
+    Matches three title shapes the agent has produced:
+      * "AAPL Earnings Release"            (legacy, pre-actuals)
+      * "AAPL Earnings Release (est.)"     (legacy, estimated)
+      * "[REPORTED] AAPL Earnings Release" (legacy, post-actuals)
+      * "AAPL Rpt'd Earnings"              (current, post-actuals)
+    """
+    # Reported (current short form): "TICKER Rpt'd Earnings"
+    m = re.match(r"^(\w+)\s+Rpt'd\s+Earnings", summary)
+    if m:
+        return m.group(1).upper()
+    # Legacy / estimated forms: "[REPORTED]? <symbols>? TICKER Earnings Release..."
     m = re.match(r"^(?:\[REPORTED\]\s*)?(?:[^\w]*)?(\w+)\s+Earnings\s+Release", summary)
     return m.group(1).upper() if m else None
 
