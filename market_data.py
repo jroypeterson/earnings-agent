@@ -231,55 +231,58 @@ def fetch_yfinance_earnings_date(ticker: str) -> list[date] | None:
 
 def fetch_yfinance_earnings_datetime(ticker: str) -> list[datetime] | None:
     """
-    Like `fetch_yfinance_earnings_date` but preserves time-of-day so callers
-    can infer pre-market vs post-market timing when Finnhub didn't populate
+    Return a list of UTC tz-aware datetimes for yfinance's known earnings
+    timestamps for `ticker`, with time-of-day preserved so callers can
+    infer pre-market vs post-market timing when Finnhub didn't populate
     its `hour` field.
 
-    Returns a list of timezone-aware datetimes (typically America/New_York)
-    when yfinance has timed entries; None otherwise. yfinance occasionally
-    returns plain dates with no time — those are skipped here since they
-    carry no signal for BMO/AMC inference (the all-day fallback path
-    already handles them).
+    Reads from `Ticker.info`, NOT `Ticker.calendar`. The high-level
+    `Ticker.calendar` and `Ticker.get_earnings_dates()` accessors
+    normalize to plain dates (their wrapper code strips time-of-day),
+    making them unusable for BMO/AMC inference. The Yahoo quoteSummary
+    fields exposed via `info` retain Unix-second precision.
+
+    Fields read (each a Unix timestamp in seconds):
+      * `earningsTimestamp`       — most recent release (past or imminent)
+      * `earningsTimestampStart`  — next upcoming release (often estimated)
+      * `earningsTimestampEnd`    — usually equal to Start
+
+    For tickers reporting imminently, all three coincide. For tickers in
+    a between-quarters state, `earningsTimestamp` is the past quarter
+    and Start/End is the next-quarter estimate. Callers do per-date
+    matching to find the relevant timestamp.
     """
     buf_out, buf_err = io.StringIO(), io.StringIO()
     try:
         with redirect_stdout(buf_out), redirect_stderr(buf_err):
-            cal = yf.Ticker(ticker).calendar
+            info = yf.Ticker(ticker).info
     except Exception as exc:
-        logger.debug(f"yfinance calendar fetch failed for {ticker}: {exc}")
+        logger.debug(f"yfinance info fetch failed for {ticker}: {exc}")
         return None
 
-    if not cal:
+    if not info:
         return None
 
-    if isinstance(cal, dict):
-        raw = cal.get("Earnings Date")
-    elif hasattr(cal, "loc") and hasattr(cal, "index"):
-        if "Earnings Date" not in cal.index:
-            return None
+    candidates: list[datetime] = []
+    seen: set[int] = set()
+    for key in ("earningsTimestamp", "earningsTimestampStart", "earningsTimestampEnd"):
+        ts = info.get(key)
+        # Yahoo uses Unix seconds; sanity-bound to roughly 2001..2128 to
+        # reject garbage (-1, 0, ms-precision values, strings, etc.).
+        if not isinstance(ts, (int, float)):
+            continue
+        ts_int = int(ts)
+        if ts_int < 1_000_000_000 or ts_int > 5_000_000_000:
+            continue
+        if ts_int in seen:
+            continue
+        seen.add(ts_int)
         try:
-            raw = cal.loc["Earnings Date"].values.tolist()
-        except Exception:
-            return None
-    else:
-        return None
+            candidates.append(datetime.fromtimestamp(ts_int, tz=timezone.utc))
+        except (ValueError, OSError):
+            continue
 
-    if raw is None:
-        return None
-    if not isinstance(raw, (list, tuple)):
-        raw = [raw]
-
-    result: list[datetime] = []
-    for d in raw:
-        if isinstance(d, datetime):
-            # tz-naive datetime: assume yfinance Yahoo Finance is reporting
-            # in America/New_York (the default for US listings) and tag.
-            if d.tzinfo is None and ZoneInfo is not None:
-                d = d.replace(tzinfo=ZoneInfo("America/New_York"))
-            result.append(d)
-        # Plain dates (no time) and other shapes carry no BMO/AMC signal.
-
-    return result or None
+    return candidates or None
 
 
 def infer_hour_from_datetime(dt: datetime) -> str | None:
@@ -315,25 +318,31 @@ def infer_hour_from_datetime(dt: datetime) -> str | None:
 
 
 def fetch_yfinance_hour_for_date(ticker: str, earnings_date: str) -> str | None:
-    """Convenience wrapper: query yfinance, find a datetime matching
-    `earnings_date` (ISO YYYY-MM-DD), and infer 'bmo'/'amc' from its time.
+    """Convenience wrapper: query yfinance, find a timestamp whose local
+    America/New_York date matches `earnings_date` (ISO YYYY-MM-DD), and
+    infer 'bmo'/'amc' from its time-of-day.
 
-    Returns None if yfinance has nothing, has no entry for this date, or
-    the entry's time doesn't fall outside market hours. Safe to call from
-    daily sync — failures are logged at debug level only.
+    Date matching is done in America/New_York so a Yahoo timestamp like
+    2026-05-04T20:00 UTC (= 16:00 ET) correctly matches earnings_date
+    "2026-05-04" — not the UTC date, which on a midnight-UTC boundary
+    could be a different calendar day.
+
+    Returns None if yfinance has nothing for this ticker, no candidate
+    matches the target date, or the matching candidate's time falls
+    inside market hours (mid-session releases are ambiguous). Safe to
+    call from daily sync — failures are logged at debug level only.
     """
     dts = fetch_yfinance_earnings_datetime(ticker)
     if not dts:
         return None
-    target = earnings_date
+    if ZoneInfo is None:
+        return None
+    tz = ZoneInfo("America/New_York")
     for dt in dts:
         try:
-            if ZoneInfo is not None:
-                local = dt.astimezone(ZoneInfo("America/New_York"))
-            else:
-                local = dt
-            if local.date().isoformat() == target:
-                return infer_hour_from_datetime(dt)
+            local = dt.astimezone(tz)
         except Exception:
             continue
+        if local.date().isoformat() == earnings_date:
+            return infer_hour_from_datetime(dt)
     return None
