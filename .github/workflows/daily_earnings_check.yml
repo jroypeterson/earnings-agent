@@ -63,6 +63,12 @@ jobs:
         uses: dawidd6/action-download-artifact@bf251b5aa9c2f7eeb574a96ee720e24f801b7c11  # v6
         with:
           name: earnings-db
+          # search_artifacts: enumerate runs and find the most recent one
+          # that ACTUALLY has the named artifact (default behavior would
+          # pick the latest successful run regardless of artifact presence
+          # and fail when e.g. the watchdog workflow ran most recently
+          # without uploading earnings-db).
+          search_artifacts: true
           workflow_search: true
           workflow_conclusion: success
           # Scope to main so a feature-branch run never pollutes the
