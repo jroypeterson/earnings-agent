@@ -1890,6 +1890,109 @@ def _yf_dates_signature(yf_dates: list[date]) -> str:
     return ",".join(d.isoformat() for d in sorted(yf_dates))
 
 
+def _apply_edgar_auto_correction(
+    conn,
+    cal_service,
+    ticker: str,
+    old_event_date: str,
+    new_event_date: str,
+) -> bool:
+    """Move an event from old_event_date to new_event_date and lock it.
+
+    Used when SEC EDGAR Item 2.02 confirms a press-release date that
+    differs from what's stored. Atomically:
+      - inserts a new DB row at the EDGAR date, copying forward fields,
+        with date_locked=1 to prevent Finnhub from overriding next run
+      - deletes the old DB row
+      - delete+recreates the calendar event at the new date
+
+    Idempotent: if old_event_date == new_event_date, no-op.
+    Returns True if a correction was applied.
+    """
+    if old_event_date == new_event_date:
+        return False
+    existing = find_existing_event(conn, ticker, old_event_date)
+    if not existing:
+        return False
+
+    # Re-query yfinance for the new date so the new row carries fresh
+    # hour and call signals.
+    new_hour_yf = None
+    new_call_iso = None
+    new_call_source = None
+    try:
+        new_hour_yf = fetch_yfinance_hour_for_date(ticker, new_event_date)
+    except Exception:
+        pass
+    try:
+        call_dt = fetch_yfinance_call_for_date(ticker, new_event_date)
+        if call_dt is not None:
+            new_call_iso = call_dt.isoformat()
+            new_call_source = "yfinance"
+    except Exception:
+        pass
+
+    # Insert new row at the EDGAR date, then delete old row.
+    upsert_event(
+        conn, ticker, new_event_date, existing.get("event_hour"), gcal_id=None,
+        quarter=existing.get("quarter"),
+        eps_estimate=existing.get("eps_estimate"),
+        eps_actual=existing.get("eps_actual"),
+        rev_estimate=existing.get("rev_estimate"),
+        rev_actual=existing.get("rev_actual"),
+        reported=existing.get("reported", False),
+        tier=existing.get("tier", 3),
+        company_name=existing.get("company_name"),
+        source_fingerprint=f"{ticker}:{new_event_date}",
+        event_hour_yf=new_hour_yf,
+        call_datetime_utc=new_call_iso,
+        call_source=new_call_source,
+    )
+    set_date_lock(conn, ticker, new_event_date, locked=True)
+    conn.execute(
+        "DELETE FROM events WHERE ticker = ? AND event_date = ?",
+        (ticker, old_event_date),
+    )
+    conn.commit()
+
+    # Move the calendar event. Best-effort — DB has already been
+    # corrected, so a calendar API hiccup leaves us in a recoverable
+    # state (next reconcile will re-create from DB).
+    old_gcal_id = existing.get("gcal_id")
+    if old_gcal_id and cal_service:
+        try:
+            delete_calendar_event(cal_service, GOOGLE_CALENDAR_ID, old_gcal_id)
+        except CalendarError as exc:
+            logger.warning(f"Could not delete old calendar event for {ticker}: {exc}")
+        try:
+            new_gcal_id = create_calendar_event(
+                cal_service, GOOGLE_CALENDAR_ID, ticker,
+                new_event_date, existing.get("event_hour"),
+                quarter=existing.get("quarter"),
+                eps_estimate=existing.get("eps_estimate"),
+                eps_actual=existing.get("eps_actual"),
+                revenue_estimate=existing.get("rev_estimate"),
+                revenue_actual=existing.get("rev_actual"),
+                tier=existing.get("tier", 3),
+                source_fingerprint=f"{ticker}:{new_event_date}",
+                hour_yf=new_hour_yf,
+                call_datetime_utc=new_call_iso,
+            )
+            conn.execute(
+                "UPDATE events SET gcal_id = ? WHERE ticker = ? AND event_date = ?",
+                (new_gcal_id, ticker, new_event_date),
+            )
+            conn.commit()
+        except CalendarError as exc:
+            logger.error(f"Could not create new calendar event for {ticker}: {exc}")
+
+    logger.info(
+        f"EDGAR auto-correction: {ticker} moved {old_event_date} -> {new_event_date} "
+        f"(date_locked=1)"
+    )
+    return True
+
+
 def run_cross_check(dry_run: bool = False, days_ahead: int = 14):
     """
     Compare Finnhub's date against yfinance for upcoming Tier 1/2 events.
@@ -1931,14 +2034,69 @@ def run_cross_check(dry_run: bool = False, days_ahead: int = 14):
         f"next {days_ahead} day(s) against yfinance"
     )
 
+    # Set up calendar service once for the auto-correction path. Best-
+    # effort — auto-correction still updates DB if calendar is down.
+    cal_service = None
+    if not dry_run and GOOGLE_CALENDAR_ID:
+        try:
+            cal_service = get_calendar_service()
+        except Exception as exc:
+            logger.warning(f"Calendar service unavailable for cross-check: {exc}")
+
     new_disagreements = []  # list[tuple[DisagreementRow, signature_str]]
     suppressed_count = 0
     yf_missing = 0
+    edgar_corrections = 0
     for ticker, event_date, tier, company_name, last_sig, date_confirmed in upcoming:
         yf_dates = fetch_yfinance_earnings_date(ticker)
         if yf_dates is None:
             yf_missing += 1
             continue
+
+        # EDGAR 8-K Item 2.02 tiebreaker runs FIRST — before
+        # _yfinance_agrees and before the suppression filter — so
+        # authoritative SEC evidence overrides every heuristic. This
+        # catches UFPT-class cases where Finnhub picked the call day
+        # and yfinance picked the release day (1-day diff falls within
+        # _yfinance_agrees' tolerance, so it'd otherwise be silently
+        # treated as agreement).
+        edgar_release: str | None = None
+        try:
+            fh_d = date.fromisoformat(event_date)
+            yf_d_min = min(yf_dates) if yf_dates else fh_d
+            yf_d_max = max(yf_dates) if yf_dates else fh_d
+            window_start = min(fh_d, yf_d_min) - timedelta(days=1)
+            window_end = max(fh_d, yf_d_max) + timedelta(days=1)
+            if window_start <= today:
+                # Cap upper bound at today — EDGAR can't have a filing
+                # for a future date.
+                edgar_window_end = min(window_end, today)
+                filing = find_earnings_release_filing(
+                    ticker, window_start, edgar_window_end
+                )
+                if filing is not None:
+                    edgar_release = filing.filing_date
+                    logger.info(
+                        f"EDGAR Item 2.02 for {ticker} filed {filing.filing_date} "
+                        f"(accession {filing.accession})"
+                    )
+        except Exception as exc:
+            logger.debug(f"EDGAR tiebreaker failed for {ticker}: {exc}")
+
+        # When EDGAR contradicts what's stored, atomically move the
+        # event to the EDGAR date and lock it. Skip the rest of cross-
+        # check for this ticker — the new locked row won't show in
+        # subsequent `upcoming` queries.
+        if edgar_release and edgar_release != event_date and not dry_run:
+            try:
+                applied = _apply_edgar_auto_correction(
+                    conn, cal_service, ticker, event_date, edgar_release
+                )
+                if applied:
+                    edgar_corrections += 1
+                    continue
+            except Exception as exc:
+                logger.error(f"EDGAR auto-correction failed for {ticker}: {exc}")
 
         if _yfinance_agrees(event_date, yf_dates):
             # Agreement restored — clear any stale alert state
@@ -1950,51 +2108,9 @@ def run_cross_check(dry_run: bool = False, days_ahead: int = 14):
                 )
             continue
 
-        # EDGAR 8-K Item 2.02 tiebreaker runs BEFORE the suppression
-        # filter so the auto-lock fires even on previously-alerted
-        # disagreements (which the suppression would otherwise skip).
-        # SEC's filing receipt is authoritative — when present, the 2.02
-        # filing date outranks Finnhub and yfinance as a third
-        # independent source.
-        edgar_release: str | None = None
-        try:
-            fh_d = date.fromisoformat(event_date)
-            yf_d_min = min(yf_dates) if yf_dates else fh_d
-            yf_d_max = max(yf_dates) if yf_dates else fh_d
-            window_start = min(fh_d, yf_d_min) - timedelta(days=1)
-            window_end = max(fh_d, yf_d_max) + timedelta(days=1)
-            if window_start <= today:
-                # Cap the upper bound at today — EDGAR can't have a
-                # filing for a future date.
-                edgar_window_end = min(window_end, today)
-                filing = find_earnings_release_filing(ticker, window_start, edgar_window_end)
-                if filing is not None:
-                    edgar_release = filing.filing_date
-                    logger.info(
-                        f"EDGAR Item 2.02 for {ticker} filed {filing.filing_date} "
-                        f"(accession {filing.accession}) — overrides Finnhub/yfinance"
-                    )
-        except Exception as exc:
-            logger.debug(f"EDGAR tiebreaker failed for {ticker}: {exc}")
-
-        # Auto-lock immediately when EDGAR disagrees with what's stored.
-        # Don't gate on dedup state — locking is idempotent and safe to
-        # re-apply.
-        if edgar_release and edgar_release != event_date:
-            try:
-                set_date_lock(conn, ticker, edgar_release, locked=True)
-                logger.info(
-                    f"Auto-locked {ticker} to EDGAR-confirmed date "
-                    f"{edgar_release} (was Finnhub {event_date})"
-                )
-            except Exception as exc:
-                logger.warning(f"Could not auto-lock {ticker}: {exc}")
-
         current_sig = _yf_dates_signature(yf_dates)
         if last_sig == current_sig and not edgar_release:
             # Already alerted with these yf dates AND no new EDGAR signal.
-            # When EDGAR confirmed something this run, fall through and
-            # post a fresh Slack message so the user sees the auto-lock.
             suppressed_count += 1
             continue
 
@@ -2048,6 +2164,7 @@ def run_cross_check(dry_run: bool = False, days_ahead: int = 14):
 
     logger.info(
         f"Cross-check: {len(new_disagreements)} new disagreement(s), "
+        f"{edgar_corrections} EDGAR auto-correction(s), "
         f"{suppressed_count} suppressed (already alerted), "
         f"{yf_missing} tickers with no yfinance data"
     )
