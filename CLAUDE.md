@@ -17,6 +17,7 @@ python main.py --cleanup           # Remove duplicate Calendar events
 python main.py --reconcile-calendar # Detect + auto-fix calendar/Finnhub date drift (silent no-op if synced)
 python main.py --cross-check       # Compare Finnhub vs yfinance for Tier 1/2 upcoming; alert on disagreement (includes EDGAR cadence)
 python main.py --check-announcements # Scan configured IR RSS feeds; upgrade estimated Tier 1 events to confirmed when found
+python main.py --check-ir-emails   # Scan Gmail (via gmail_token.json) for IR-alert pre-announcements on Tier 1/2 estimated events; auto-confirm + record Gmail thread URL
 python main.py --check-replies     # Poll Slack threads for replies on open questions; apply commands (lock/wait/snooze/ignore/etc) to DB
 python main.py --refresh-descriptions # One-shot: rewrite title + description for all tagged upcoming calendar events
 python main.py --lock TICKER:YYYY-MM-DD     # Pin a date so sync/reconcile won't move it
@@ -49,7 +50,22 @@ Getting the earnings date right is the primary goal. The stack of safeguards, fr
 - **A3 — Urgent Slack** for Tier 1 date moves within 5 business days. Posted in addition to the normal summary; kept simple (no ack, no repeat logic). Business-days helper is `_business_days_until()` in `main.py`.
 - **Confirmed/estimated flag (`date_confirmed`).** Derived from Finnhub's `hour` field: `bmo`/`amc`/`dmh` = confirmed timing → the company has announced the date; empty hour = Finnhub projecting from historical cadence. Surfaced in calendar title (" (est.)" suffix), calendar description ("Status: Confirmed/Estimated" line), and cross-check Slack alerts. Use `--refresh-descriptions` after schema changes to backfill existing events.
 - **IR RSS announcement scanner (`--check-announcements`).** Only scans tickers configured in `ir_feeds.json`. Aggregator RSS (Seeking Alpha, Nasdaq, Business Wire, PR Newswire) was tested and **empirically does not carry company IR press releases** — it surfaces analyst commentary and post-release transcripts. So this is Tier 1-only and opt-in per company. When a match is found, upgrades `date_confirmed=1` and stores `announcement_url`. Regex is tight: verb + same-quarter marker, excluding "earnings preview / gears up / what to expect / transcript" noise.
+- **Gmail IR-alert scanner (`--check-ir-emails`).** When `gmail_token.json` is present (locally) or `GMAIL_TOKEN_JSON`+`GMAIL_CLIENT_CREDENTIALS_JSON` secrets are set (CI), polls Gmail for IR-alert emails from known platforms (Notified, Q4, GlobeNewswire, BusinessWire, PR Newswire, InvestorRoom) plus mail to `floridabusinessman+ir@gmail.com`. Reuses the same announcement-detection regex as `--check-announcements` so noise filtering is consistent. On match, sets `date_confirmed=1` and stores the Gmail thread URL as `announcement_url`. Authed against `floridabusinessman@gmail.com` (separate from primary `jroypeterson@gmail.com` to keep IR alerts isolated). OAuth client reused from daily-reads project. See `gmail_client.py` and `scripts/authorize_gmail.py`.
+- **EDGAR 8-K Item 2.02 auto-correction (in `--cross-check`).** When SEC EDGAR shows a 2.02 ("Results of Operations") filing in the candidate window for a Tier 1/2 disagreement, the filing date IS ground truth. `_apply_edgar_auto_correction()` atomically: inserts new DB row at EDGAR date with `date_locked=1`, deletes old DB row, delete+recreates calendar event at EDGAR date, re-queries yfinance for hour/call info. Runs BEFORE `_yfinance_agrees` and BEFORE the suppression filter — SEC evidence overrides every heuristic, including the ±1-day tolerance that masks UFPT-class split-day patterns. Verified live: UFPT (Finnhub said May 5, EDGAR said May 4) auto-corrected.
+- **yfinance hour fallback via `Ticker.info`.** When Finnhub's `hour` is empty for an upcoming Tier 1/2 event, infer from yfinance's `earningsTimestamp`/`Start`/`End` (Unix-seconds, time-of-day preserved). Reads via `Ticker.info`, NOT `Ticker.calendar` or `get_earnings_dates()` — those wrappers strip time-of-day. Market-session boundaries: `< 09:30 ET → bmo`, `>= 16:00 ET → amc`, mid-session → None (catches 8:30 ET pre-open releases the original `<9 / >16` heuristic missed). Hour stored separately in `event_hour_yf` (v11 column) so `event_hour` and `date_confirmed` keep Finnhub-canonical semantics.
+- **Conference-call timestamp tracking (v12 schema).** Reads `earningsCallTimestampStart`/`End` from yfinance and stores in `call_datetime_utc` (with `call_source='yfinance'`). Calendar event description renders `Press release: <timing>` + `Conference call: <weekday Mon DD H:MM ET>` (split-day) or `Conference call: H:MM ET (same day)`. Calendar event itself anchors to the press-release date; the call line is descriptive context. Cross-check classifies "release/call split-day pattern" (yfinance call date matches Finnhub date but release date doesn't) as informational, not a true conflict. Calendar title for reported events: `<TICKER> Rpt'd Earnings` (compact form vs old `[REPORTED] X Earnings Release`).
 - **Slack-reply resolution (`--check-replies`, v9).** When `SLACK_BOT_TOKEN`+`SLACK_CHANNEL_ID` are set, cross-check / unseen / urgent alerts post a summary header + one threaded parent message per row instead of one batched webhook message. Each thread parent advertises a small command grammar (`lock fh|yf|YYYY-MM-DD`, `confirm fh`, `wait`, `snooze Nd|Nw`, `ignore`, `reported`, `ir <url>`, `note <text>`, `help`, `status`); replying in a thread drives DB state via the `--check-replies` poller. State is tracked on the `events` row (`slack_thread_ts`, `slack_question_kind`, `slack_last_reply_ts`, `question_state`, `question_snooze_until`, `question_first_seen`). Webhook batched-message path stays as fallback when bot token is unset, but reply commands then have no effect. Parser: `slack_replies.py`. Web client: `slack_api.py`.
+
+## Source priority hierarchy (date verification)
+
+When sources disagree on the press-release date, the agent's tiebreaker order:
+
+1. **EDGAR 8-K Item 2.02 (post-hoc)** — authoritative SEC filing. Auto-corrects + locks when found.
+2. **IR email alert (forward-looking, `--check-ir-emails`)** — company's own pre-announcement email. Auto-confirms + records Gmail URL.
+3. **IR RSS feed (forward-looking, `--check-announcements`)** — company's own RSS. Auto-confirms + records URL.
+4. **Finnhub date** — primary source for upcoming events.
+5. **yfinance** — release-date validation + hour/call inference (fallback).
+6. **Manual `--lock`** — user override of last resort.
 
 ## Gotchas
 
@@ -61,11 +77,13 @@ Getting the earnings date right is the primary goal. The stack of safeguards, fr
 - **Idempotent result detection.** `run_check_results` skips events already marked `reported=1`. DB update happens *after* Slack post succeeds, so a Slack failure leaves records unmarked for the next run to retry.
 - **`run()` shares `notify_results()` with `run_check_results`** — the 6 AM daily sync also posts Slack alerts when it detects overnight AMC actuals. Don't re-post from a separate path.
 - **DB artifact is shared across three workflows.** `daily_earnings_check`, `reconcile_calendar`, `post_earnings_check` all restore/upload the `earnings-db` artifact. They share the `concurrency: group: earnings-db-writer` setting so they serialize and don't clobber each other. `weekly_digest` doesn't persist the DB so it's not in the group.
-- **Schema is at v10.** `storage.py CURRENT_SCHEMA_VERSION=10`. Migrations are non-destructive. Fresh-DB `CREATE TABLE` duplicates v2–v10 columns; when adding a column, update both the migration and the fresh-DB statement. Column history: v3=`unseen_run_count`, v4=`date_locked`, v5=`last_xcheck_yf_dates`, v6=`date_confirmed`, v7=backfill for v6, v8=`announcement_url`, v9=`slack_thread_ts` + `slack_question_kind` + `slack_last_reply_ts` + `question_state` + `question_snooze_until` + `question_first_seen` + `kv_store` table, v10=`slack_channel_id` (so `--check-replies` knows which channel to poll for each thread).
+- **Schema is at v12.** `storage.py CURRENT_SCHEMA_VERSION=12`. Migrations are non-destructive. Fresh-DB `CREATE TABLE` duplicates v2–v12 columns; when adding a column, update both the migration and the fresh-DB statement. The `test_fresh_db_schema_matches_migration_path` test in `test_dedup.py` enforces this invariant. Column history: v3=`unseen_run_count`, v4=`date_locked`, v5=`last_xcheck_yf_dates`, v6=`date_confirmed`, v7=backfill for v6, v8=`announcement_url`, v9=`slack_thread_ts` + `slack_question_kind` + `slack_last_reply_ts` + `question_state` + `question_snooze_until` + `question_first_seen` + `kv_store` table, v10=`slack_channel_id`, v11=`event_hour_yf` (yfinance-inferred hour), v12=`call_datetime_utc`+`call_source` (conference-call timestamp).
 - **SEC EDGAR requires contact info in User-Agent.** Default in `config.py` is `"earnings-agent (jroypeterson@gmail.com)"`. Override via `SEC_EDGAR_USER_AGENT` env var. SEC returns HTTP 403/malformed responses to generic User-Agents. Rate-limited self-throttle (~8 req/s) to stay under the 10 req/s ceiling.
 - **`.ticker_cik_cache.json`** is a local 30-day cache of SEC's ticker→CIK mapping (800KB blob). Gitignored.
 - **`ir_feeds.json` is empty by default.** Aggregator RSS testing showed Seeking Alpha / Nasdaq / Business Wire / PR Newswire do NOT carry company IR press releases (only analyst commentary). So `--check-announcements` silently skips any ticker without an explicit per-company IR RSS URL. To use: populate `ir_feeds.json` with `{"TICKER": "https://ir.example.com/rss"}` entries, or reply `ir <url>` in a question thread (writes to `kv_store.ir_feed:TICKER` which `_load_ir_feeds()` overlays on top of the JSON).
-- **Schema is at v10.** v9 adds `slack_thread_ts`, `slack_question_kind`, `slack_last_reply_ts`, `question_state`, `question_snooze_until`, `question_first_seen` on `events` (Slack-reply state), plus a generic `kv_store(key, value)` table for things mutable via Slack reply (IR feeds, free-text notes). v10 adds `slack_channel_id` so the reply poller can find threads regardless of which channel they were posted to.
+- **Calendar artifact persistence + branch scoping.** `dawidd6/action-download-artifact@v6` (pinned to commit SHA) used in all three uploading workflows with `search_artifacts: true`, `workflow_search: true`, and `branch: main`. The default `actions/download-artifact@v4` only sees artifacts from the same run — that bug silently produced fresh-DB runs every time and erased locks/Slack-state/dedup. Upload guarded with `if: github.ref == 'refs/heads/main'` so feature-branch runs cannot pollute the persistent artifact. `EA_DB_BOOTSTRAPPED=true` repo variable is set: missing artifact post-bootstrap = Slack alert + workflow failure (no more silent state loss).
+- **Watchdog workflow** (`.github/workflows/watchdog.yml`) runs 3x/day at off-peak minutes (13:37/17:37/21:37 UTC). Queries last-success per sibling workflow via `gh run list`, alerts to `#status-reports` when stale beyond per-workflow thresholds (27h daily, 70h reconcile, 75h post-earnings, 192h weekly), and auto-dispatches a recovery run via `gh workflow run`. Per-workflow recent-failure window guards against dispatch-loops on permanently-failing workflows.
+- **Cron offsets.** All crons moved off `:00` (worst window for GitHub Actions delays/skips). Daily: 11:13/19:23 UTC. Reconcile: 14:09/17:09/20:09 UTC. Post-earnings: 22:37 UTC. Weekly digest: 16:43 UTC Sun. Watchdog: 13:37/17:37/21:37 UTC.
 
 ## Slack channel routing
 
@@ -76,11 +94,14 @@ Getting the earnings date right is the primary goal. The stack of safeguards, fr
 
 | Workflow | Cron (UTC) | Local ET (EDT) | Purpose |
 |---|---|---|---|
-| `daily_earnings_check.yml` | `0 11 * * *` | ~7 AM | Full `main.py` daily sync + `--cross-check` |
-| `daily_earnings_check.yml` | `0 19 * * 1-5` | ~3 PM (weekdays) | Afternoon redundancy — catches mid-day Finnhub updates |
-| `reconcile_calendar.yml` | `0 14,17,20 * * 1-5` | ~10 AM / 1 PM / 4 PM | Lightweight drift auto-repair (silent unless drift found) + `--check-replies` poll |
-| `weekly_digest.yml` | `0 16 * * 0` | Sunday ~12 PM | Weekly digest to Slack |
-| `post_earnings_check.yml` | `0 22 * * 1-5` | Weekday ~6 PM | Results sweep (today + yesterday for AMC overnight catch-up) |
+| `daily_earnings_check.yml` | `13 11 * * *` | ~7:13 AM | Full `main.py` daily sync + `--refresh-descriptions` + `--cross-check` (with EDGAR auto-correction) + `--check-ir-emails` + `--check-replies` |
+| `daily_earnings_check.yml` | `23 19 * * 1-5` | ~3:23 PM (weekdays) | Afternoon redundancy — catches mid-day Finnhub updates |
+| `reconcile_calendar.yml` | `9 14,17,20 * * 1-5` | ~10:09 AM / 1:09 PM / 4:09 PM | Lightweight drift auto-repair (silent unless drift found) + `--check-replies` poll |
+| `weekly_digest.yml` | `43 16 * * 0` | Sunday ~12:43 PM | Weekly digest to Slack |
+| `post_earnings_check.yml` | `37 22 * * 1-5` | Weekday ~6:37 PM | Results sweep (today + yesterday for AMC overnight catch-up) |
+| `watchdog.yml` | `37 13,17,21 * * *` | ~9:37 AM / 1:37 PM / 5:37 PM | Detect stale sibling workflows + auto-dispatch recovery |
+
+All crons offset off `:00` to avoid GitHub Actions top-of-hour delays/skips.
 
 All workflows sparse-checkout `jroypeterson/Coverage-Manager/exports/` (the repo is public). All DB-writing workflows share `concurrency: group: earnings-db-writer`. Every workflow has an `if: failure()` step that Slacks the run URL on non-zero exit.
 
@@ -92,21 +113,29 @@ Optional for Slack-reply flow: `SLACK_BOT_TOKEN` (xoxb-...) + `SLACK_CHANNEL_ID`
 
 Optional for status-reports routing: `SLACK_WEBHOOK_STATUS` + `SLACK_STATUS_CHANNEL_ID`. Cross-check / unseen / reconcile alerts post here instead of #earnings. Bot must be a member of #status-reports for threaded replies to work. Falls back to the earnings webhook/channel when unset.
 
+Optional for Gmail IR-alert scanning: `GMAIL_TOKEN_JSON` + `GMAIL_CLIENT_CREDENTIALS_JSON` (both set as of 2026-05-05). Token authed against `floridabusinessman@gmail.com` with `gmail.readonly` scope. OAuth client reused from the daily-reads project (same Google Cloud project). When unset, `--check-ir-emails` step prints "GMAIL_TOKEN_JSON secret not set — skipping IR-email scan" and exits 0. Generated locally via `scripts/authorize_gmail.py`. See `gmail_client.py`.
+
+## Required repo variables
+
+- `EA_DB_BOOTSTRAPPED=true` (set 2026-05-04). Activates the post-bootstrap fail-loud check on the `earnings-db` artifact restore in all three uploading workflows. Missing artifact = Slack alert + workflow failure rather than a silent fresh-DB run that loses locks/Slack-state/dedup.
+
 ## Local `.env`
 
 Same keys as above (minus the JSON-blob form of Google creds — local uses the `credentials.json` file path) plus `COVERAGE_MANAGER_PATH`, `EMAIL_TO`, and optionally `SEC_EDGAR_USER_AGENT` (overrides the hardcoded default contact info).
 
 ## Module map
 
-- `main.py` — CLI entry + all top-level flows (`run`, `run_reconcile_calendar`, `run_check_results`, `run_cross_check`, `run_check_announcements`, `run_refresh_descriptions`, lock management).
+- `main.py` — CLI entry + all top-level flows (`run`, `run_reconcile_calendar`, `run_check_results`, `run_cross_check`, `run_check_announcements`, `run_check_ir_emails`, `run_refresh_descriptions`, `_apply_edgar_auto_correction`, lock management).
 - `finnhub_client.py` — Finnhub earnings calendar with adaptive chunk splitting + fail-fast.
-- `storage.py` — SQLite schema + non-destructive migrations (v8) + upsert/lock helpers.
-- `calendar_sync.py` — Google Calendar CRUD, deduplication, description rendering (confirmed/estimated status).
-- `coverage.py` — loads ticker universe from Coverage Manager exports.
-- `digest.py`, `notifications.py` — weekly digest + Slack Block Kit builders (cross-check, reconcile, unseen, urgent, heartbeat).
+- `storage.py` — SQLite schema (v12) + non-destructive migrations + upsert/lock helpers.
+- `calendar_sync.py` — Google Calendar CRUD, deduplication, description rendering (Press release / Conference call lines), drift detection (`calendar_event_drift_kind` returns 'fresh'/'text'/'shape').
+- `coverage.py` — loads ticker universe from Coverage Manager exports + freshness check (`compute_coverage_freshness`, alerts on staleness >7d).
+- `digest.py`, `notifications.py` — weekly digest + Slack Block Kit builders (cross-check, reconcile, unseen, urgent, heartbeat). Cross-check verdict logic includes EDGAR auto-correction recognition + split-day pattern downgrade.
 - `ticktick.py` — TickTick task CRUD.
-- `market_data.py` — yfinance wrappers (YTD, post-earnings move, cross-check earnings date).
-- `edgar_client.py` — SEC EDGAR 8-K fetcher + prior-year same-quarter cadence inference.
-- `rss_client.py` — RSS/Atom parser + conservative announcement detector for IR feeds. `_load_ir_feeds()` reads `ir_feeds.json` (committed defaults) and overlays `kv_store.ir_feed:*` (mutable via Slack reply).
+- `market_data.py` — yfinance wrappers. `Ticker.info`-based earnings timestamps (release + call) preserve time-of-day; `Ticker.calendar` strips it. Includes `fetch_yfinance_earnings_timestamps`, `fetch_yfinance_hour_for_date`, `fetch_yfinance_call_for_date`, `infer_hour_from_datetime` (NYSE session boundaries).
+- `edgar_client.py` — SEC EDGAR 8-K fetcher + prior-year same-quarter cadence inference + `find_earnings_release_filing()` for Item 2.02 post-hoc tiebreaker.
+- `rss_client.py` — RSS/Atom parser + conservative announcement detector for IR feeds. `_load_ir_feeds()` reads `ir_feeds.json` (committed defaults) and overlays `kv_store.ir_feed:*` (mutable via Slack reply). Regex constants reused by `gmail_client.py`.
+- `gmail_client.py` — Gmail API wrapper for IR-alert scanning. `get_gmail_service` (auto-refreshes token), `list_message_ids`, `get_message` (HTML stripped), `detect_earnings_announcement` (delegates regex to rss_client), `is_known_ir_sender`. Reads from `gmail_token.json`.
+- `scripts/authorize_gmail.py` — one-shot OAuth flow producing `gmail_token.json`. Reuses daily-reads OAuth client (`gmail_client_credentials.json` copied from `C:/Users/jroyp/Dropbox/API Keys/gmail_oauth_client.json`).
 - `slack_api.py` — Slack Web API client (bot-token): `chat.postMessage`, `conversations.replies`. Used by the threaded question flow.
 - `slack_replies.py` — reply-command parser + help/status text. `parse_reply(text, ctx) -> ParsedAction`. Caller dispatches the action via `_apply_action` in `main.py`.
