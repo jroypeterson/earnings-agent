@@ -9,6 +9,7 @@ Usage:
     python main.py --cleanup --dry-run # Preview which duplicates would be deleted
 """
 
+import re
 import sys
 import time
 import argparse
@@ -1739,6 +1740,195 @@ def run_refresh_descriptions(dry_run: bool = False, days_ahead: int = 90):
 # ---------------------------------------------------------------------------
 
 
+def run_check_ir_emails(
+    dry_run: bool = False,
+    days_ahead: int = 30,
+    lookback_days: int = 14,
+    max_messages: int = 200,
+):
+    """
+    Scan Gmail for IR press-release emails that pre-announce upcoming
+    earnings dates for Tier 1/2 estimated events.
+
+    Query is bounded to known IR distribution platforms (Notified, Q4,
+    GlobeNewswire, BusinessWire, PR Newswire) plus mail to the +ir
+    alias if present. For each matching message, runs the same
+    announcement-detection regex used by --check-announcements
+    (rss_client.detect_announcement). On match, sets date_confirmed=1
+    and stores the Gmail thread URL as announcement_url so future
+    runs don't re-process and the user can click through to the
+    original email.
+
+    No-ops cleanly when gmail_token.json isn't present (e.g., the
+    integration hasn't been configured for this environment yet).
+    """
+    try:
+        from gmail_client import (
+            get_gmail_service, list_message_ids, get_message,
+            detect_earnings_announcement, extract_sender_email,
+            GmailError,
+        )
+    except ImportError as exc:
+        logger.error(f"gmail_client unavailable: {exc}")
+        return
+
+    try:
+        svc = get_gmail_service()
+    except GmailError as exc:
+        logger.info(f"Gmail integration not configured (skipping): {exc}")
+        return
+
+    conn = init_db()
+    today = date.today()
+    horizon = (today + timedelta(days=days_ahead)).isoformat()
+
+    # Pull Tier 1/2 estimated events that haven't been confirmed yet
+    # AND haven't already been linked to an announcement.
+    cur = conn.execute(
+        "SELECT ticker, event_date, company_name, tier "
+        "FROM events "
+        "WHERE tier <= 2 AND reported = 0 AND date_confirmed = 0 "
+        "AND announcement_url IS NULL "
+        "AND event_date >= ? AND event_date <= ? "
+        "ORDER BY event_date, ticker",
+        (today.isoformat(), horizon),
+    )
+    candidates = cur.fetchall()
+    if not candidates:
+        logger.info("Gmail IR scan: no Tier 1/2 estimated events in window")
+        conn.close()
+        return
+
+    logger.info(
+        f"Gmail IR scan: {len(candidates)} Tier 1/2 estimated event(s) to check "
+        f"against the last {lookback_days} days of mail"
+    )
+
+    # One broad Gmail query — IR alert platforms + the +ir alias.
+    # Then we iterate per-event and match by ticker or company name in
+    # subject/body. Cheaper than per-ticker queries when there are 100+
+    # estimated events to check.
+    query = (
+        f"(from:(notified.com OR q4inc.com OR globenewswire.com OR "
+        f"businesswire.com OR prnewswire.com OR investorroom.com) "
+        f"OR to:floridabusinessman+ir@gmail.com) "
+        f"newer_than:{lookback_days}d"
+    )
+    try:
+        message_ids = list_message_ids(svc, query, max_results=max_messages)
+    except GmailError as exc:
+        logger.error(f"Gmail list failed: {exc}")
+        conn.close()
+        return
+
+    logger.info(f"Gmail IR scan: {len(message_ids)} candidate message(s)")
+    if not message_ids:
+        conn.close()
+        return
+
+    # Pre-fetch all message bodies once. Each ticker iteration is a
+    # cheap in-memory scan over this list.
+    messages = []
+    for mid in message_ids:
+        try:
+            msg = get_message(svc, mid)
+            messages.append(msg)
+        except GmailError as exc:
+            logger.debug(f"Failed to fetch {mid}: {exc}")
+
+    newly_confirmed: list[dict] = []
+    for ticker, event_date, company_name, tier in candidates:
+        ticker_pat = ticker.upper()
+        # Match if subject OR body contains the ticker (whole word) or
+        # the company name (case-insensitive). Company name match is a
+        # fallback for emails that don't ticker-tag in the subject.
+        company_lower = (company_name or "").lower()
+        relevant = []
+        for msg in messages:
+            text = f"{msg.subject} {msg.body}"
+            if re.search(rf"\b{re.escape(ticker_pat)}\b", text):
+                relevant.append(msg)
+            elif company_lower and len(company_lower) >= 5 and company_lower in text.lower():
+                relevant.append(msg)
+
+        if not relevant:
+            continue
+
+        evt_dt = date.fromisoformat(event_date)
+        # Newest first — if multiple matching emails exist, use the most
+        # recent one (a re-announcement supersedes the earlier one).
+        relevant.sort(key=lambda m: m.received_date, reverse=True)
+        for msg in relevant:
+            announced, matched = detect_earnings_announcement(msg, evt_dt)
+            if not matched:
+                continue
+            sender_addr = extract_sender_email(msg.sender)
+            gmail_url = f"https://mail.google.com/mail/u/0/#inbox/{msg.thread_id}"
+            logger.info(
+                f"  {ticker}: IR email match [{msg.received_date}] from "
+                f"{sender_addr} — {msg.subject[:80]}"
+            )
+            newly_confirmed.append({
+                "ticker": ticker,
+                "event_date": event_date,
+                "company_name": company_name or "",
+                "subject": msg.subject,
+                "sender": sender_addr,
+                "received_date": msg.received_date.isoformat(),
+                "gmail_url": gmail_url,
+                "announced_date": (
+                    announced.isoformat() if announced else None
+                ),
+            })
+            if not dry_run:
+                conn.execute(
+                    "UPDATE events SET date_confirmed = 1, announcement_url = ? "
+                    "WHERE ticker = ? AND event_date = ?",
+                    (gmail_url, ticker, event_date),
+                )
+            break  # one match per ticker is enough
+
+    if not dry_run:
+        conn.commit()
+    conn.close()
+
+    if not newly_confirmed:
+        logger.info("Gmail IR scan: no new announcements detected")
+        return
+
+    logger.info(
+        f"Gmail IR scan: confirmed {len(newly_confirmed)} event(s) via IR email"
+    )
+
+    if not dry_run and SLACK_WEBHOOK_EARNINGS:
+        lines = []
+        for r in newly_confirmed:
+            co = f" — {r['company_name']}" if r["company_name"] else ""
+            lines.append(
+                f"• `{r['ticker']}`{co}  →  *confirmed* for {r['event_date']}"
+                f"\n  <{r['gmail_url']}|{r['subject'][:90]}>"
+            )
+        blocks = [
+            {
+                "type": "header",
+                "text": {
+                    "type": "plain_text",
+                    "text": (
+                        f":email: {len(newly_confirmed)} event(s) newly confirmed via IR email"
+                    ),
+                },
+            },
+            {"type": "section", "text": {"type": "mrkdwn", "text": "\n".join(lines)}},
+        ]
+        try:
+            post_slack(
+                SLACK_WEBHOOK_EARNINGS, blocks,
+                f"{len(newly_confirmed)} event(s) confirmed via IR email",
+            )
+        except NotificationError as exc:
+            logger.warning(f"IR email Slack post failed: {exc}")
+
+
 def run_check_announcements(dry_run: bool = False, days_ahead: int = 30):
     """
     For each upcoming Tier 1 estimated event that has an IR RSS URL
@@ -2617,6 +2807,11 @@ def main():
         help="Scan configured IR RSS feeds (ir_feeds.json) for earnings-date announcements; upgrade estimated Tier 1 events to confirmed when found",
     )
     parser.add_argument(
+        "--check-ir-emails",
+        action="store_true",
+        help="Scan Gmail (via gmail_token.json) for IR-alert emails on Tier 1/2 estimated events; upgrade to confirmed and store the Gmail thread URL",
+    )
+    parser.add_argument(
         "--check-replies",
         action="store_true",
         help="Poll Slack threads for replies on open questions; apply commands (lock/wait/snooze/ignore/etc) to DB state",
@@ -2651,6 +2846,8 @@ def main():
         run_refresh_descriptions(dry_run=args.dry_run)
     elif args.check_announcements:
         run_check_announcements(dry_run=args.dry_run)
+    elif args.check_ir_emails:
+        run_check_ir_emails(dry_run=args.dry_run)
     elif args.check_replies:
         run_check_replies(dry_run=args.dry_run)
     elif args.cleanup:

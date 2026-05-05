@@ -1171,6 +1171,75 @@ def test_find_earnings_release_filing_window():
             assert result is None
 
 
+# ── IR email announcement detection ───────────────────────────────────────
+
+
+def _make_gmail_msg(subject="", body="", sender="noreply@notified.com",
+                    received_date=None, msg_id="abc123", thread_id="thr456"):
+    from gmail_client import GmailMessage
+    from datetime import date as _date
+    return GmailMessage(
+        id=msg_id, thread_id=thread_id,
+        sender=sender, subject=subject, body=body,
+        received_date=received_date or _date(2026, 5, 1),
+    )
+
+
+def test_ir_email_classic_pre_announcement():
+    """Typical IR alert: 'AcmeCo Schedules Q1 2026 Earnings Conference Call'."""
+    from gmail_client import detect_earnings_announcement
+    from datetime import date as _date
+    msg = _make_gmail_msg(
+        subject="AcmeCo Schedules First Quarter 2026 Earnings Conference Call for May 8",
+        body="AcmeCo announces it will release first quarter 2026 financial results on May 8, 2026 before market open.",
+    )
+    announced, matched = detect_earnings_announcement(msg, _date(2026, 5, 8))
+    assert matched
+    assert announced == _date(2026, 5, 8)
+
+
+def test_ir_email_rejects_earnings_preview_noise():
+    """Analyst commentary that mentions earnings — should NOT match."""
+    from gmail_client import detect_earnings_announcement
+    from datetime import date as _date
+    msg = _make_gmail_msg(
+        subject="AcmeCo Q1 Earnings Preview: What to Expect",
+        body="With earnings on deck, analysts expect the company to beat consensus.",
+    )
+    _, matched = detect_earnings_announcement(msg, _date(2026, 5, 8))
+    assert not matched
+
+
+def test_ir_email_rejects_wrong_quarter():
+    """Q4 release announcement when we're looking for Q1 — reject."""
+    from gmail_client import detect_earnings_announcement
+    from datetime import date as _date
+    msg = _make_gmail_msg(
+        subject="AcmeCo to Release Fourth Quarter 2025 Results on February 14",
+        body="AcmeCo will report fourth quarter 2025 earnings on February 14, 2026.",
+    )
+    # event is in Q1 reporting window (May), so Q4 announcement shouldn't match
+    _, matched = detect_earnings_announcement(msg, _date(2026, 5, 8))
+    assert not matched
+
+
+def test_extract_sender_email():
+    from gmail_client import extract_sender_email
+    assert extract_sender_email("Notified <noreply@notified.com>") == "noreply@notified.com"
+    assert extract_sender_email("noreply@globenewswire.com") == "noreply@globenewswire.com"
+    assert extract_sender_email("Q4 IR Updates <ir@q4inc.com>") == "ir@q4inc.com"
+
+
+def test_is_known_ir_sender():
+    from gmail_client import is_known_ir_sender
+    assert is_known_ir_sender("noreply@notified.com")
+    assert is_known_ir_sender("ir-noreply@globenewswire.com")
+    assert is_known_ir_sender("anything@q4inc.com")
+    # Not a known IR platform
+    assert not is_known_ir_sender("ceo@acmeco.com")
+    assert not is_known_ir_sender("newsletter@medtech-dive.com")
+
+
 # ── Run all tests ─────────────────────────────────────────────────────────
 
 if __name__ == "__main__":

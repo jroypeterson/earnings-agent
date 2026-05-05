@@ -144,6 +144,31 @@ jobs:
           GOOGLE_CREDENTIALS_PATH: credentials.json
         run: python main.py --cross-check
 
+      # Scan Gmail for IR-alert pre-announcements and auto-confirm
+      # estimated Tier 1/2 events. Materializes the GMAIL_TOKEN_JSON +
+      # GMAIL_CLIENT_CREDENTIALS_JSON secrets to disk so gmail_client
+      # picks them up via its default file paths. No-ops cleanly when
+      # secrets aren't set (gmail_client raises GmailError, caught and
+      # logged at INFO). Never fails the workflow.
+      - name: Check IR-alert emails
+        continue-on-error: true
+        env:
+          GMAIL_TOKEN_JSON: ${{ secrets.GMAIL_TOKEN_JSON }}
+          GMAIL_CLIENT_CREDENTIALS_JSON: ${{ secrets.GMAIL_CLIENT_CREDENTIALS_JSON }}
+          SLACK_WEBHOOK_EARNINGS: ${{ secrets.SLACK_WEBHOOK_EARNINGS }}
+        run: |
+          if [ -z "$GMAIL_TOKEN_JSON" ]; then
+            echo "GMAIL_TOKEN_JSON secret not set — skipping IR-email scan"
+            exit 0
+          fi
+          printf '%s' "$GMAIL_TOKEN_JSON" > gmail_token.json
+          printf '%s' "$GMAIL_CLIENT_CREDENTIALS_JSON" > gmail_client_credentials.json
+          python main.py --check-ir-emails
+          # Wipe the credentials from the runner FS — the artifact
+          # upload step later only includes earnings_events.db, but
+          # explicit cleanup avoids any future regression.
+          rm -f gmail_token.json gmail_client_credentials.json
+
       # Poll Slack threads for replies on open questions and apply any
       # commands to DB state. No-op when SLACK_BOT_TOKEN/SLACK_CHANNEL_ID
       # are unset.
