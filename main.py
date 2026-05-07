@@ -81,6 +81,8 @@ from notifications import (
     build_email_text,
     build_results_slack_blocks,
     build_results_fallback_text,
+    build_move_unavailable_blocks,
+    build_move_unavailable_fallback,
     build_reconcile_blocks,
     build_reconcile_fallback,
     build_unseen_blocks,
@@ -165,6 +167,61 @@ def _business_days_until(target_iso: str, as_of: date) -> int:
         if d.weekday() < 5:
             days += 1
     return days
+
+
+# Max age (calendar days) before we give up waiting for the post-earnings
+# stock move and post anyway. Friday-AMC events need close(Mon) = X+3
+# calendar days, so the cap must be >= 3 to give the X+3 sweep a chance.
+_POST_DEFER_MAX_AGE_DAYS = 3
+
+
+def _alert_move_unavailable(rows, as_of: date) -> None:
+    """Post a #status-reports alert for results that gave up on the stock-move
+    calc after the deferral window expired. Failures should be visible, not
+    silent — see feedback memory `feedback_no_silent_fails.md`.
+    """
+    if not rows:
+        return
+    webhook = SLACK_WEBHOOK_STATUS or SLACK_WEBHOOK_EARNINGS
+    if not webhook:
+        logger.warning(
+            f"Move-unavailable alert suppressed (no webhook): "
+            f"{', '.join(r.ticker for r in rows)}"
+        )
+        return
+    try:
+        post_slack(
+            webhook,
+            build_move_unavailable_blocks(rows, as_of),
+            build_move_unavailable_fallback(rows, as_of),
+        )
+        logger.info(
+            f"Posted move-unavailable alert for {len(rows)} event(s): "
+            f"{', '.join(r.ticker for r in rows)}"
+        )
+    except NotificationError as exc:
+        logger.error(f"Move-unavailable Slack post failed: {exc}")
+
+
+def _should_defer_post(
+    move, event_date_iso: str, today: date,
+    max_age_days: int = _POST_DEFER_MAX_AGE_DAYS,
+) -> bool:
+    """Whether to hold a results post back until the next sweep.
+
+    fetch_post_earnings_move returns None when the comparison close hasn't
+    posted yet — for AMC events, that's the next-day close, which only
+    becomes available at the post_earnings_check sweep on day X+1 (6:37 PM
+    ET). Defer the Slack post + reported flag so the next sweep retries.
+    Cap at max_age_days so a delisted/unfetchable ticker doesn't loop.
+    """
+    if move is not None:
+        return False
+    try:
+        ed = date.fromisoformat(event_date_iso)
+    except ValueError:
+        return False
+    return (today - ed).days <= max_age_days
 
 
 def _alert_coverage_stale_if_needed(conn, health: CoverageHealth) -> None:
@@ -622,10 +679,24 @@ def run(
                     except CalendarError as exc:
                         logger.error(f"Failed to update event for {ticker}: {exc}")
 
+                # Fetch the post-earnings move first so we can decide whether
+                # to mark this row reported (and post to Slack) now, or defer
+                # until the next sweep when the comparison close will exist.
+                # Skip the network call entirely in dry-run mode.
+                move = None
+                if not dry_run:
+                    move = fetch_post_earnings_move(ticker, earnings_date, hour)
+                defer_post = _should_defer_post(move, earnings_date, today)
+                # In dry-run we never persist `reported` (it's a preview).
+                # Otherwise, mark reported only when we're actually going
+                # to post Slack this run (i.e. not deferring).
+                mark_reported = (not dry_run) and (not defer_post)
+
                 upsert_event(
                     conn, ticker, earnings_date, hour, existing["gcal_id"],
                     quarter=quarter, eps_estimate=eps_est, eps_actual=eps_act,
-                    rev_estimate=rev_est, rev_actual=rev_act, reported=True,
+                    rev_estimate=rev_est, rev_actual=rev_act,
+                    reported=mark_reported,
                     tier=tier, company_name=company_name,
                     source_fingerprint=source_fingerprint,
                     event_hour_yf=hour_yf,
@@ -634,9 +705,15 @@ def run(
                 )
                 actuals_count += 1
 
+                if defer_post:
+                    logger.info(
+                        f"Deferring Slack post for {ticker} {earnings_date}: "
+                        f"stock-move data not yet available, will retry next sweep"
+                    )
+                    continue
+
                 # Collect for Slack + TickTick post-loop notification
                 if not dry_run:
-                    move = fetch_post_earnings_move(ticker, earnings_date, hour)
                     sync_results.append(
                         ResultRow(
                             ticker=ticker,
@@ -649,6 +726,9 @@ def run(
                             rev_estimate=rev_est,
                             tier=tier,
                             move=move,
+                            sector=info.sector if info else "",
+                            subsector=info.subsector if info else "",
+                            position=info.position if info else "",
                         )
                     )
                 continue
@@ -962,6 +1042,12 @@ def run(
     if sync_results and not dry_run:
         logger.info(f"Notifying on {len(sync_results)} actuals detected during sync")
         notify_results(conn, sync_results, today)
+        # Move-give-up alert: rows whose deferral window expired but yfinance
+        # still produced no usable move. These are in sync_results because
+        # _should_defer_post returned False (event too old to keep waiting).
+        gave_up = [r for r in sync_results if r.move is None]
+        if gave_up:
+            _alert_move_unavailable(gave_up, today)
 
     # --- B2: unseen-ticker detection ---
     # For every Tier 1/2 upcoming-30d event in DB, check whether Finnhub
@@ -1370,6 +1456,9 @@ def run_check_results(
             rev_estimate=rev_est,
             tier=tier,
             move=move,
+            sector=info.sector if info else "",
+            subsector=info.subsector if info else "",
+            position=info.position if info else "",
         )
         new_results.append(result)
 
@@ -1423,15 +1512,44 @@ def run_check_results(
             duration_sec=time.monotonic() - start_ts,
         )
 
-    if not new_results:
-        logger.info(f"No new reported results for {target_iso}")
+    # Split into rows ready to post (have a stock move, or too old to keep
+    # waiting) and rows to defer until the next sweep. AMC events on day X
+    # need close X+1, which only becomes available at the post_earnings_check
+    # 22:37 UTC sweep on day X+1.
+    ready: list[ResultRow] = []
+    deferred: list[ResultRow] = []
+    for r in new_results:
+        if _should_defer_post(r.move, r.event_date, target):
+            deferred.append(r)
+        else:
+            ready.append(r)
+
+    if deferred:
+        logger.info(
+            f"Deferring {len(deferred)} result(s) until move data available: "
+            + ", ".join(r.ticker for r in deferred)
+        )
+
+    # Among ready rows, separate those whose move calc gave up. They still
+    # post (with "Stock data unavailable" inline) but also trigger a separate
+    # #status-reports alert so the failure is loud, not silent.
+    gave_up = [r for r in ready if r.move is None]
+    if gave_up:
+        _alert_move_unavailable(gave_up, target)
+
+    if not ready:
+        logger.info(
+            f"No ready results for {target_iso} "
+            f"(deferred: {len(deferred)}, already reported: {skipped_already_reported}, "
+            f"pending actuals: {skipped_no_actuals})"
+        )
         conn.close()
         _emit_heartbeat()
         return
 
-    # Build + post Slack
-    blocks = build_results_slack_blocks(new_results, target)
-    fallback = build_results_fallback_text(new_results, target)
+    # Build + post Slack — only ready rows go out.
+    blocks = build_results_slack_blocks(ready, target)
+    fallback = build_results_fallback_text(ready, target)
 
     if dry_run:
         logger.info("=" * 50)
@@ -1453,16 +1571,17 @@ def run_check_results(
         conn.close()
         return
 
-    posted = notify_results(conn, new_results, target)
+    posted = notify_results(conn, ready, target)
 
     # Only mark reported=True after Slack has been handled. If the post failed
     # and we have a webhook configured, leave records unmarked so the next
-    # run retries.
+    # run retries. Deferred rows are intentionally left as reported=False so
+    # the next sweep picks them up again with fresh move data.
     if not posted:
         conn.close()
         return
 
-    for r in new_results:
+    for r in ready:
         existing = find_existing_event(conn, r.ticker, r.event_date)
         upsert_event(
             conn,
@@ -1480,7 +1599,7 @@ def run_check_results(
             company_name=r.company_name,
         )
 
-    logger.info(f"Marked {len(new_results)} results as reported in DB")
+    logger.info(f"Marked {len(ready)} results as reported in DB")
     conn.close()
     _emit_heartbeat()
 

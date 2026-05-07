@@ -32,6 +32,9 @@ class ResultRow:
     rev_estimate: float | None
     tier: int
     move: PostEarningsMove | None = None
+    sector: str = ""
+    subsector: str = ""
+    position: str = ""
 
 logger = logging.getLogger("earnings_agent")
 
@@ -415,22 +418,151 @@ def _results_tier_label(tier: int) -> str:
     return {1: "Core Watchlist", 2: "HC Services + MedTech"}.get(tier, "Other")
 
 
-def _results_result_block(r: ResultRow) -> dict:
-    header = f"*`{r.ticker}`*"
-    if r.company_name:
-        header += f" · {r.company_name}"
-    header += f"  _{_results_tier_label(r.tier)}_"
+# Subgroup membership for results (mirrors sigma-alert SUBCATEGORIES).
+# Mutually exclusive: priority order Portfolio > Researching > HC Services >
+# MedTech > Large Pharma > Other. Within a tier, every row falls into exactly
+# one subgroup.
+SECTORS_GROUPED_AS_OTHER = frozenset({
+    "Tech", "SaaS", "Financials", "Industrials",
+    "Consumer", "Energy", "Materials", "Real Estate",
+})
 
-    lines = [
-        header,
-        _fmt_actual_vs_estimate_eps(r.eps_actual, r.eps_estimate),
-        _fmt_actual_vs_estimate_rev(r.rev_actual, r.rev_estimate),
-        _fmt_move(r.move),
-    ]
-    return {
-        "type": "section",
-        "text": {"type": "mrkdwn", "text": "\n".join(lines)[:3000]},
-    }
+
+def _results_subcategory(r: ResultRow) -> str:
+    """Mutually-exclusive subgroup label for a result row.
+
+    Priority order matches sigma-alert: position > sector > Other bucket.
+    Falls back to "Other" so every row finds a home.
+    """
+    if r.position == "Portfolio":
+        return "Portfolio"
+    if r.position == "Researching":
+        return "Researching"
+    if r.sector == "Healthcare Services":
+        return "Healthcare Services"
+    if r.sector == "MedTech":
+        return "MedTech"
+    if r.subsector == "Large Pharma":
+        return "Large Pharma"
+    if r.sector in SECTORS_GROUPED_AS_OTHER:
+        return "Other"
+    return "Other"
+
+
+_SUBCATEGORY_ORDER = (
+    "Portfolio",
+    "Researching",
+    "Healthcare Services",
+    "MedTech",
+    "Large Pharma",
+    "Other",
+)
+
+
+def _short_company_name(name: str) -> str:
+    """Trim trailing corporate suffixes for compact display."""
+    if not name:
+        return ""
+    s = name.strip()
+    suffixes = (
+        ", Inc.", ", Inc", " Inc.", " Inc", " Incorporated",
+        " Corp.", " Corp", " Corporation",
+        " Co., Ltd.", " Co Ltd", " Company",
+        " Ltd.", " Ltd", " Limited",
+        " plc", " PLC", " AG", " SA", " S.A.", " N.V.", " NV",
+        " Holdings", " Holding", " Group",
+    )
+    changed = True
+    while changed:
+        changed = False
+        for suf in suffixes:
+            if s.endswith(suf):
+                s = s[: -len(suf)].rstrip(",.& ")
+                changed = True
+                break
+    # Strip trailing connectors left behind ("Eli Lilly and Company" -> "Eli Lilly")
+    while True:
+        lowered = s.lower()
+        if lowered.endswith(" and"):
+            s = s[: -4].rstrip(",.& ")
+        elif lowered.endswith(" &"):
+            s = s[: -2].rstrip(",.& ")
+        else:
+            break
+    return s or name
+
+
+def _signed_pct(actual: float | None, estimate: float | None) -> str:
+    """Inline beat/miss tag: '+2.4% 🟩' / '(1.7%) 🟥' / '–' when N/A."""
+    pct = _beat_miss_pct(actual, estimate)
+    if pct is None:
+        return "–"
+    if pct < 0:
+        return f"({abs(pct):.1f}%) \U0001F7E5"
+    return f"+{pct:.1f}% \U0001F7E9"
+
+
+def _fmt_eps_compact(actual: float | None, estimate: float | None) -> str:
+    a = _fmt_estimate_eps(actual) if actual is not None else "–"
+    e = _fmt_estimate_eps(estimate) if estimate is not None else "–"
+    return f"EPS {a}/{e} {_signed_pct(actual, estimate)}"
+
+
+def _fmt_rev_compact(actual: float | None, estimate: float | None) -> str:
+    a = _fmt_estimate_rev(actual) if actual is not None else "–"
+    e = _fmt_estimate_rev(estimate) if estimate is not None else "–"
+    return f"Rev {a}/{e} {_signed_pct(actual, estimate)}"
+
+
+def _fmt_move_compact(move: PostEarningsMove | None) -> str:
+    """Compact stock-move segment.
+
+    Callers defer the post when move is None and the event is fresh, so by
+    the time we render with move=None we've given up waiting (e.g. delisted
+    ticker, yfinance unreachable). Show the give-up explicitly so failures
+    are visible rather than silently disappearing.
+    """
+    if move is None:
+        return "Stock data unavailable ⚠️"
+    marker = "\U0001F7E9" if move.move_pct >= 0 else "\U0001F7E5"
+    sign = "+" if move.move_pct >= 0 else "-"
+    return f"Stock {sign}{abs(move.move_pct):.1f}% ({move.window_label}) {marker}"
+
+
+def _format_results_line(r: ResultRow) -> str:
+    short = _short_company_name(r.company_name)
+    name_part = f" {short}" if short else ""
+    return (
+        f"*{r.ticker}*{name_part} · "
+        f"{_fmt_eps_compact(r.eps_actual, r.eps_estimate)} · "
+        f"{_fmt_rev_compact(r.rev_actual, r.rev_estimate)} · "
+        f"{_fmt_move_compact(r.move)}"
+    )
+
+
+def _append_section_chunked(
+    blocks: list[dict], header: str, lines: list[str], max_len: int = 2900
+) -> None:
+    """Append section block(s) for a header + lines, splitting at Slack's 3000-char cap."""
+    chunk = [header]
+    chunk_len = len(header) + 1
+    for line in lines:
+        line_len = len(line) + 1
+        if chunk_len + line_len > max_len and len(chunk) > 1:
+            blocks.append({
+                "type": "section",
+                "text": {"type": "mrkdwn", "text": "\n".join(chunk)},
+            })
+            chunk = [line]
+            chunk_len = line_len
+        else:
+            chunk.append(line)
+            chunk_len += line_len
+    if chunk:
+        blocks.append({
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": "\n".join(chunk)},
+        })
 
 
 def build_results_slack_blocks(results: list[ResultRow], as_of: date) -> list[dict]:
@@ -448,12 +580,45 @@ def build_results_slack_blocks(results: list[ResultRow], as_of: date) -> list[di
         },
         {"type": "divider"},
     ]
-    # Sort: Tier 1 first, then Tier 2, then alpha by ticker
-    ordered = sorted(results, key=lambda r: (r.tier, r.ticker))
-    for r in ordered:
-        blocks.append(_results_result_block(r))
-        if len(blocks) >= SLACK_MAX_BLOCKS:
-            break
+
+    # Group by tier, then by mutually-exclusive subcategory within tier.
+    by_tier: dict[int, list[ResultRow]] = {}
+    for r in results:
+        by_tier.setdefault(r.tier, []).append(r)
+
+    tier_emojis = {1: "\U0001F31F", 2: "\U0001F4CA", 3: "\U0001F4DD"}
+
+    first_tier = True
+    for tier in sorted(by_tier.keys()):
+        if not first_tier:
+            blocks.append({"type": "divider"})
+        first_tier = False
+
+        tier_rows = by_tier[tier]
+        emoji = tier_emojis.get(tier, "")
+        tier_header = (
+            f"{emoji} *Tier {tier} — {_results_tier_label(tier)} ({len(tier_rows)})*"
+        )
+
+        # Bucket by subcategory.
+        by_sub: dict[str, list[ResultRow]] = {}
+        for r in tier_rows:
+            by_sub.setdefault(_results_subcategory(r), []).append(r)
+
+        # Tier header on its own line so subgroup headers can follow.
+        _append_section_chunked(blocks, tier_header, [])
+
+        for sub_label in _SUBCATEGORY_ORDER:
+            members = by_sub.get(sub_label)
+            if not members:
+                continue
+            members_sorted = sorted(members, key=lambda r: r.ticker)
+            sub_header = f"    _{sub_label} ({len(members)})_"
+            _append_section_chunked(
+                blocks, sub_header, [_format_results_line(r) for r in members_sorted]
+            )
+            if len(blocks) >= SLACK_MAX_BLOCKS:
+                return blocks
     return blocks
 
 
@@ -941,6 +1106,48 @@ class UnseenRow:
     event_date: str
     tier: int
     miss_count: int
+
+
+def build_move_unavailable_blocks(rows: list[ResultRow], as_of: date) -> list[dict]:
+    """Status-reports alert: post-earnings stock-move calc gave up after retries.
+
+    Surfaces failures the results post itself can't fully describe — typical
+    causes are delisted/unfetchable tickers or yfinance flakiness. Posted
+    once per event (the row is marked reported=1 after this fires, so the
+    next sweep won't re-trigger).
+    """
+    def _sort_key(r: ResultRow) -> tuple[int, str, str]:
+        return (r.tier, r.event_date, r.ticker)
+
+    lines = []
+    for r in sorted(rows, key=_sort_key):
+        co = f" — {r.company_name}" if r.company_name else ""
+        lines.append(
+            f"• `{r.ticker}` (T{r.tier}){co} · reported "
+            f"{_fmt_date_safe(r.event_date)} · stock-move calc returned no data"
+        )
+
+    header = (
+        f":warning: Post-earnings stock move unavailable "
+        f"({len(rows)} event{'s' if len(rows) != 1 else ''})"
+    )
+    help_text = (
+        "yfinance returned no usable closes after the deferral window. "
+        "Likely a delisted ticker or transient yfinance issue — check ticker "
+        "manually if this is a name you care about."
+    )
+    return [
+        {"type": "header", "text": {"type": "plain_text", "text": header}},
+        {"type": "section", "text": {"type": "mrkdwn", "text": "\n".join(lines)}},
+        {"type": "context", "elements": [{"type": "mrkdwn", "text": help_text}]},
+    ]
+
+
+def build_move_unavailable_fallback(rows: list[ResultRow], as_of: date) -> str:
+    return (
+        f"{len(rows)} earnings event(s) reported but stock-move calc gave up — "
+        f"likely yfinance/delisting issue"
+    )
 
 
 def build_unseen_blocks(rows: list[UnseenRow], as_of: date) -> list[dict]:
