@@ -69,17 +69,8 @@ def _headers(token: str) -> dict:
 
 
 TIER_LIST_LABELS = {
-    1: "Core Watchlist",       # legacy default for tier 1 — used when no
-                                # position is provided (back-compat)
+    1: "Core Watchlist - Positions/Researching",  # all Tier 1 consolidated here
     2: "HC Svcs & MedTech",
-}
-
-# When a Tier 1 row carries a `position` value, the TickTick list name is
-# split based on which sub-bucket it lives in. Coverage Manager Phase D
-# (2026-05-03) introduced this distinction.
-TIER1_POSITION_LABELS = {
-    "Portfolio": "Portfolio",
-    "Researching": "Researching",
 }
 
 
@@ -114,24 +105,21 @@ def _reporting_quarter(event_date: str) -> str:
 
 def _quarter_list_name(event_date: str, tier: int = 2, position: str = "") -> str:
     """
-    Generate the quarterly list name from an event date, tier, and (for
-    Tier 1) a position sub-bucket.
+    Generate the quarterly list name from an event date and tier.
 
     Uses the reporting quarter (what period results cover), not the
     calendar quarter of the release date.
 
+    `position` is accepted for backwards compatibility with callers but is
+    no longer used — all Tier 1 names land in the same "Core Watchlist"
+    list regardless of Portfolio/Researching designation.
+
     Examples:
-      tier=1, position="Portfolio"   -> "1Q26 Earnings - Portfolio"
-      tier=1, position="Researching" -> "1Q26 Earnings - Researching"
-      tier=1, position=""            -> "1Q26 Earnings - Core Watchlist"  (legacy)
-      tier=2                          -> "1Q26 Earnings - HC Svcs & MedTech"
-      tier=3                          -> "1Q26 Earnings"  (no suffix)
+      tier=1 -> "1Q26 Earnings - Core Watchlist"
+      tier=2 -> "1Q26 Earnings - HC Svcs & MedTech"
+      tier=3 -> "1Q26 Earnings"
     """
     rq = _reporting_quarter(event_date)
-    if tier == 1 and position:
-        sub_label = TIER1_POSITION_LABELS.get(position)
-        if sub_label:
-            return f"{rq} Earnings - {sub_label}"
     tier_label = TIER_LIST_LABELS.get(tier)
     if tier_label:
         return f"{rq} Earnings - {tier_label}"
@@ -166,7 +154,7 @@ def find_or_create_list(token: str, list_name: str) -> str | None:
     # List not found — try to create it
     # Use the same groupId as existing earnings lists
     earnings_group_id = os.environ.get(
-        "TICKTICK_EARNINGS_GROUP_ID", "6887b7f873800767fff51bf5"
+        "TICKTICK_EARNINGS_GROUP_ID", "6887c72473800767fff51d51"
     )
     try:
         payload = {"name": list_name}
@@ -329,9 +317,75 @@ def find_existing_task_by_ticker(tasks: list[dict], ticker: str) -> dict | None:
     for task in tasks:
         title = task.get("title", "")
         # Task titles look like "UNH Q1 2026 Earnings (Apr 21 BMO)"
-        if title.startswith(f"{ticker} "):
+        # or "[REPORTED] UNH Q1 2026 Earnings (Apr 21 BMO)"
+        if _ticker_from_task_title(title) == ticker:
             return task
     return None
+
+
+def _ticker_from_task_title(title: str) -> str | None:
+    """
+    Extract the ticker symbol from a TickTick task title.
+    Handles both plain titles ('UNH Q1 ...') and reported-prefix titles
+    ('[REPORTED] UNH Q1 ...').
+    """
+    if not title:
+        return None
+    parts = title.split(" ", 2)
+    if not parts:
+        return None
+    first = parts[0]
+    if first.startswith("[") and len(parts) >= 2:
+        return parts[1] or None
+    return first or None
+
+
+def _list_all_projects(token: str) -> list[dict]:
+    """Fetch all TickTick projects once. Returns [] on failure."""
+    try:
+        resp = requests.get(
+            f"{TICKTICK_API_BASE}/project",
+            headers=_headers(token),
+            timeout=15,
+        )
+        if resp.status_code == 401:
+            raise TickTickTokenExpired("TickTick access token expired")
+        if resp.status_code == 200:
+            return resp.json()
+        logger.warning(f"Failed to list TickTick projects: HTTP {resp.status_code}")
+    except TickTickTokenExpired:
+        raise
+    except requests.RequestException as exc:
+        logger.warning(f"Failed to list TickTick projects: {exc}")
+    return []
+
+
+def _gather_quarter_existing_tasks(
+    token: str,
+    projects: list[dict],
+    quarters: set[str],
+) -> dict[str, dict[str, tuple[str, str, str]]]:
+    """
+    Build a per-quarter ticker -> (project_id, project_name, task_id) map by
+    scanning every TickTick list whose name starts with '<RQ> Earnings'.
+
+    Used by sync_ticktick_tasks to avoid creating a duplicate task when the
+    same ticker already has one in a sibling list (e.g. tier promoted from
+    HC Svcs to Core Watchlist mid-quarter).
+    """
+    result: dict[str, dict[str, tuple[str, str, str]]] = {q: {} for q in quarters}
+    for p in projects:
+        name = p.get("name", "")
+        for q in quarters:
+            if name.startswith(f"{q} Earnings"):
+                pid = p["id"]
+                tasks = list_tasks_in_project(token, pid)
+                for t in tasks:
+                    ticker = _ticker_from_task_title(t.get("title", ""))
+                    if ticker and ticker not in result[q]:
+                        result[q][ticker] = (pid, name, t["id"])
+                break
+    return result
 
 
 def get_all_earnings_lists(token: str) -> list[dict]:
@@ -577,6 +631,7 @@ def sync_ticktick_tasks(
 
     # Group events by reporting quarter + tier (separate lists per tier)
     events_by_list: dict[str, list[dict]] = {}
+    quarters_needed: set[str] = set()
     for event in events:
         tier = event.get("tier", 3)
         if tier > 2:
@@ -588,6 +643,7 @@ def sync_ticktick_tasks(
         position = event.get("position", "") or ""
         list_name = _quarter_list_name(event["event_date"], tier, position=position)
         events_by_list.setdefault(list_name, []).append(event)
+        quarters_needed.add(_reporting_quarter(event["event_date"]))
 
     if not events_by_list:
         logger.info("TickTick: No new tasks needed")
@@ -595,8 +651,35 @@ def sync_ticktick_tasks(
 
     logger.info(f"TickTick: {sum(len(v) for v in events_by_list.values())} tasks to create across {len(events_by_list)} list(s)")
 
+    # Cross-list dedup: scan ALL of each quarter's lists once, so a ticker
+    # already tracked in any sibling list (Core Watchlist / HC Svcs / legacy
+    # Portfolio / legacy Researching) blocks a duplicate write.
+    quarter_ticker_map: dict[str, dict[str, tuple[str, str, str]]] = {q: {} for q in quarters_needed}
+    projects: list[dict] = []
+    if not dry_run:
+        try:
+            projects = _list_all_projects(token)
+            quarter_ticker_map = _gather_quarter_existing_tasks(token, projects, quarters_needed)
+            sibling_count = sum(
+                1 for p in projects
+                for q in quarters_needed
+                if p.get("name", "").startswith(f"{q} Earnings")
+            )
+            total_existing = sum(len(m) for m in quarter_ticker_map.values())
+            logger.info(
+                f"  Quarter-wide dedup: {total_existing} existing task(s) found "
+                f"across {sibling_count} sibling list(s)"
+            )
+        except TickTickTokenExpired:
+            logger.error(
+                "TickTick access token expired. Re-run the OAuth flow at "
+                "developer.ticktick.com and update TICKTICK_ACCESS_TOKEN."
+            )
+            stats["errors"] = sum(len(v) for v in events_by_list.values())
+            return stats
+
     # Process each quarterly list
-    list_id_cache: dict[str, str] = {}
+    list_id_cache: dict[str, str] = {p.get("name", ""): p["id"] for p in projects}
 
     # If a default list ID is configured, use it as fallback
     default_list_id = config.get("list_id")
@@ -665,11 +748,28 @@ def sync_ticktick_tasks(
                 stats["created"] += 1
                 continue
 
-            # Check if task already exists in TickTick (dedup fallback)
+            # Cross-list dedup: did this ticker already get a task in any
+            # sibling list for this quarter? (e.g. legacy Portfolio task or a
+            # tier-promoted HC Svcs task)
+            quarter = _reporting_quarter(event_date)
+            cross_existing = quarter_ticker_map.get(quarter, {}).get(ticker)
+            if cross_existing:
+                src_pid, src_name, src_tid = cross_existing
+                logger.info(f"  Task for {ticker} already exists in '{src_name}', backfilling DB")
+                conn.execute(
+                    "UPDATE events SET ticktick_task_id = ?, updated_at = datetime('now') "
+                    "WHERE ticker = ? AND event_date = ?",
+                    (src_tid, ticker, event_date),
+                )
+                conn.commit()
+                stats["skipped"] += 1
+                continue
+
+            # Check if task already exists in this specific list
+            # (covers cases where the cross-list scan didn't run, e.g. dry_run path)
             existing = find_existing_task_by_ticker(existing_tasks, ticker)
             if existing:
                 logger.info(f"  Task already exists in TickTick for {ticker}, backfilling DB")
-                # Backfill the task ID into our DB
                 conn.execute(
                     "UPDATE events SET ticktick_task_id = ?, updated_at = datetime('now') "
                     "WHERE ticker = ? AND event_date = ?",
@@ -697,6 +797,8 @@ def sync_ticktick_tasks(
                     (task_id, ticker, event_date),
                 )
                 conn.commit()
+                # Register in cross-list map so dedup catches same-quarter twins
+                quarter_ticker_map.setdefault(quarter, {})[ticker] = (list_id, list_name, task_id)
                 stats["created"] += 1
             else:
                 stats["errors"] += 1

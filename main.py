@@ -222,6 +222,144 @@ def _alert_coverage_stale_if_needed(conn, health: CoverageHealth) -> None:
         logger.error(f"Coverage staleness Slack post failed: {exc}")
 
 
+def _alert_coverage_changes_if_needed(conn, coverage) -> None:
+    """Compare current coverage to the prior snapshot in kv_store, post a
+    Tier 1/2 diff to #status-reports, and persist the new snapshot.
+
+    Detects: added (Tier 1/2), removed (Tier 1/2), tier_changed (involving
+    Tier 1/2 on either side), and position_changed (Portfolio <-> Researching
+    within Tier 1). Tier 3 churn is suppressed since it's universe-wide noise.
+
+    First run: seeds the snapshot silently — no alert without a baseline.
+    Swallows its own errors — informational, not blocking.
+    """
+    import json as _json
+
+    KEY = "coverage_snapshot"
+
+    current = {
+        t.ticker: {
+            "tier": t.tier,
+            "position": t.position or "",
+            "name": t.company_name or "",
+        }
+        for t in coverage
+    }
+    current_json = _json.dumps(current, sort_keys=True)
+
+    prior_raw = kv_get(conn, KEY)
+    if not prior_raw:
+        kv_set(conn, KEY, current_json)
+        logger.info(f"Coverage snapshot seeded ({len(current)} tickers); no diff alert")
+        return
+
+    try:
+        prior = _json.loads(prior_raw)
+    except (ValueError, TypeError):
+        logger.warning("Prior coverage snapshot unparseable; reseeding")
+        kv_set(conn, KEY, current_json)
+        return
+
+    if prior == current:
+        return  # no change
+
+    added: list[tuple[str, dict]] = []
+    removed: list[tuple[str, dict]] = []
+    tier_changed: list[tuple[str, dict, dict]] = []
+    position_changed: list[tuple[str, dict, dict]] = []
+
+    all_tickers = set(prior) | set(current)
+    for tk in sorted(all_tickers):
+        old = prior.get(tk)
+        new = current.get(tk)
+        if old and new:
+            if old.get("tier") != new.get("tier"):
+                if old.get("tier", 3) <= 2 or new.get("tier", 3) <= 2:
+                    tier_changed.append((tk, old, new))
+            elif old.get("position", "") != new.get("position", "") and new.get("tier") == 1:
+                position_changed.append((tk, old, new))
+        elif new and not old:
+            if new.get("tier", 3) <= 2:
+                added.append((tk, new))
+        elif old and not new:
+            if old.get("tier", 3) <= 2:
+                removed.append((tk, old))
+
+    # Always persist the latest snapshot, even if the diff was Tier 3-only
+    kv_set(conn, KEY, current_json)
+
+    if not (added or removed or tier_changed or position_changed):
+        return
+
+    logger.info(
+        f"Coverage diff: +{len(added)} added, -{len(removed)} removed, "
+        f"{len(tier_changed)} tier changes, {len(position_changed)} position changes"
+    )
+
+    webhook = SLACK_WEBHOOK_STATUS or SLACK_WEBHOOK_EARNINGS
+    if not webhook:
+        logger.info("No Slack webhook configured; skipping coverage diff alert")
+        return
+
+    def _fmt_tier(t: int) -> str:
+        return f"T{t}"
+
+    def _fmt_pos(p: str) -> str:
+        return f"/{p}" if p else ""
+
+    lines: list[str] = []
+    lines.append(":compass: *Coverage Manager diff*")
+
+    if added:
+        lines.append(f"*Added* ({len(added)}):")
+        for tk, info in added:
+            tag = f"{_fmt_tier(info['tier'])}{_fmt_pos(info.get('position',''))}"
+            name = info.get("name") or ""
+            suffix = f" — {name}" if name else ""
+            lines.append(f"  • `{tk}` ({tag}){suffix}")
+
+    if removed:
+        lines.append(f"*Removed* ({len(removed)}):")
+        for tk, info in removed:
+            tag = f"was {_fmt_tier(info['tier'])}{_fmt_pos(info.get('position',''))}"
+            name = info.get("name") or ""
+            suffix = f" — {name}" if name else ""
+            lines.append(f"  • `{tk}` ({tag}){suffix}")
+
+    if tier_changed:
+        lines.append(f"*Tier changed* ({len(tier_changed)}):")
+        for tk, old, new in tier_changed:
+            old_tag = f"{_fmt_tier(old['tier'])}{_fmt_pos(old.get('position',''))}"
+            new_tag = f"{_fmt_tier(new['tier'])}{_fmt_pos(new.get('position',''))}"
+            lines.append(f"  • `{tk}`: {old_tag} → {new_tag}")
+
+    if position_changed:
+        lines.append(f"*Position changed* ({len(position_changed)}):")
+        for tk, old, new in position_changed:
+            lines.append(
+                f"  • `{tk}`: {old.get('position') or '(none)'} → "
+                f"{new.get('position') or '(none)'}"
+            )
+
+    lines.append(
+        "_Note: tier-changed tickers may have stale TickTick tasks in the old list "
+        "(cross-list dedup blocks auto-recreation). Move manually if needed._"
+    )
+    text = "\n".join(lines)
+
+    try:
+        import urllib.request
+        import json as __json
+        req = urllib.request.Request(
+            webhook,
+            data=__json.dumps({"text": text}).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+        )
+        urllib.request.urlopen(req, timeout=10).read()
+    except Exception as exc:
+        logger.error(f"Coverage diff Slack post failed: {exc}")
+
+
 def _post_urgent_alert(rows: list[UrgentMoveRow], as_of: date, conn=None):
     """
     Post the A3 Tier 1 urgent Slack alert. Swallows its own errors.
@@ -312,6 +450,7 @@ def run(
 
     conn = init_db()
     _alert_coverage_stale_if_needed(conn, compute_coverage_freshness())
+    _alert_coverage_changes_if_needed(conn, coverage)
 
     cal_service = None
     if not dry_run:
