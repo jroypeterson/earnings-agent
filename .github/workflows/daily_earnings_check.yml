@@ -25,6 +25,11 @@ concurrency:
   group: earnings-db-writer
   cancel-in-progress: false
 
+# contents:write needed for the exports/upcoming_events.json commit-back
+# step (publishes the calendar JSON for sa-monitor Phase 2 enrichment).
+permissions:
+  contents: write
+
 jobs:
   check-earnings:
     runs-on: ubuntu-latest
@@ -181,6 +186,32 @@ jobs:
           GOOGLE_CALENDAR_ID: ${{ secrets.GOOGLE_CALENDAR_ID }}
           GOOGLE_CREDENTIALS_PATH: credentials.json
         run: python main.py --check-replies
+
+      # Publish exports/upcoming_events.json for downstream consumers
+      # (sa-monitor Phase 2 'Note:' context enrichment fetches this via
+      # raw.githubusercontent.com). Commit-back so the file is reachable
+      # from a public URL without needing GH artifact auth.
+      - name: Export upcoming events JSON
+        if: github.ref == 'refs/heads/main'
+        run: python scripts/export_upcoming_events.py
+
+      - name: Commit upcoming_events.json if changed
+        if: github.ref == 'refs/heads/main'
+        run: |
+          set -euo pipefail
+          git config user.name "earnings-agent-ci"
+          git config user.email "earnings-agent-ci@users.noreply.github.com"
+          git add exports/upcoming_events.json
+          if git diff --cached --quiet; then
+            echo "no changes to upcoming_events.json"
+            exit 0
+          fi
+          git pull --rebase --quiet || git rebase --abort || true
+          git commit -m "ci: refresh exports/upcoming_events.json"
+          git push "https://${GITHUB_ACTOR}:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+            "HEAD:${GITHUB_REF_NAME:-main}" || echo "push failed (non-fatal)"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # Persist the SQLite DB for next run. Only main-branch runs upload —
       # otherwise a feature-branch test could leave a tainted artifact for
