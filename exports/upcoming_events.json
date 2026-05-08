@@ -1,33 +1,15 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-05-08T00:28:12Z",
+  "generated_at": "2026-05-08T00:32:53Z",
   "window": {
     "start": "2026-05-06",
     "end": "2026-05-22"
   },
   "counts": {
-    "events": 457
+    "events": 369
   },
   "events": [
-    {
-      "ticker": "ACAD",
-      "event_date": "2026-05-06",
-      "event_hour": "amc",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "ACADIA Pharmaceuticals Inc"
-    },
-    {
-      "ticker": "ACH",
-      "event_date": "2026-05-06",
-      "event_hour": "bmo",
-      "tier": 2,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Accendra Health (fma Owens and Minor)"
-    },
     {
       "ticker": "ACLX",
       "event_date": "2026-05-06",
@@ -36,33 +18,6 @@
       "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "Arcellx Inc"
-    },
-    {
-      "ticker": "ACVA",
-      "event_date": "2026-05-06",
-      "event_hour": "amc",
-      "tier": 1,
-      "date_confirmed": true,
-      "call_datetime_utc": "2026-05-06T21:00:00+00:00",
-      "company_name": "ACV Auctions Inc"
-    },
-    {
-      "ticker": "ADMA",
-      "event_date": "2026-05-06",
-      "event_hour": "amc",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "ADMA Biologics Inc"
-    },
-    {
-      "ticker": "AGL",
-      "event_date": "2026-05-06",
-      "event_hour": "amc",
-      "tier": 2,
-      "date_confirmed": true,
-      "call_datetime_utc": "2026-05-06T20:30:00+00:00",
-      "company_name": "Agilon Health Inc"
     },
     {
       "ticker": "ALLO",
@@ -74,33 +29,6 @@
       "company_name": "Allogene Therapeutics Inc"
     },
     {
-      "ticker": "ALVO",
-      "event_date": "2026-05-06",
-      "event_hour": "amc",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Alvotech SA"
-    },
-    {
-      "ticker": "AMPL",
-      "event_date": "2026-05-06",
-      "event_hour": "amc",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Amplitude Inc"
-    },
-    {
-      "ticker": "APP",
-      "event_date": "2026-05-06",
-      "event_hour": "amc",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Applovin Corp"
-    },
-    {
       "ticker": "APTO",
       "event_date": "2026-05-06",
       "event_hour": "",
@@ -108,15 +36,6 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Aptose Biosciences, Inc."
-    },
-    {
-      "ticker": "ARQT",
-      "event_date": "2026-05-06",
-      "event_hour": "amc",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Arcutis Biotherapeutics Inc"
     },
     {
       "ticker": "ATRA",
@@ -146,69 +65,6 @@
       "company_name": "Azenta, Inc."
     },
     {
-      "ticker": "BCRX",
-      "event_date": "2026-05-06",
-      "event_hour": "bmo",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "BioCryst Pharmaceuticals Inc"
-    },
-    {
-      "ticker": "BKD",
-      "event_date": "2026-05-06",
-      "event_hour": "amc",
-      "tier": 2,
-      "date_confirmed": true,
-      "call_datetime_utc": "2026-05-07T13:00:00+00:00",
-      "company_name": "Brookdale Senior Living Inc"
-    },
-    {
-      "ticker": "BLLN",
-      "event_date": "2026-05-06",
-      "event_hour": "amc",
-      "tier": 2,
-      "date_confirmed": true,
-      "call_datetime_utc": "2026-05-06T20:30:00+00:00",
-      "company_name": "BillionToOne, Inc."
-    },
-    {
-      "ticker": "BRKR",
-      "event_date": "2026-05-06",
-      "event_hour": "bmo",
-      "tier": 2,
-      "date_confirmed": true,
-      "call_datetime_utc": "2026-05-06T12:00:00+00:00",
-      "company_name": "Bruker Corp"
-    },
-    {
-      "ticker": "CLOV",
-      "event_date": "2026-05-06",
-      "event_hour": "amc",
-      "tier": 2,
-      "date_confirmed": true,
-      "call_datetime_utc": "2026-05-06T21:00:00+00:00",
-      "company_name": "Clover Health Investments Corp"
-    },
-    {
-      "ticker": "COR",
-      "event_date": "2026-05-06",
-      "event_hour": "bmo",
-      "tier": 2,
-      "date_confirmed": true,
-      "call_datetime_utc": "2026-05-06T12:30:00+00:00",
-      "company_name": "Cencora Inc"
-    },
-    {
-      "ticker": "CSTL",
-      "event_date": "2026-05-06",
-      "event_hour": "amc",
-      "tier": 2,
-      "date_confirmed": true,
-      "call_datetime_utc": "2026-05-06T20:30:00+00:00",
-      "company_name": "Castle Biosciences, Inc."
-    },
-    {
       "ticker": "CUE",
       "event_date": "2026-05-06",
       "event_hour": "",
@@ -225,24 +81,6 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Cadrenal Therapeutics Inc"
-    },
-    {
-      "ticker": "CVS",
-      "event_date": "2026-05-06",
-      "event_hour": "bmo",
-      "tier": 2,
-      "date_confirmed": true,
-      "call_datetime_utc": "2026-05-06T12:00:00+00:00",
-      "company_name": "CVS Health Corp"
-    },
-    {
-      "ticker": "DV",
-      "event_date": "2026-05-06",
-      "event_hour": "amc",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "DoubleVerify Holdings Inc"
     },
     {
       "ticker": "DYN",
@@ -263,33 +101,6 @@
       "company_name": "Editas Medicine Inc"
     },
     {
-      "ticker": "ELAN",
-      "event_date": "2026-05-06",
-      "event_hour": "bmo",
-      "tier": 2,
-      "date_confirmed": true,
-      "call_datetime_utc": "2026-05-06T12:00:00+00:00",
-      "company_name": "Elanco Animal Health Incorporated"
-    },
-    {
-      "ticker": "ESTA",
-      "event_date": "2026-05-06",
-      "event_hour": "bmo",
-      "tier": 2,
-      "date_confirmed": true,
-      "call_datetime_utc": "2026-05-06T12:30:00+00:00",
-      "company_name": "Establishment Labs Holdings Inc."
-    },
-    {
-      "ticker": "EYPT",
-      "event_date": "2026-05-06",
-      "event_hour": "bmo",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "EyePoint Inc"
-    },
-    {
       "ticker": "FATE",
       "event_date": "2026-05-06",
       "event_hour": "",
@@ -299,22 +110,13 @@
       "company_name": "Fate Therapeutics Inc"
     },
     {
-      "ticker": "FTNT",
-      "event_date": "2026-05-06",
-      "event_hour": "amc",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Fortinet Inc"
-    },
-    {
-      "ticker": "GERN",
+      "ticker": "GDRX",
       "event_date": "2026-05-06",
       "event_hour": "bmo",
-      "tier": 3,
+      "tier": 2,
       "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Geron Corp"
+      "call_datetime_utc": "2026-05-07T12:00:00+00:00",
+      "company_name": "Goodrx Holdings Inc"
     },
     {
       "ticker": "GPCR",
@@ -344,42 +146,6 @@
       "company_name": "Immix Biopharma Inc"
     },
     {
-      "ticker": "INMD",
-      "event_date": "2026-05-06",
-      "event_hour": "bmo",
-      "tier": 2,
-      "date_confirmed": true,
-      "call_datetime_utc": "2026-05-06T12:30:00+00:00",
-      "company_name": "InMode Ltd."
-    },
-    {
-      "ticker": "LAW",
-      "event_date": "2026-05-06",
-      "event_hour": "bmo",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "CS Disco Inc"
-    },
-    {
-      "ticker": "LFCR",
-      "event_date": "2026-05-06",
-      "event_hour": "bmo",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Lifecore Biomedical Inc"
-    },
-    {
-      "ticker": "LIVN",
-      "event_date": "2026-05-06",
-      "event_hour": "bmo",
-      "tier": 2,
-      "date_confirmed": true,
-      "call_datetime_utc": "2026-05-06T12:00:00+00:00",
-      "company_name": "LivaNova PLC"
-    },
-    {
       "ticker": "LPCN",
       "event_date": "2026-05-06",
       "event_hour": "",
@@ -387,60 +153,6 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Lipocine Inc"
-    },
-    {
-      "ticker": "LTC",
-      "event_date": "2026-05-06",
-      "event_hour": "amc",
-      "tier": 2,
-      "date_confirmed": true,
-      "call_datetime_utc": "2026-05-07T15:00:00+00:00",
-      "company_name": "LTC Properties Inc"
-    },
-    {
-      "ticker": "MDGL",
-      "event_date": "2026-05-06",
-      "event_hour": "bmo",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Madrigal Pharmaceuticals Inc"
-    },
-    {
-      "ticker": "MDLN",
-      "event_date": "2026-05-06",
-      "event_hour": "bmo",
-      "tier": 2,
-      "date_confirmed": true,
-      "call_datetime_utc": "2026-05-06T13:30:00+00:00",
-      "company_name": "Medline Inc"
-    },
-    {
-      "ticker": "MIRM",
-      "event_date": "2026-05-06",
-      "event_hour": "amc",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Mirum Pharmaceuticals Inc"
-    },
-    {
-      "ticker": "MLYS",
-      "event_date": "2026-05-06",
-      "event_hour": "amc",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Mineralys Therapeutics Inc"
-    },
-    {
-      "ticker": "MNKD",
-      "event_date": "2026-05-06",
-      "event_hour": "amc",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "MannKind Corp"
     },
     {
       "ticker": "MODV",
@@ -461,24 +173,6 @@
       "company_name": "Minerva Neurosciences Inc"
     },
     {
-      "ticker": "NVAX",
-      "event_date": "2026-05-06",
-      "event_hour": "bmo",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Novavax Inc"
-    },
-    {
-      "ticker": "NVST",
-      "event_date": "2026-05-06",
-      "event_hour": "amc",
-      "tier": 2,
-      "date_confirmed": true,
-      "call_datetime_utc": "2026-05-06T21:00:00+00:00",
-      "company_name": "Envista Holdings Corporation"
-    },
-    {
       "ticker": "OS",
       "event_date": "2026-05-06",
       "event_hour": "",
@@ -486,33 +180,6 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "OneStream Inc"
-    },
-    {
-      "ticker": "OSCR",
-      "event_date": "2026-05-06",
-      "event_hour": "bmo",
-      "tier": 2,
-      "date_confirmed": true,
-      "call_datetime_utc": "2026-05-06T12:00:00+00:00",
-      "company_name": "Oscar Health Inc"
-    },
-    {
-      "ticker": "PAHC",
-      "event_date": "2026-05-06",
-      "event_hour": "amc",
-      "tier": 2,
-      "date_confirmed": true,
-      "call_datetime_utc": "2026-05-07T13:00:00+00:00",
-      "company_name": "Phibro Animal Health Corp"
-    },
-    {
-      "ticker": "PAYC",
-      "event_date": "2026-05-06",
-      "event_hour": "amc",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Paycom Software Inc"
     },
     {
       "ticker": "PEPG",
@@ -524,24 +191,6 @@
       "company_name": "PepGen Inc"
     },
     {
-      "ticker": "PODD",
-      "event_date": "2026-05-06",
-      "event_hour": "bmo",
-      "tier": 2,
-      "date_confirmed": true,
-      "call_datetime_utc": "2026-05-06T12:00:00+00:00",
-      "company_name": "Insulet Corporation"
-    },
-    {
-      "ticker": "PRGO",
-      "event_date": "2026-05-06",
-      "event_hour": "bmo",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Perrigo Company PLC"
-    },
-    {
       "ticker": "PRQR",
       "event_date": "2026-05-06",
       "event_hour": "",
@@ -549,24 +198,6 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "ProQR Therapeutics NV"
-    },
-    {
-      "ticker": "PTC",
-      "event_date": "2026-05-06",
-      "event_hour": "amc",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "PTC Inc"
-    },
-    {
-      "ticker": "QGEN",
-      "event_date": "2026-05-06",
-      "event_hour": "amc",
-      "tier": 2,
-      "date_confirmed": true,
-      "call_datetime_utc": "2026-05-06T20:05:00+00:00",
-      "company_name": "Qiagen N.V."
     },
     {
       "ticker": "RAPT",
@@ -587,51 +218,6 @@
       "company_name": "Regenxbio Inc"
     },
     {
-      "ticker": "RPRX",
-      "event_date": "2026-05-06",
-      "event_hour": "bmo",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Royalty Pharma plc"
-    },
-    {
-      "ticker": "RVMD",
-      "event_date": "2026-05-06",
-      "event_hour": "amc",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Revolution Medicines Inc"
-    },
-    {
-      "ticker": "RXRX",
-      "event_date": "2026-05-06",
-      "event_hour": "bmo",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Recursion Pharmaceuticals Inc"
-    },
-    {
-      "ticker": "RXST",
-      "event_date": "2026-05-06",
-      "event_hour": "amc",
-      "tier": 2,
-      "date_confirmed": true,
-      "call_datetime_utc": "2026-05-06T20:30:00+00:00",
-      "company_name": "RxSight, Inc."
-    },
-    {
-      "ticker": "SGHT",
-      "event_date": "2026-05-06",
-      "event_hour": "amc",
-      "tier": 2,
-      "date_confirmed": true,
-      "call_datetime_utc": "2026-05-06T20:30:00+00:00",
-      "company_name": "Sight Sciences, Inc."
-    },
-    {
       "ticker": "SKYE",
       "event_date": "2026-05-06",
       "event_hour": "",
@@ -648,24 +234,6 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Senti Biosciences Inc"
-    },
-    {
-      "ticker": "SRPT",
-      "event_date": "2026-05-06",
-      "event_hour": "amc",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Sarepta Therapeutics Inc"
-    },
-    {
-      "ticker": "STAA",
-      "event_date": "2026-05-06",
-      "event_hour": "",
-      "tier": 2,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "STAAR Surgical Company"
     },
     {
       "ticker": "STRO",
@@ -686,15 +254,6 @@
       "company_name": "Synlogic Inc"
     },
     {
-      "ticker": "TARS",
-      "event_date": "2026-05-06",
-      "event_hour": "amc",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Tarsus Pharmaceuticals Inc"
-    },
-    {
       "ticker": "TBPH",
       "event_date": "2026-05-06",
       "event_hour": "",
@@ -702,42 +261,6 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Theravance Biopharma Inc"
-    },
-    {
-      "ticker": "TECH",
-      "event_date": "2026-05-06",
-      "event_hour": "bmo",
-      "tier": 2,
-      "date_confirmed": true,
-      "call_datetime_utc": "2026-05-06T13:00:00+00:00",
-      "company_name": "Bio-Techne Corporation"
-    },
-    {
-      "ticker": "TGTX",
-      "event_date": "2026-05-06",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "TG Therapeutics Inc common stock"
-    },
-    {
-      "ticker": "TPL",
-      "event_date": "2026-05-06",
-      "event_hour": "amc",
-      "tier": 1,
-      "date_confirmed": true,
-      "call_datetime_utc": "2026-05-07T14:30:00+00:00",
-      "company_name": "Texas Pacific Land Corp"
-    },
-    {
-      "ticker": "TSHA",
-      "event_date": "2026-05-06",
-      "event_hour": "bmo",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Taysha Gene Therapies Inc"
     },
     {
       "ticker": "TYRA",
@@ -749,33 +272,6 @@
       "company_name": "Tyra Biosciences Inc"
     },
     {
-      "ticker": "URGN",
-      "event_date": "2026-05-06",
-      "event_hour": "bmo",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Urogen Pharma Ltd"
-    },
-    {
-      "ticker": "USPH",
-      "event_date": "2026-05-06",
-      "event_hour": "amc",
-      "tier": 2,
-      "date_confirmed": true,
-      "call_datetime_utc": "2026-05-07T14:30:00+00:00",
-      "company_name": "US Physical Therapy Inc"
-    },
-    {
-      "ticker": "UTHR",
-      "event_date": "2026-05-06",
-      "event_hour": "bmo",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "United Therapeutics Corp"
-    },
-    {
       "ticker": "VERU",
       "event_date": "2026-05-06",
       "event_hour": "",
@@ -783,24 +279,6 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Veru Inc"
-    },
-    {
-      "ticker": "VNDA",
-      "event_date": "2026-05-06",
-      "event_hour": "amc",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Vanda Pharmaceuticals Inc."
-    },
-    {
-      "ticker": "VXRT",
-      "event_date": "2026-05-06",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Vaxart Inc"
     },
     {
       "ticker": "VYNE",
@@ -812,15 +290,6 @@
       "company_name": "Vyne Therapeutics Inc"
     },
     {
-      "ticker": "ZVRA",
-      "event_date": "2026-05-06",
-      "event_hour": "amc",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Zevra Therapeutics Inc"
-    },
-    {
       "ticker": "ABSI",
       "event_date": "2026-05-07",
       "event_hour": "amc",
@@ -828,15 +297,6 @@
       "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "Absci Corp"
-    },
-    {
-      "ticker": "ACHV",
-      "event_date": "2026-05-07",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Achieve Life Sciences Inc"
     },
     {
       "ticker": "AFRM",
@@ -857,24 +317,6 @@
       "company_name": "American Healthcare REIT Inc"
     },
     {
-      "ticker": "ALT",
-      "event_date": "2026-05-07",
-      "event_hour": "bmo",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Altimmune Inc"
-    },
-    {
-      "ticker": "AMLX",
-      "event_date": "2026-05-07",
-      "event_hour": "bmo",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Amylyx Pharmaceuticals Inc"
-    },
-    {
       "ticker": "AMN",
       "event_date": "2026-05-07",
       "event_hour": "amc",
@@ -886,9 +328,9 @@
     {
       "ticker": "AMPH",
       "event_date": "2026-05-07",
-      "event_hour": "",
+      "event_hour": "amc",
       "tier": 3,
-      "date_confirmed": false,
+      "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "Amphastar Pharmaceuticals Inc"
     },
@@ -976,20 +418,11 @@
     {
       "ticker": "BBIO",
       "event_date": "2026-05-07",
-      "event_hour": "",
+      "event_hour": "amc",
       "tier": 3,
-      "date_confirmed": false,
+      "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "BridgeBio Pharma Inc"
-    },
-    {
-      "ticker": "BDX",
-      "event_date": "2026-05-07",
-      "event_hour": "bmo",
-      "tier": 2,
-      "date_confirmed": true,
-      "call_datetime_utc": "2026-05-07T12:00:00+00:00",
-      "company_name": "Becton Dickinson and Co"
     },
     {
       "ticker": "BILL",
@@ -1019,15 +452,6 @@
       "company_name": "Caris Life Sciences Inc"
     },
     {
-      "ticker": "CAPR",
-      "event_date": "2026-05-07",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Capricor Therapeutics Inc"
-    },
-    {
       "ticker": "CCRN",
       "event_date": "2026-05-07",
       "event_hour": "amc",
@@ -1044,15 +468,6 @@
       "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "Codexis Inc"
-    },
-    {
-      "ticker": "CGEM",
-      "event_date": "2026-05-07",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Cullinan Therapeutics Inc"
     },
     {
       "ticker": "CGON",
@@ -1073,15 +488,6 @@
       "company_name": "Coinbase Global Inc"
     },
     {
-      "ticker": "COLL",
-      "event_date": "2026-05-07",
-      "event_hour": "bmo",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Collegium Pharmaceutical Inc"
-    },
-    {
       "ticker": "CON",
       "event_date": "2026-05-07",
       "event_hour": "amc",
@@ -1100,24 +506,6 @@
       "company_name": "Coya Therapeutics Inc"
     },
     {
-      "ticker": "CRL",
-      "event_date": "2026-05-07",
-      "event_hour": "bmo",
-      "tier": 2,
-      "date_confirmed": true,
-      "call_datetime_utc": "2026-05-07T12:30:00+00:00",
-      "company_name": "Charles River Lbrtrs ntrntl Inc"
-    },
-    {
-      "ticker": "CRMD",
-      "event_date": "2026-05-07",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "CorMedix Inc"
-    },
-    {
       "ticker": "CRNX",
       "event_date": "2026-05-07",
       "event_hour": "amc",
@@ -1129,11 +517,20 @@
     {
       "ticker": "CRVS",
       "event_date": "2026-05-07",
-      "event_hour": "",
+      "event_hour": "amc",
       "tier": 3,
-      "date_confirmed": false,
+      "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "Corvus Pharmaceuticals Inc"
+    },
+    {
+      "ticker": "CTMX",
+      "event_date": "2026-05-07",
+      "event_hour": "amc",
+      "tier": 3,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "CytomX Therapeutics Inc"
     },
     {
       "ticker": "CTRE",
@@ -1152,15 +549,6 @@
       "date_confirmed": true,
       "call_datetime_utc": "2026-05-07T21:00:00+00:00",
       "company_name": "Dropbox, Inc."
-    },
-    {
-      "ticker": "DDOG",
-      "event_date": "2026-05-07",
-      "event_hour": "bmo",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Datadog, Inc."
     },
     {
       "ticker": "DH",
@@ -1190,15 +578,6 @@
       "company_name": "Eledon Pharmaceuticals Inc"
     },
     {
-      "ticker": "ENOV",
-      "event_date": "2026-05-07",
-      "event_hour": "bmo",
-      "tier": 2,
-      "date_confirmed": true,
-      "call_datetime_utc": "2026-05-07T12:30:00+00:00",
-      "company_name": "Enovis Corporation"
-    },
-    {
       "ticker": "ERAS",
       "event_date": "2026-05-07",
       "event_hour": "amc",
@@ -1226,15 +605,6 @@
       "company_name": "EverCommerce Inc"
     },
     {
-      "ticker": "EVH",
-      "event_date": "2026-05-07",
-      "event_hour": "bmo",
-      "tier": 2,
-      "date_confirmed": true,
-      "call_datetime_utc": "2026-05-07T12:00:00+00:00",
-      "company_name": "Evolent Health Inc"
-    },
-    {
       "ticker": "EXFY",
       "event_date": "2026-05-07",
       "event_hour": "amc",
@@ -1246,9 +616,9 @@
     {
       "ticker": "FDMT",
       "event_date": "2026-05-07",
-      "event_hour": "",
+      "event_hour": "amc",
       "tier": 3,
-      "date_confirmed": false,
+      "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "4D Molecular Therapeutics Inc"
     },
@@ -1260,15 +630,6 @@
       "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "JFrog Ltd"
-    },
-    {
-      "ticker": "GDRX",
-      "event_date": "2026-05-07",
-      "event_hour": "bmo",
-      "tier": 2,
-      "date_confirmed": true,
-      "call_datetime_utc": "2026-05-07T12:00:00+00:00",
-      "company_name": "Goodrx Holdings Inc"
     },
     {
       "ticker": "GEN",
@@ -1307,15 +668,6 @@
       "company_name": "Gilead Sciences Inc"
     },
     {
-      "ticker": "GLUE",
-      "event_date": "2026-05-07",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Monte Rosa Therapeutics Inc"
-    },
-    {
       "ticker": "GMED",
       "event_date": "2026-05-07",
       "event_hour": "amc",
@@ -1325,31 +677,13 @@
       "company_name": "Globus Medical Inc"
     },
     {
-      "ticker": "HAE",
-      "event_date": "2026-05-07",
-      "event_hour": "bmo",
-      "tier": 2,
-      "date_confirmed": true,
-      "call_datetime_utc": "2026-05-07T12:00:00+00:00",
-      "company_name": "Haemonetics Corporation"
-    },
-    {
       "ticker": "HOWL",
       "event_date": "2026-05-07",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Werewolf Therapeutics Inc"
-    },
-    {
-      "ticker": "HRMY",
-      "event_date": "2026-05-07",
-      "event_hour": "bmo",
+      "event_hour": "amc",
       "tier": 3,
       "date_confirmed": true,
       "call_datetime_utc": null,
-      "company_name": "Harmony Biosciences Holdings Inc"
+      "company_name": "Werewolf Therapeutics Inc"
     },
     {
       "ticker": "HUBS",
@@ -1359,15 +693,6 @@
       "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "HubSpot, Inc."
-    },
-    {
-      "ticker": "IBRX",
-      "event_date": "2026-05-07",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Immunitybio Inc"
     },
     {
       "ticker": "ICUI",
@@ -1390,38 +715,20 @@
     {
       "ticker": "INMB",
       "event_date": "2026-05-07",
-      "event_hour": "",
+      "event_hour": "amc",
       "tier": 3,
-      "date_confirmed": false,
+      "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "INmune Bio Inc"
     },
     {
-      "ticker": "INSM",
-      "event_date": "2026-05-07",
-      "event_hour": "bmo",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Insmed Inc"
-    },
-    {
       "ticker": "INTS",
       "event_date": "2026-05-07",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Intensity Therapeutics Inc"
-    },
-    {
-      "ticker": "IOVA",
-      "event_date": "2026-05-07",
-      "event_hour": "bmo",
+      "event_hour": "amc",
       "tier": 3,
       "date_confirmed": true,
       "call_datetime_utc": null,
-      "company_name": "Iovance Biotherapeutics Inc"
+      "company_name": "Intensity Therapeutics Inc"
     },
     {
       "ticker": "IRON",
@@ -1451,49 +758,13 @@
       "company_name": "Kezar Life Sciences Inc"
     },
     {
-      "ticker": "LCTX",
-      "event_date": "2026-05-07",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Lineage Cell Therapeutics Inc"
-    },
-    {
-      "ticker": "LFST",
-      "event_date": "2026-05-07",
-      "event_hour": "bmo",
-      "tier": 2,
-      "date_confirmed": true,
-      "call_datetime_utc": "2026-05-07T12:30:00+00:00",
-      "company_name": "Lifestance Health Group Inc"
-    },
-    {
-      "ticker": "LNTH",
-      "event_date": "2026-05-07",
-      "event_hour": "bmo",
-      "tier": 2,
-      "date_confirmed": true,
-      "call_datetime_utc": "2026-05-07T12:00:00+00:00",
-      "company_name": "Lantheus Holdings, Inc."
-    },
-    {
       "ticker": "LONA",
       "event_date": "2026-05-07",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "LeonaBio Inc (fka Athira Pharma)"
-    },
-    {
-      "ticker": "LQDA",
-      "event_date": "2026-05-07",
-      "event_hour": "bmo",
+      "event_hour": "amc",
       "tier": 3,
       "date_confirmed": true,
       "call_datetime_utc": null,
-      "company_name": "Liquidia Corp"
+      "company_name": "LeonaBio Inc (fka Athira Pharma)"
     },
     {
       "ticker": "LRMR",
@@ -1512,15 +783,6 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Lexeo Therapeutics Inc"
-    },
-    {
-      "ticker": "LXRX",
-      "event_date": "2026-05-07",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Lexicon Pharmaceuticals Inc"
     },
     {
       "ticker": "MAIA",
@@ -1577,15 +839,6 @@
       "company_name": "Mettler-Toledo International Inc"
     },
     {
-      "ticker": "NAMS",
-      "event_date": "2026-05-07",
-      "event_hour": "bmo",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "NewAmsterdam Pharma Company NV"
-    },
-    {
       "ticker": "NET",
       "event_date": "2026-05-07",
       "event_hour": "amc",
@@ -1629,15 +882,6 @@
       "date_confirmed": true,
       "call_datetime_utc": "2026-05-07T20:30:00+00:00",
       "company_name": "Natera, Inc."
-    },
-    {
-      "ticker": "NUVL",
-      "event_date": "2026-05-07",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Nuvalent Inc"
     },
     {
       "ticker": "OABI",
@@ -1721,22 +965,13 @@
       "company_name": "Progyny Inc"
     },
     {
-      "ticker": "PRME",
+      "ticker": "PRTA",
       "event_date": "2026-05-07",
-      "event_hour": "",
+      "event_hour": "amc",
       "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Prime Medicine Inc"
-    },
-    {
-      "ticker": "PRVA",
-      "event_date": "2026-05-07",
-      "event_hour": "bmo",
-      "tier": 2,
       "date_confirmed": true,
-      "call_datetime_utc": "2026-05-07T12:00:00+00:00",
-      "company_name": "Privia Health Group Inc"
+      "call_datetime_utc": null,
+      "company_name": "Prothena Corporation PLC"
     },
     {
       "ticker": "PTCT",
@@ -1748,15 +983,6 @@
       "company_name": "PTC Therapeutics, Inc."
     },
     {
-      "ticker": "QNRX",
-      "event_date": "2026-05-07",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Quoin Pharmaceuticals Ltd - ADR"
-    },
-    {
       "ticker": "QTTB",
       "event_date": "2026-05-07",
       "event_hour": "",
@@ -1764,24 +990,6 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Q32 Bio Inc"
-    },
-    {
-      "ticker": "RAPP",
-      "event_date": "2026-05-07",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Rapport Therapeutics Inc"
-    },
-    {
-      "ticker": "RMTI",
-      "event_date": "2026-05-07",
-      "event_hour": "bmo",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Rockwell Medical Inc"
     },
     {
       "ticker": "RNG",
@@ -1804,11 +1012,20 @@
     {
       "ticker": "SIGA",
       "event_date": "2026-05-07",
-      "event_hour": "",
+      "event_hour": "amc",
       "tier": 3,
-      "date_confirmed": false,
+      "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "SIGA Technologies Inc"
+    },
+    {
+      "ticker": "SILA",
+      "event_date": "2026-05-07",
+      "event_hour": "",
+      "tier": 2,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Sila Realty Trust Inc"
     },
     {
       "ticker": "SNGX",
@@ -1829,22 +1046,13 @@
       "company_name": "Sprout Social Inc"
     },
     {
-      "ticker": "SRRK",
+      "ticker": "STOK",
       "event_date": "2026-05-07",
-      "event_hour": "bmo",
+      "event_hour": "amc",
       "tier": 3,
       "date_confirmed": true,
       "call_datetime_utc": null,
-      "company_name": "Scholar Rock Holding Corp"
-    },
-    {
-      "ticker": "STVN",
-      "event_date": "2026-05-07",
-      "event_hour": "bmo",
-      "tier": 2,
-      "date_confirmed": true,
-      "call_datetime_utc": "2026-05-07T12:30:00+00:00",
-      "company_name": "Stevanato Group S.p.A."
+      "company_name": "Stoke Therapeutics Inc"
     },
     {
       "ticker": "SVRA",
@@ -1867,20 +1075,11 @@
     {
       "ticker": "TECX",
       "event_date": "2026-05-07",
-      "event_hour": "",
+      "event_hour": "amc",
       "tier": 3,
-      "date_confirmed": false,
+      "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "Tectonic Therapeutic Inc"
-    },
-    {
-      "ticker": "TFX",
-      "event_date": "2026-05-07",
-      "event_hour": "bmo",
-      "tier": 2,
-      "date_confirmed": true,
-      "call_datetime_utc": "2026-05-07T12:00:00+00:00",
-      "company_name": "Teleflex Incorporated"
     },
     {
       "ticker": "TNDM",
@@ -1890,15 +1089,6 @@
       "date_confirmed": true,
       "call_datetime_utc": "2026-05-07T20:30:00+00:00",
       "company_name": "Tandem Diabetes Care, Inc."
-    },
-    {
-      "ticker": "TRDA",
-      "event_date": "2026-05-07",
-      "event_hour": "bmo",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Entrada Therapeutics Inc"
     },
     {
       "ticker": "TRVI",
@@ -1917,24 +1107,6 @@
       "date_confirmed": true,
       "call_datetime_utc": "2026-05-07T20:30:00+00:00",
       "company_name": "10x Genomics, Inc."
-    },
-    {
-      "ticker": "U",
-      "event_date": "2026-05-07",
-      "event_hour": "bmo",
-      "tier": 1,
-      "date_confirmed": true,
-      "call_datetime_utc": "2026-05-07T12:30:00+00:00",
-      "company_name": "Unity Software Inc"
-    },
-    {
-      "ticker": "VCEL",
-      "event_date": "2026-05-07",
-      "event_hour": "bmo",
-      "tier": 2,
-      "date_confirmed": true,
-      "call_datetime_utc": "2026-05-07T12:30:00+00:00",
-      "company_name": "Vericel Corporation"
     },
     {
       "ticker": "VREX",
@@ -1964,31 +1136,22 @@
       "company_name": "VTEX"
     },
     {
-      "ticker": "VTRS",
+      "ticker": "VXRT",
       "event_date": "2026-05-07",
-      "event_hour": "bmo",
+      "event_hour": "amc",
       "tier": 3,
       "date_confirmed": true,
       "call_datetime_utc": null,
-      "company_name": "Viatris Inc"
+      "company_name": "Vaxart Inc"
     },
     {
-      "ticker": "WHWK",
+      "ticker": "XENE",
       "event_date": "2026-05-07",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Whitehawk Therapeutics Inc"
-    },
-    {
-      "ticker": "XERS",
-      "event_date": "2026-05-07",
-      "event_hour": "bmo",
+      "event_hour": "amc",
       "tier": 3,
       "date_confirmed": true,
       "call_datetime_utc": null,
-      "company_name": "Xeris Biopharma Holdings Inc"
+      "company_name": "Xenon Pharmaceuticals Inc"
     },
     {
       "ticker": "XLO",
@@ -1998,24 +1161,6 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Xilio Therapeutics Inc"
-    },
-    {
-      "ticker": "ZTS",
-      "event_date": "2026-05-07",
-      "event_hour": "bmo",
-      "tier": 2,
-      "date_confirmed": true,
-      "call_datetime_utc": "2026-05-07T12:30:00+00:00",
-      "company_name": "Zoetis Inc."
-    },
-    {
-      "ticker": "ZURA",
-      "event_date": "2026-05-07",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Zura Bio Ltd"
     },
     {
       "ticker": "ZYME",
@@ -2072,15 +1217,6 @@
       "company_name": "Gyre Therapeutics Inc"
     },
     {
-      "ticker": "LGVN",
-      "event_date": "2026-05-08",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Longeveron Inc"
-    },
-    {
       "ticker": "NGNE",
       "event_date": "2026-05-08",
       "event_hour": "bmo",
@@ -2088,15 +1224,6 @@
       "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "Neurogene Inc"
-    },
-    {
-      "ticker": "PLX",
-      "event_date": "2026-05-08",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Protalix Biotherapeutics Inc"
     },
     {
       "ticker": "PMVP",
@@ -2126,15 +1253,6 @@
       "company_name": "Pyxis Oncology Inc"
     },
     {
-      "ticker": "SILA",
-      "event_date": "2026-05-08",
-      "event_hour": "",
-      "tier": 2,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Sila Realty Trust Inc"
-    },
-    {
       "ticker": "STRW",
       "event_date": "2026-05-08",
       "event_hour": "bmo",
@@ -2146,11 +1264,20 @@
     {
       "ticker": "ABCL",
       "event_date": "2026-05-11",
-      "event_hour": "",
+      "event_hour": "amc",
       "tier": 3,
-      "date_confirmed": false,
+      "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "AbCellera Biologics Inc"
+    },
+    {
+      "ticker": "ACH",
+      "event_date": "2026-05-11",
+      "event_hour": "bmo",
+      "tier": 2,
+      "date_confirmed": true,
+      "call_datetime_utc": "2026-05-11T12:30:00+00:00",
+      "company_name": "Accendra Health (fma Owens and Minor)"
     },
     {
       "ticker": "ADAP",
@@ -2159,25 +1286,16 @@
       "tier": 3,
       "date_confirmed": false,
       "call_datetime_utc": null,
-      "company_name": "Automatic Data Processing Inc"
+      "company_name": "Adaptimmune Therapeutics PLC"
     },
     {
       "ticker": "AGEN",
       "event_date": "2026-05-11",
-      "event_hour": "",
+      "event_hour": "bmo",
       "tier": 3,
-      "date_confirmed": false,
+      "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "Agenus Inc"
-    },
-    {
-      "ticker": "AKBA",
-      "event_date": "2026-05-11",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Akebia Therapeutics Inc"
     },
     {
       "ticker": "ALBT",
@@ -2252,6 +1370,15 @@
       "company_name": "Aurinia Pharmaceuticals Inc"
     },
     {
+      "ticker": "BCAX",
+      "event_date": "2026-05-11",
+      "event_hour": "bmo",
+      "tier": 3,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Bicara Therapeutics Inc"
+    },
+    {
       "ticker": "BLTE",
       "event_date": "2026-05-11",
       "event_hour": "",
@@ -2299,11 +1426,20 @@
     {
       "ticker": "CERT",
       "event_date": "2026-05-11",
-      "event_hour": "amc",
+      "event_hour": "bmo",
       "tier": 2,
       "date_confirmed": true,
       "call_datetime_utc": "2026-05-11T12:30:00+00:00",
       "company_name": "Certara, Inc."
+    },
+    {
+      "ticker": "CHRS",
+      "event_date": "2026-05-11",
+      "event_hour": "amc",
+      "tier": 3,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Coherus Oncology Inc"
     },
     {
       "ticker": "CRSP",
@@ -2396,11 +1532,20 @@
       "company_name": "Genprex Inc"
     },
     {
+      "ticker": "HCAT",
+      "event_date": "2026-05-11",
+      "event_hour": "amc",
+      "tier": 2,
+      "date_confirmed": true,
+      "call_datetime_utc": "2026-05-11T21:00:00+00:00",
+      "company_name": "Health Catalyst Inc"
+    },
+    {
       "ticker": "HIMS",
       "event_date": "2026-05-11",
-      "event_hour": "",
+      "event_hour": "amc",
       "tier": 2,
-      "date_confirmed": false,
+      "date_confirmed": true,
       "call_datetime_utc": "2026-05-11T21:00:00+00:00",
       "company_name": "Hims & Hers Health Inc"
     },
@@ -2416,18 +1561,18 @@
     {
       "ticker": "HROW",
       "event_date": "2026-05-11",
-      "event_hour": "",
+      "event_hour": "amc",
       "tier": 3,
-      "date_confirmed": false,
+      "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "Harrow Inc"
     },
     {
       "ticker": "HRTX",
       "event_date": "2026-05-11",
-      "event_hour": "",
+      "event_hour": "bmo",
       "tier": 3,
-      "date_confirmed": false,
+      "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "Heron Therapeutics Inc"
     },
@@ -2479,11 +1624,29 @@
     {
       "ticker": "KLTR",
       "event_date": "2026-05-11",
-      "event_hour": "bmo",
+      "event_hour": "amc",
       "tier": 3,
       "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "Kaltura Inc"
+    },
+    {
+      "ticker": "LENZ",
+      "event_date": "2026-05-11",
+      "event_hour": "amc",
+      "tier": 3,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Lenz Therapeutics Inc"
+    },
+    {
+      "ticker": "LQDA",
+      "event_date": "2026-05-11",
+      "event_hour": "bmo",
+      "tier": 3,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Liquidia Corp"
     },
     {
       "ticker": "LYEL",
@@ -2533,9 +1696,9 @@
     {
       "ticker": "NOVT",
       "event_date": "2026-05-11",
-      "event_hour": "",
+      "event_hour": "amc",
       "tier": 2,
-      "date_confirmed": false,
+      "date_confirmed": true,
       "call_datetime_utc": "2026-05-12T12:00:00+00:00",
       "company_name": "Novanta Inc."
     },
@@ -2547,6 +1710,15 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "ORIC Pharmaceuticals Inc"
+    },
+    {
+      "ticker": "PACS",
+      "event_date": "2026-05-11",
+      "event_hour": "amc",
+      "tier": 1,
+      "date_confirmed": true,
+      "call_datetime_utc": "2026-05-12T15:30:00+00:00",
+      "company_name": "PACS Group Inc"
     },
     {
       "ticker": "PASG",
@@ -2585,15 +1757,6 @@
       "company_name": "Pliant Therapeutics Inc"
     },
     {
-      "ticker": "PNTG",
-      "event_date": "2026-05-11",
-      "event_hour": "",
-      "tier": 1,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Pennant Group Inc"
-    },
-    {
       "ticker": "PROK",
       "event_date": "2026-05-11",
       "event_hour": "",
@@ -2623,9 +1786,9 @@
     {
       "ticker": "RDNT",
       "event_date": "2026-05-11",
-      "event_hour": "",
+      "event_hour": "bmo",
       "tier": 2,
-      "date_confirmed": false,
+      "date_confirmed": true,
       "call_datetime_utc": "2026-05-11T14:30:00+00:00",
       "company_name": "Radnet Inc"
     },
@@ -2650,9 +1813,9 @@
     {
       "ticker": "SIBN",
       "event_date": "2026-05-11",
-      "event_hour": "",
+      "event_hour": "amc",
       "tier": 2,
-      "date_confirmed": false,
+      "date_confirmed": true,
       "call_datetime_utc": "2026-05-11T20:30:00+00:00",
       "company_name": "SI-BONE, Inc."
     },
@@ -2673,15 +1836,6 @@
       "date_confirmed": true,
       "call_datetime_utc": "2026-05-12T13:00:00+00:00",
       "company_name": "STERIS plc"
-    },
-    {
-      "ticker": "STOK",
-      "event_date": "2026-05-11",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Stoke Therapeutics Inc"
     },
     {
       "ticker": "TIL",
@@ -2729,6 +1883,24 @@
       "company_name": "Xenetic Biosciences Inc"
     },
     {
+      "ticker": "ABOS",
+      "event_date": "2026-05-12",
+      "event_hour": "bmo",
+      "tier": 3,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Acumen Pharmaceuticals Inc"
+    },
+    {
+      "ticker": "ACHV",
+      "event_date": "2026-05-12",
+      "event_hour": "bmo",
+      "tier": 3,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Achieve Life Sciences Inc"
+    },
+    {
       "ticker": "ACRS",
       "event_date": "2026-05-12",
       "event_hour": "",
@@ -2756,6 +1928,24 @@
       "company_name": "Aprea Therapeutics Inc"
     },
     {
+      "ticker": "ARVN",
+      "event_date": "2026-05-12",
+      "event_hour": "bmo",
+      "tier": 3,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Arvinas Inc"
+    },
+    {
+      "ticker": "AVIR",
+      "event_date": "2026-05-12",
+      "event_hour": "amc",
+      "tier": 3,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Atea Pharmaceuticals Inc"
+    },
+    {
       "ticker": "BEAM",
       "event_date": "2026-05-12",
       "event_hour": "",
@@ -2781,6 +1971,15 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Benitec Biopharma Inc"
+    },
+    {
+      "ticker": "CAPR",
+      "event_date": "2026-05-12",
+      "event_hour": "amc",
+      "tier": 3,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Capricor Therapeutics Inc"
     },
     {
       "ticker": "CLSD",
@@ -2846,22 +2045,22 @@
       "company_name": "Gossamer Bio Inc"
     },
     {
-      "ticker": "HCAT",
-      "event_date": "2026-05-12",
-      "event_hour": "",
-      "tier": 2,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Health Catalyst Inc"
-    },
-    {
       "ticker": "HYPR",
       "event_date": "2026-05-12",
-      "event_hour": "",
+      "event_hour": "amc",
       "tier": 2,
-      "date_confirmed": false,
+      "date_confirmed": true,
       "call_datetime_utc": "2026-05-12T20:30:00+00:00",
       "company_name": "Hyperfine Inc"
+    },
+    {
+      "ticker": "IMNN",
+      "event_date": "2026-05-12",
+      "event_hour": "bmo",
+      "tier": 3,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Imunon Inc"
     },
     {
       "ticker": "IMRX",
@@ -2891,6 +2090,24 @@
       "company_name": "KALA BIO Inc"
     },
     {
+      "ticker": "KURA",
+      "event_date": "2026-05-12",
+      "event_hour": "amc",
+      "tier": 3,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Kura Oncology Inc"
+    },
+    {
+      "ticker": "LCTX",
+      "event_date": "2026-05-12",
+      "event_hour": "amc",
+      "tier": 3,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Lineage Cell Therapeutics Inc"
+    },
+    {
       "ticker": "LEGN",
       "event_date": "2026-05-12",
       "event_hour": "bmo",
@@ -2902,9 +2119,9 @@
     {
       "ticker": "LMRI",
       "event_date": "2026-05-12",
-      "event_hour": "",
+      "event_hour": "amc",
       "tier": 2,
-      "date_confirmed": false,
+      "date_confirmed": true,
       "call_datetime_utc": "2026-05-12T20:00:00+00:00",
       "company_name": "Lumexa Imaging Holdings Inc"
     },
@@ -2983,9 +2200,9 @@
     {
       "ticker": "Q",
       "event_date": "2026-05-12",
-      "event_hour": "",
+      "event_hour": "bmo",
       "tier": 3,
-      "date_confirmed": false,
+      "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "Qnity Electronics Inc."
     },
@@ -2997,6 +2214,15 @@
       "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "Uniqure NV"
+    },
+    {
+      "ticker": "RLMD",
+      "event_date": "2026-05-12",
+      "event_hour": "amc",
+      "tier": 3,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Relmada Therapeutics Inc"
     },
     {
       "ticker": "SCLX",
@@ -3064,9 +2290,9 @@
     {
       "ticker": "VRCA",
       "event_date": "2026-05-12",
-      "event_hour": "",
+      "event_hour": "amc",
       "tier": 3,
-      "date_confirmed": false,
+      "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "Verrica Pharmaceuticals Inc"
     },
@@ -3098,15 +2324,6 @@
       "company_name": "XBiotech Inc"
     },
     {
-      "ticker": "XENE",
-      "event_date": "2026-05-12",
-      "event_hour": "amc",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Xenon Pharmaceuticals Inc"
-    },
-    {
       "ticker": "ZNTL",
       "event_date": "2026-05-12",
       "event_hour": "",
@@ -3114,6 +2331,15 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Zentalis Pharmaceuticals Inc"
+    },
+    {
+      "ticker": "ABEO",
+      "event_date": "2026-05-13",
+      "event_hour": "bmo",
+      "tier": 3,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Abeona Therapeutics Inc"
     },
     {
       "ticker": "AIM",
@@ -3125,6 +2351,15 @@
       "company_name": "AIM ImmunoTech Inc"
     },
     {
+      "ticker": "ALT",
+      "event_date": "2026-05-13",
+      "event_hour": "bmo",
+      "tier": 3,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Altimmune Inc"
+    },
+    {
       "ticker": "ANTX",
       "event_date": "2026-05-13",
       "event_hour": "",
@@ -3132,6 +2367,15 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "AN2 Therapeutics Inc"
+    },
+    {
+      "ticker": "AQST",
+      "event_date": "2026-05-13",
+      "event_hour": "amc",
+      "tier": 3,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Aquestive Therapeutics Inc"
     },
     {
       "ticker": "ATYR",
@@ -3152,13 +2396,13 @@
       "company_name": "Arrivent Biopharma Inc"
     },
     {
-      "ticker": "AVIR",
+      "ticker": "BCAB",
       "event_date": "2026-05-13",
       "event_hour": "",
       "tier": 3,
       "date_confirmed": false,
       "call_datetime_utc": null,
-      "company_name": "Atea Pharmaceuticals Inc"
+      "company_name": "Bioatla Inc"
     },
     {
       "ticker": "BCLI",
@@ -3224,6 +2468,15 @@
       "company_name": "Catalyst Pharmaceuticals Inc"
     },
     {
+      "ticker": "CTSO",
+      "event_date": "2026-05-13",
+      "event_hour": "amc",
+      "tier": 3,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Cytosorbents Corp"
+    },
+    {
       "ticker": "DOCS",
       "event_date": "2026-05-13",
       "event_hour": "amc",
@@ -3235,7 +2488,7 @@
     {
       "ticker": "DT",
       "event_date": "2026-05-13",
-      "event_hour": "amc",
+      "event_hour": "bmo",
       "tier": 3,
       "date_confirmed": true,
       "call_datetime_utc": null,
@@ -3343,20 +2596,20 @@
     {
       "ticker": "KMDA",
       "event_date": "2026-05-13",
-      "event_hour": "",
+      "event_hour": "bmo",
       "tier": 3,
-      "date_confirmed": false,
+      "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "Kamada Ltd"
     },
     {
-      "ticker": "LENZ",
+      "ticker": "LGVN",
       "event_date": "2026-05-13",
-      "event_hour": "",
+      "event_hour": "amc",
       "tier": 3,
-      "date_confirmed": false,
+      "date_confirmed": true,
       "call_datetime_utc": null,
-      "company_name": "Lenz Therapeutics Inc"
+      "company_name": "Longeveron Inc"
     },
     {
       "ticker": "MGNX",
@@ -3449,22 +2702,13 @@
       "company_name": "Pharvaris NV"
     },
     {
-      "ticker": "PRAX",
+      "ticker": "PLX",
       "event_date": "2026-05-13",
       "event_hour": "",
       "tier": 3,
       "date_confirmed": false,
       "call_datetime_utc": null,
-      "company_name": "Praxis Precision Medicines Inc"
-    },
-    {
-      "ticker": "PRTA",
-      "event_date": "2026-05-13",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Prothena Corporation PLC"
+      "company_name": "Protalix Biotherapeutics Inc"
     },
     {
       "ticker": "RANI",
@@ -3474,15 +2718,6 @@
       "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "Rani Therapeutics Holdings Inc"
-    },
-    {
-      "ticker": "RLMD",
-      "event_date": "2026-05-13",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Relmada Therapeutics Inc"
     },
     {
       "ticker": "RNTX",
@@ -3514,11 +2749,29 @@
     {
       "ticker": "SMWB",
       "event_date": "2026-05-13",
-      "event_hour": "amc",
+      "event_hour": "bmo",
       "tier": 3,
       "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "Similarweb Ltd"
+    },
+    {
+      "ticker": "SPRO",
+      "event_date": "2026-05-13",
+      "event_hour": "amc",
+      "tier": 3,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Spero Therapeutics Inc"
+    },
+    {
+      "ticker": "STAA",
+      "event_date": "2026-05-13",
+      "event_hour": "amc",
+      "tier": 2,
+      "date_confirmed": true,
+      "call_datetime_utc": "2026-05-13T21:30:00+00:00",
+      "company_name": "STAAR Surgical Company"
     },
     {
       "ticker": "STTK",
@@ -3611,6 +2864,15 @@
       "company_name": "CASI Pharmaceuticals Inc"
     },
     {
+      "ticker": "CRMD",
+      "event_date": "2026-05-14",
+      "event_hour": "bmo",
+      "tier": 3,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "CorMedix Inc"
+    },
+    {
       "ticker": "CTNM",
       "event_date": "2026-05-14",
       "event_hour": "",
@@ -3622,18 +2884,18 @@
     {
       "ticker": "FIG",
       "event_date": "2026-05-14",
-      "event_hour": "",
+      "event_hour": "amc",
       "tier": 3,
-      "date_confirmed": false,
+      "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "Figma Inc"
     },
     {
       "ticker": "HTFL",
       "event_date": "2026-05-14",
-      "event_hour": "",
+      "event_hour": "amc",
       "tier": 2,
-      "date_confirmed": false,
+      "date_confirmed": true,
       "call_datetime_utc": "2026-05-14T20:30:00+00:00",
       "company_name": "HeartFlow, Inc."
     },
@@ -3649,11 +2911,20 @@
     {
       "ticker": "TRAK",
       "event_date": "2026-05-14",
-      "event_hour": "",
+      "event_hour": "amc",
       "tier": 3,
-      "date_confirmed": false,
+      "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "Repositrak Inc"
+    },
+    {
+      "ticker": "YSS",
+      "event_date": "2026-05-14",
+      "event_hour": "amc",
+      "tier": 3,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "York Space Systems Inc"
     },
     {
       "ticker": "ZBIO",
@@ -3737,15 +3008,6 @@
       "company_name": "Greenwich Lifesciences Inc"
     },
     {
-      "ticker": "IMNN",
-      "event_date": "2026-05-18",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Imunon Inc"
-    },
-    {
       "ticker": "MBX",
       "event_date": "2026-05-18",
       "event_hour": "",
@@ -3780,15 +3042,6 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Orchestra Biomed Holdings Inc"
-    },
-    {
-      "ticker": "PACS",
-      "event_date": "2026-05-18",
-      "event_hour": "",
-      "tier": 1,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "PACS Group Inc"
     },
     {
       "ticker": "SGMO",
@@ -3836,15 +3089,6 @@
       "company_name": "Vivani Medical Inc"
     },
     {
-      "ticker": "ABOS",
-      "event_date": "2026-05-19",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Acumen Pharmaceuticals Inc"
-    },
-    {
       "ticker": "AUNA",
       "event_date": "2026-05-19",
       "event_hour": "",
@@ -3852,15 +3096,6 @@
       "date_confirmed": false,
       "call_datetime_utc": "2026-05-19T12:00:00+00:00",
       "company_name": "Auna SA"
-    },
-    {
-      "ticker": "BCAX",
-      "event_date": "2026-05-19",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Bicara Therapeutics Inc"
     },
     {
       "ticker": "CRVO",
@@ -3908,15 +3143,6 @@
       "company_name": "Serina Therapeutics Inc"
     },
     {
-      "ticker": "SPRO",
-      "event_date": "2026-05-19",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Spero Therapeutics Inc"
-    },
-    {
       "ticker": "SPRY",
       "event_date": "2026-05-19",
       "event_hour": "amc",
@@ -3933,15 +3159,6 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Aardvark Therapeutics Inc"
-    },
-    {
-      "ticker": "ABEO",
-      "event_date": "2026-05-20",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Abeona Therapeutics Inc"
     },
     {
       "ticker": "ACRV",
@@ -4068,15 +3285,6 @@
       "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "Sagimet Biosciences Inc"
-    },
-    {
-      "ticker": "ADSK",
-      "event_date": "2026-05-21",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Autodesk Inc"
     },
     {
       "ticker": "DOMO",
