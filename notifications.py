@@ -419,9 +419,16 @@ def _results_tier_label(tier: int) -> str:
 
 
 # Subgroup membership for results (mirrors sigma-alert SUBCATEGORIES).
-# Mutually exclusive: priority order Portfolio > Researching > HC Services >
-# MedTech > Large Pharma > Other. Within a tier, every row falls into exactly
-# one subgroup.
+# Mutually exclusive: priority order Portfolio > Researching > Ready to Buy >
+# Ready to Short > Following for Interest > HC Services > MedTech >
+# Large Pharma > Other. Within a tier, every row falls into exactly one
+# subgroup.
+#
+# 2026-05-11: added Ready to Buy / Ready to Short / Following for Interest
+# subgroups when Coverage Manager's Position taxonomy expanded from 2 to 5
+# values. Position-derived subgroups all rank above sector-derived ones so
+# a Following ticker in Tech still renders under "Following for Interest"
+# rather than "Other".
 SECTORS_GROUPED_AS_OTHER = frozenset({
     "Tech", "SaaS", "Financials", "Industrials",
     "Consumer", "Energy", "Materials", "Real Estate",
@@ -438,6 +445,12 @@ def _results_subcategory(r: ResultRow) -> str:
         return "Portfolio"
     if r.position == "Researching":
         return "Researching"
+    if r.position == "Ready to Buy":
+        return "Ready to Buy"
+    if r.position == "Ready to Short":
+        return "Ready to Short"
+    if r.position == "Following for Interest":
+        return "Following for Interest"
     if r.sector == "Healthcare Services":
         return "Healthcare Services"
     if r.sector == "MedTech":
@@ -452,6 +465,9 @@ def _results_subcategory(r: ResultRow) -> str:
 _SUBCATEGORY_ORDER = (
     "Portfolio",
     "Researching",
+    "Ready to Buy",
+    "Ready to Short",
+    "Following for Interest",
     "Healthcare Services",
     "MedTech",
     "Large Pharma",

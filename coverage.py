@@ -2,12 +2,21 @@
 Coverage Manager integration — reads the canonical ticker universe and
 resolves each ticker to a service tier.
 
-Tier 1 (Top priority — held + actively researched): tickers with Core=Y that
-    are EITHER in portfolio.json (Position == "Portfolio") OR in researching.json
-    (Position == "Researching"). The TickerInfo.position field disambiguates
-    Portfolio vs Researching for the ticktick.py list-name split.
+Tier 1 (Top priority — held + actively researched + trigger-ready):
+    - Portfolio + Researching ∩ Core (held names + active thesis work)
+    - Ready to Buy + Ready to Short (trigger-ready; Core filter dropped
+      because user explicitly committed by completing the thesis)
 Tier 2 (HC Services + MedTech): universe tickers in those sectors, excluding Tier 1
 Tier 3 (Other): everything else in the universe
+
+The TickerInfo.position field carries the original Position state for any
+ticker in one of the five Position lists (Portfolio / Researching /
+Ready to Buy / Ready to Short / Following for Interest), regardless of
+which tier the ticker landed in. Following for Interest names keep their
+sector-derived tier (no automatic promotion to Tier 1) but still get a
+non-empty .position so the digest can render them under their own
+subgroup. notifications._subgroup uses .position before falling back to
+sector-based bucketing.
 
 Falls back to legacy core_watchlist.json (= Portfolio + Researching unioned)
 during the Coverage Manager Phase B->C migration window.
@@ -39,7 +48,11 @@ class TickerInfo:
     company_name: str
     sector: str
     subsector: str
-    position: str = ""      # "Portfolio" | "Researching" | "" (Tier 2/3 leave empty)
+    # One of the five Position values from Coverage Manager, or "" for
+    # tickers not in any Position list. Drives digest subgrouping in
+    # notifications._subgroup. Expanded 2026-05-11 from {Portfolio,
+    # Researching} to all five values.
+    position: str = ""      # "Portfolio" | "Researching" | "Ready to Buy" | "Ready to Short" | "Following for Interest" | ""
 
 
 @dataclass
@@ -118,41 +131,48 @@ def _read_position_json(exports_path: Path, filename: str) -> dict[str, dict]:
     return {t.strip().upper(): row for t, row in data.items() if isinstance(row, dict)}
 
 
-def _read_watchlist(exports_path: Path) -> tuple[dict[str, dict], dict[str, dict]]:
-    """Read portfolio.json + researching.json, filtered to Core=Y tickers.
+def _read_position_lists(exports_path: Path) -> dict[str, dict[str, dict]]:
+    """Read all five Position files and return a {label: {ticker: row}} dict.
 
-    Returns (portfolio_core, researching_core) — two ticker->row dicts that
-    together form Tier 1. We need universe Core info to apply the Core=Y filter,
-    so we read watchlist.csv too (it carries every universe column including
-    the Core flag).
+    Returns an empty inner dict for any file that's absent. Falls back to
+    legacy watchlist.csv when none of the five new files are present
+    (Coverage Manager Phase B->C migration window) — in that case the
+    legacy union is returned under "Portfolio" only and the other four
+    labels stay empty.
 
-    Falls back to legacy watchlist.csv during the migration window if
-    portfolio.json + researching.json haven't been pushed yet.
+    Tier-1 promotion rules are applied by the caller, not here:
+      - Portfolio + Researching require Core=Y for Tier 1 (legacy rule).
+      - Ready to Buy + Ready to Short are Tier 1 unconditionally
+        (trigger-ready ⇒ user committed).
+      - Following for Interest is NOT auto-promoted; falls through to
+        sector-based tiering.
+
+    This function just surfaces the raw lists. Filter/promotion logic
+    lives in load_coverage.
     """
-    portfolio = _read_position_json(exports_path, "portfolio.json")
-    researching = _read_position_json(exports_path, "researching.json")
+    lists = {
+        "Portfolio": _read_position_json(exports_path, "portfolio.json"),
+        "Researching": _read_position_json(exports_path, "researching.json"),
+        "Following for Interest": _read_position_json(exports_path, "following_for_interest.json"),
+        "Ready to Buy": _read_position_json(exports_path, "ready_to_buy.json"),
+        "Ready to Short": _read_position_json(exports_path, "ready_to_short.json"),
+    }
 
-    if not portfolio and not researching:
+    if not any(lists.values()):
         # Legacy fallback: read watchlist.csv (Portfolio + Researching unioned)
         # and treat everything as Portfolio for the migration window.
         watchlist_path = exports_path / "watchlist.csv"
         if not watchlist_path.exists():
-            logger.warning(f"Neither portfolio/researching nor legacy watchlist found at {exports_path}")
-            return {}, {}
-        result = {}
+            logger.warning(f"Neither position files nor legacy watchlist found at {exports_path}")
+            return lists
         with open(watchlist_path, newline="", encoding="utf-8") as f:
             for row in csv.DictReader(f):
                 if row.get("Core", "").strip().upper() == "Y":
                     ticker = row.get("Ticker", "").strip().upper()
                     if ticker:
-                        result[ticker] = row
-        return result, {}
+                        lists["Portfolio"][ticker] = row
 
-    # Filter to Core=Y. Both files include the full universe column join,
-    # so the "Core" key is present on each entry.
-    portfolio_core = {t: row for t, row in portfolio.items() if (row.get("Core") or "").strip().upper() == "Y"}
-    researching_core = {t: row for t, row in researching.items() if (row.get("Core") or "").strip().upper() == "Y"}
-    return portfolio_core, researching_core
+    return lists
 
 
 def _read_universe_metadata(exports_path: Path) -> dict[str, dict]:
@@ -232,18 +252,44 @@ def load_coverage() -> list[TickerInfo]:
         ]
 
     # Load data from Coverage Manager
-    portfolio_core, researching_core = _read_watchlist(exports_path)
+    position_lists = _read_position_lists(exports_path)
     metadata = _read_universe_metadata(exports_path)
     universe_tickers = _read_universe_tickers(exports_path)
 
-    # Tier 1 = Portfolio ∩ Core ∪ Researching ∩ Core. Track which sub-bucket
-    # each ticker lives in via the position field on TickerInfo so ticktick.py
-    # can split into separate "Portfolio" and "Researching" TickTick lists.
-    watchlist = {**researching_core, **portfolio_core}  # Portfolio wins on collision
-    portfolio_tickers = set(portfolio_core.keys())
+    # Tier 1 promotion rule (expanded 2026-05-11):
+    #   - Portfolio ∩ Core
+    #   - Researching ∩ Core
+    #   - Ready to Buy   (any; Core filter dropped — trigger-ready ⇒ committed)
+    #   - Ready to Short (any; same reason)
+    # Following for Interest is NOT auto-promoted — names land at their
+    # sector-derived tier, but their `.position` field is set so the
+    # digest renders them under their own subgroup.
+    portfolio = position_lists["Portfolio"]
+    researching = position_lists["Researching"]
+    following = position_lists["Following for Interest"]
+    ready_to_buy = position_lists["Ready to Buy"]
+    ready_to_short = position_lists["Ready to Short"]
 
-    # Also include watchlist tickers in the universe set
-    all_tickers = universe_tickers | set(watchlist.keys())
+    portfolio_t1 = {t for t, row in portfolio.items() if (row.get("Core") or "").strip().upper() == "Y"}
+    researching_t1 = {t for t, row in researching.items() if (row.get("Core") or "").strip().upper() == "Y"}
+    ready_to_buy_t1 = set(ready_to_buy.keys())
+    ready_to_short_t1 = set(ready_to_short.keys())
+    tier1_tickers = portfolio_t1 | researching_t1 | ready_to_buy_t1 | ready_to_short_t1
+
+    # All Position-list tickers carry richer row data we want to fall back
+    # on when universe_metadata is incomplete. Position-priority resolution
+    # for the .position field: Portfolio > Researching > Ready to Buy >
+    # Ready to Short > Following for Interest. A ticker should only ever
+    # appear in one Position list (Coverage Manager's positions.py
+    # validate() rejects duplicates), so the priority order only matters
+    # as a defensive tiebreaker.
+    position_lookup: dict[str, tuple[str, dict]] = {}
+    for label in ("Following for Interest", "Ready to Short", "Ready to Buy",
+                  "Researching", "Portfolio"):
+        for t, row in position_lists[label].items():
+            position_lookup[t] = (label, row)  # later wins => Portfolio top priority
+
+    all_tickers = universe_tickers | set(position_lookup.keys())
 
     result = []
     tier_counts = {1: 0, 2: 0, 3: 0}
@@ -254,9 +300,10 @@ def load_coverage() -> list[TickerInfo]:
         sector = meta.get("sector", "")
         subsector = meta.get("subsector", "")
 
-        # Watchlist tickers may have richer data
-        if ticker in watchlist:
-            row = watchlist[ticker]
+        # Position-list tickers may have richer data than universe metadata
+        position_entry = position_lookup.get(ticker)
+        if position_entry is not None:
+            _, row = position_entry
             if not company_name:
                 company_name = row.get("Company Name", "")
             if not sector:
@@ -265,15 +312,17 @@ def load_coverage() -> list[TickerInfo]:
                 subsector = row.get("Subsector (JP)", "")
 
         # Determine tier
-        if ticker in watchlist:
+        if ticker in tier1_tickers:
             tier = 1
-            position = "Portfolio" if ticker in portfolio_tickers else "Researching"
         elif sector in TIER_2_SECTORS:
             tier = 2
-            position = ""
         else:
             tier = 3
-            position = ""
+
+        # Determine position label (independent of tier — a Following ticker
+        # at Tier 3 still gets position="Following for Interest" so the
+        # digest can route it to its own subgroup).
+        position = position_entry[0] if position_entry is not None else ""
 
         tier_counts[tier] += 1
         result.append(TickerInfo(
@@ -287,7 +336,9 @@ def load_coverage() -> list[TickerInfo]:
 
     logger.info(
         f"Loaded {len(result)} tickers from Coverage Manager: "
-        f"Tier 1={tier_counts[1]}, Tier 2={tier_counts[2]}, Tier 3={tier_counts[3]}"
+        f"Tier 1={tier_counts[1]}, Tier 2={tier_counts[2]}, Tier 3={tier_counts[3]} "
+        f"(Position lists: P={len(portfolio)}, R={len(researching)}, "
+        f"RtB={len(ready_to_buy)}, RtS={len(ready_to_short)}, FfI={len(following)})"
     )
     return result
 
