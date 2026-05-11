@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-05-11T13:53:52Z",
+  "generated_at": "2026-05-11T20:59:24Z",
   "window": {
     "start": "2026-05-09",
     "end": "2026-05-25"
@@ -49,9 +49,9 @@
     {
       "ticker": "ANTX",
       "event_date": "2026-05-11",
-      "event_hour": "",
+      "event_hour": "amc",
       "tier": 3,
-      "date_confirmed": false,
+      "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "AN2 Therapeutics Inc"
     },
@@ -175,9 +175,9 @@
     {
       "ticker": "ENTA",
       "event_date": "2026-05-11",
-      "event_hour": "",
+      "event_hour": "amc",
       "tier": 3,
-      "date_confirmed": false,
+      "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "Enanta Pharmaceuticals Inc"
     },
@@ -382,7 +382,7 @@
     {
       "ticker": "OCS",
       "event_date": "2026-05-11",
-      "event_hour": "bmo",
+      "event_hour": "amc",
       "tier": 3,
       "date_confirmed": true,
       "call_datetime_utc": null,
@@ -589,9 +589,9 @@
     {
       "ticker": "TNXP",
       "event_date": "2026-05-11",
-      "event_hour": "",
+      "event_hour": "amc",
       "tier": 3,
-      "date_confirmed": false,
+      "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "Tonix Pharmaceuticals Holding Corp"
     },
