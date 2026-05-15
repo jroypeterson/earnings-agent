@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-05-15T13:05:42Z",
+  "generated_at": "2026-05-15T20:38:16Z",
   "window": {
     "start": "2026-05-13",
     "end": "2026-05-29"
   },
   "counts": {
-    "events": 109
+    "events": 101
   },
   "events": [
     {
@@ -479,60 +479,6 @@
       "company_name": "Cyclerion Therapeutics Inc"
     },
     {
-      "ticker": "DARE",
-      "event_date": "2026-05-14",
-      "event_hour": "amc",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Dare Bioscience Inc"
-    },
-    {
-      "ticker": "FIG",
-      "event_date": "2026-05-14",
-      "event_hour": "amc",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Figma Inc"
-    },
-    {
-      "ticker": "HTFL",
-      "event_date": "2026-05-14",
-      "event_hour": "amc",
-      "tier": 2,
-      "date_confirmed": true,
-      "call_datetime_utc": "2026-05-14T20:30:00+00:00",
-      "company_name": "HeartFlow, Inc."
-    },
-    {
-      "ticker": "SGMO",
-      "event_date": "2026-05-14",
-      "event_hour": "amc",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Sangamo Therapeutics Inc"
-    },
-    {
-      "ticker": "TRAK",
-      "event_date": "2026-05-14",
-      "event_hour": "amc",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Repositrak Inc"
-    },
-    {
-      "ticker": "YSS",
-      "event_date": "2026-05-14",
-      "event_hour": "amc",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "York Space Systems Inc"
-    },
-    {
       "ticker": "ZBIO",
       "event_date": "2026-05-14",
       "event_hour": "",
@@ -540,15 +486,6 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Zenas Biopharma Inc"
-    },
-    {
-      "ticker": "INKT",
-      "event_date": "2026-05-15",
-      "event_hour": "bmo",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Mink Therapeutics Inc"
     },
     {
       "ticker": "LTRN",
@@ -567,15 +504,6 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "OS Therapies Inc"
-    },
-    {
-      "ticker": "SPRY",
-      "event_date": "2026-05-15",
-      "event_hour": "bmo",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "ARS Pharmaceuticals Inc"
     },
     {
       "ticker": "COCP",
