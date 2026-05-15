@@ -1,96 +1,15 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-05-14T20:51:14Z",
+  "generated_at": "2026-05-15T13:05:42Z",
   "window": {
-    "start": "2026-05-12",
-    "end": "2026-05-28"
+    "start": "2026-05-13",
+    "end": "2026-05-29"
   },
   "counts": {
-    "events": 118
+    "events": 109
   },
   "events": [
-    {
-      "ticker": "BNTC",
-      "event_date": "2026-05-12",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Benitec Biopharma Inc"
-    },
-    {
-      "ticker": "CLSD",
-      "event_date": "2026-05-12",
-      "event_hour": "amc",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Clearside Biomedical, Inc."
-    },
-    {
-      "ticker": "CVM",
-      "event_date": "2026-05-12",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "CEL-SCI Corp"
-    },
-    {
-      "ticker": "ELDN",
-      "event_date": "2026-05-12",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Eledon Pharmaceuticals Inc"
-    },
-    {
-      "ticker": "IMRX",
-      "event_date": "2026-05-12",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Immuneering Corp"
-    },
-    {
-      "ticker": "IOBT",
-      "event_date": "2026-05-12",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "IO Biotech Inc"
-    },
-    {
-      "ticker": "NMRA",
-      "event_date": "2026-05-12",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Neumora Therapeutics Inc"
-    },
-    {
-      "ticker": "PTN",
-      "event_date": "2026-05-12",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Palatin Technologies Inc"
-    },
-    {
-      "ticker": "XBIT",
-      "event_date": "2026-05-12",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "XBiotech Inc"
-    },
     {
       "ticker": "ACLX",
       "event_date": "2026-05-13",
@@ -803,15 +722,6 @@
       "company_name": "bioAffinity Technologies Inc"
     },
     {
-      "ticker": "CPRT",
-      "event_date": "2026-05-20",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Copart Inc."
-    },
-    {
       "ticker": "GLMD",
       "event_date": "2026-05-20",
       "event_hour": "",
@@ -875,6 +785,15 @@
       "company_name": "Sagimet Biosciences Inc"
     },
     {
+      "ticker": "CPRT",
+      "event_date": "2026-05-21",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Copart Inc."
+    },
+    {
       "ticker": "DOMO",
       "event_date": "2026-05-21",
       "event_hour": "",
@@ -913,9 +832,9 @@
     {
       "ticker": "WMT",
       "event_date": "2026-05-21",
-      "event_hour": "",
-      "tier": 1,
-      "date_confirmed": false,
+      "event_hour": "bmo",
+      "tier": 3,
+      "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "Walmart Inc"
     },
