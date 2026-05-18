@@ -1,150 +1,15 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-05-17T12:07:26Z",
+  "generated_at": "2026-05-18T14:39:36Z",
   "window": {
-    "start": "2026-05-15",
-    "end": "2026-05-31"
+    "start": "2026-05-16",
+    "end": "2026-06-01"
   },
   "counts": {
-    "events": 53
+    "events": 39
   },
   "events": [
-    {
-      "ticker": "AIM",
-      "event_date": "2026-05-15",
-      "event_hour": "amc",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "AIM ImmunoTech Inc"
-    },
-    {
-      "ticker": "BCAB",
-      "event_date": "2026-05-15",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Bioatla Inc"
-    },
-    {
-      "ticker": "ENSC",
-      "event_date": "2026-05-15",
-      "event_hour": "amc",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Ensysce Biosciences Inc"
-    },
-    {
-      "ticker": "GOSS",
-      "event_date": "2026-05-15",
-      "event_hour": "amc",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Gossamer Bio Inc"
-    },
-    {
-      "ticker": "JAGX",
-      "event_date": "2026-05-15",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Jaguar Health Inc"
-    },
-    {
-      "ticker": "LTRN",
-      "event_date": "2026-05-15",
-      "event_hour": "amc",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Lantern Pharma Inc"
-    },
-    {
-      "ticker": "NRXP",
-      "event_date": "2026-05-15",
-      "event_hour": "amc",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "NRX Pharmaceuticals Inc"
-    },
-    {
-      "ticker": "OSTX",
-      "event_date": "2026-05-15",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "OS Therapies Inc"
-    },
-    {
-      "ticker": "OTLK",
-      "event_date": "2026-05-15",
-      "event_hour": "amc",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Outlook Therapeutics Inc"
-    },
-    {
-      "ticker": "PULM",
-      "event_date": "2026-05-15",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Pulmatrix Inc"
-    },
-    {
-      "ticker": "RANI",
-      "event_date": "2026-05-15",
-      "event_hour": "amc",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Rani Therapeutics Holdings Inc"
-    },
-    {
-      "ticker": "SCNX",
-      "event_date": "2026-05-15",
-      "event_hour": "amc",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Scienture Holdings Inc"
-    },
-    {
-      "ticker": "TVGN",
-      "event_date": "2026-05-15",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Tevogen Bio Holdings Inc"
-    },
-    {
-      "ticker": "VINC",
-      "event_date": "2026-05-15",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Vincerx Pharma Inc"
-    },
-    {
-      "ticker": "VYNE",
-      "event_date": "2026-05-15",
-      "event_hour": "amc",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Vyne Therapeutics Inc"
-    },
     {
       "ticker": "ACLX",
       "event_date": "2026-05-18",
@@ -279,15 +144,6 @@
       "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "Copart Inc."
-    },
-    {
-      "ticker": "DOMO",
-      "event_date": "2026-05-21",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Domo Inc"
     },
     {
       "ticker": "RAMP",
@@ -486,6 +342,24 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "SentinelOne Inc"
+    },
+    {
+      "ticker": "ENGN",
+      "event_date": "2026-06-01",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "enGene Holdings Inc"
+    },
+    {
+      "ticker": "NCNA",
+      "event_date": "2026-06-01",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "NuCana PLC"
     }
   ]
 }
