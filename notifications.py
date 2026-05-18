@@ -509,13 +509,17 @@ def _short_company_name(name: str) -> str:
 
 
 def _signed_pct(actual: float | None, estimate: float | None) -> str:
-    """Inline beat/miss tag: '+2.4% 🟩' / '(1.7%) 🟥' / '–' when N/A."""
+    """Inline beat/miss tag: '+2.4%' / '(1.7%)' / '–' when N/A.
+
+    Color marker is rendered separately at the start of the line by
+    `_format_results_line` so the three per-row markers align in one column.
+    """
     pct = _beat_miss_pct(actual, estimate)
     if pct is None:
         return "–"
     if pct < 0:
-        return f"({abs(pct):.1f}%) \U0001F7E5"
-    return f"+{pct:.1f}% \U0001F7E9"
+        return f"({abs(pct):.1f}%)"
+    return f"+{pct:.1f}%"
 
 
 def _fmt_eps_compact(actual: float | None, estimate: float | None) -> str:
@@ -531,7 +535,7 @@ def _fmt_rev_compact(actual: float | None, estimate: float | None) -> str:
 
 
 def _fmt_move_compact(move: PostEarningsMove | None) -> str:
-    """Compact stock-move segment.
+    """Compact stock-move segment (color marker rendered at line prefix).
 
     Callers defer the post when move is None and the event is fresh, so by
     the time we render with move=None we've given up waiting (e.g. delisted
@@ -539,17 +543,36 @@ def _fmt_move_compact(move: PostEarningsMove | None) -> str:
     are visible rather than silently disappearing.
     """
     if move is None:
-        return "Stock data unavailable ⚠️"
-    marker = "\U0001F7E9" if move.move_pct >= 0 else "\U0001F7E5"
+        return "Stock data unavailable"
     sign = "+" if move.move_pct >= 0 else "-"
-    return f"Stock {sign}{abs(move.move_pct):.1f}% ({move.window_label}) {marker}"
+    return f"Stock {sign}{abs(move.move_pct):.1f}% ({move.window_label})"
+
+
+def _beat_marker(actual: float | None, estimate: float | None) -> str:
+    """Single-emoji color marker for EPS/Rev: 🟩 beat / 🟥 miss / ⬜ N/A."""
+    pct = _beat_miss_pct(actual, estimate)
+    if pct is None:
+        return "⬜"
+    return "\U0001F7E9" if pct >= 0 else "\U0001F7E5"
+
+
+def _move_marker(move: PostEarningsMove | None) -> str:
+    """Single-emoji color marker for stock move: 🟩 up / 🟥 down / ⚠️ no data."""
+    if move is None:
+        return "⚠️"
+    return "\U0001F7E9" if move.move_pct >= 0 else "\U0001F7E5"
 
 
 def _format_results_line(r: ResultRow) -> str:
     short = _short_company_name(r.company_name)
     name_part = f" {short}" if short else ""
+    markers = (
+        f"{_beat_marker(r.eps_actual, r.eps_estimate)} "
+        f"{_beat_marker(r.rev_actual, r.rev_estimate)} "
+        f"{_move_marker(r.move)}"
+    )
     return (
-        f"*{r.ticker}*{name_part} · "
+        f"{markers}  *{r.ticker}*{name_part} · "
         f"{_fmt_eps_compact(r.eps_actual, r.eps_estimate)} · "
         f"{_fmt_rev_compact(r.rev_actual, r.rev_estimate)} · "
         f"{_fmt_move_compact(r.move)}"
