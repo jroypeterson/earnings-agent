@@ -1,24 +1,15 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-05-20T21:18:33Z",
+  "generated_at": "2026-05-21T14:19:43Z",
   "window": {
-    "start": "2026-05-18",
-    "end": "2026-06-03"
+    "start": "2026-05-19",
+    "end": "2026-06-04"
   },
   "counts": {
-    "events": 43
+    "events": 41
   },
   "events": [
-    {
-      "ticker": "CVAC",
-      "event_date": "2026-05-18",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "CureVac N.V."
-    },
     {
       "ticker": "ACLX",
       "event_date": "2026-05-20",
@@ -47,15 +38,6 @@
       "company_name": "Galmed Pharmaceuticals Ltd"
     },
     {
-      "ticker": "JAGX",
-      "event_date": "2026-05-20",
-      "event_hour": "amc",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Jaguar Health Inc"
-    },
-    {
       "ticker": "LYRA",
       "event_date": "2026-05-20",
       "event_hour": "",
@@ -65,24 +47,6 @@
       "company_name": "Lyra Therapeutics Inc"
     },
     {
-      "ticker": "NNOX",
-      "event_date": "2026-05-20",
-      "event_hour": "",
-      "tier": 2,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Nano-X Imaging Ltd."
-    },
-    {
-      "ticker": "NVDA",
-      "event_date": "2026-05-20",
-      "event_hour": "amc",
-      "tier": 1,
-      "date_confirmed": true,
-      "call_datetime_utc": "2026-05-20T21:00:00+00:00",
-      "company_name": "NVIDIA Corporation"
-    },
-    {
       "ticker": "REPL",
       "event_date": "2026-05-20",
       "event_hour": "amc",
@@ -90,15 +54,6 @@
       "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "Replimune Group Inc"
-    },
-    {
-      "ticker": "SCLX",
-      "event_date": "2026-05-20",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Scilex Holding Co"
     },
     {
       "ticker": "CPRT",
@@ -126,15 +81,6 @@
       "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "Workday, Inc."
-    },
-    {
-      "ticker": "WMT",
-      "event_date": "2026-05-21",
-      "event_hour": "bmo",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Walmart Inc"
     },
     {
       "ticker": "ZM",
@@ -184,9 +130,9 @@
     {
       "ticker": "BRZE",
       "event_date": "2026-05-27",
-      "event_hour": "",
+      "event_hour": "amc",
       "tier": 3,
-      "date_confirmed": false,
+      "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "Braze Inc"
     },
@@ -202,27 +148,36 @@
     {
       "ticker": "MDWD",
       "event_date": "2026-05-27",
-      "event_hour": "",
+      "event_hour": "bmo",
       "tier": 3,
-      "date_confirmed": false,
+      "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "Mediwound Ltd"
     },
     {
       "ticker": "NCNO",
       "event_date": "2026-05-27",
-      "event_hour": "",
+      "event_hour": "amc",
       "tier": 3,
-      "date_confirmed": false,
+      "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "nCino Inc"
     },
     {
-      "ticker": "PHR",
+      "ticker": "NNOX",
       "event_date": "2026-05-27",
       "event_hour": "",
       "tier": 2,
       "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Nano-X Imaging Ltd."
+    },
+    {
+      "ticker": "PHR",
+      "event_date": "2026-05-27",
+      "event_hour": "amc",
+      "tier": 2,
+      "date_confirmed": true,
       "call_datetime_utc": "2026-05-27T20:00:00+00:00",
       "company_name": "Phreesia Inc"
     },
@@ -335,15 +290,6 @@
       "company_name": "Palo Alto Networks Inc"
     },
     {
-      "ticker": "YEXT",
-      "event_date": "2026-06-02",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Yext Inc"
-    },
-    {
       "ticker": "CRWD",
       "event_date": "2026-06-03",
       "event_hour": "",
@@ -396,6 +342,42 @@
       "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "Veeva Systems Inc."
+    },
+    {
+      "ticker": "COO",
+      "event_date": "2026-06-04",
+      "event_hour": "",
+      "tier": 2,
+      "date_confirmed": false,
+      "call_datetime_utc": "2026-06-04T21:00:00+00:00",
+      "company_name": "The Cooper Companies, Inc."
+    },
+    {
+      "ticker": "DOCU",
+      "event_date": "2026-06-04",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Docusign Inc"
+    },
+    {
+      "ticker": "DOMO",
+      "event_date": "2026-06-04",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Domo Inc"
+    },
+    {
+      "ticker": "TTAN",
+      "event_date": "2026-06-04",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "ServiceTitan Inc"
     }
   ]
 }
