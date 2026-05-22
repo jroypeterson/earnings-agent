@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-05-21T21:03:34Z",
+  "generated_at": "2026-05-22T13:39:26Z",
   "window": {
-    "start": "2026-05-19",
-    "end": "2026-06-04"
+    "start": "2026-05-20",
+    "end": "2026-06-05"
   },
   "counts": {
-    "events": 41
+    "events": 38
   },
   "events": [
     {
@@ -56,15 +56,6 @@
       "company_name": "Replimune Group Inc"
     },
     {
-      "ticker": "CPRT",
-      "event_date": "2026-05-21",
-      "event_hour": "amc",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Copart Inc."
-    },
-    {
       "ticker": "SLGL",
       "event_date": "2026-05-21",
       "event_hour": "",
@@ -72,24 +63,6 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Sol Gel Technologies Ltd"
-    },
-    {
-      "ticker": "WDAY",
-      "event_date": "2026-05-21",
-      "event_hour": "amc",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Workday, Inc."
-    },
-    {
-      "ticker": "ZM",
-      "event_date": "2026-05-21",
-      "event_hour": "amc",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Zoom Communications, Inc."
     },
     {
       "ticker": "ANIX",
@@ -193,54 +166,54 @@
     {
       "ticker": "ADSK",
       "event_date": "2026-05-28",
-      "event_hour": "",
+      "event_hour": "amc",
       "tier": 3,
-      "date_confirmed": false,
+      "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "Autodesk Inc"
     },
     {
       "ticker": "ASAN",
       "event_date": "2026-05-28",
-      "event_hour": "",
+      "event_hour": "amc",
       "tier": 3,
-      "date_confirmed": false,
+      "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "Asana Inc"
     },
     {
       "ticker": "MDB",
       "event_date": "2026-05-28",
-      "event_hour": "",
+      "event_hour": "amc",
       "tier": 3,
-      "date_confirmed": false,
+      "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "Mongodb Inc"
     },
     {
       "ticker": "OKTA",
       "event_date": "2026-05-28",
-      "event_hour": "",
+      "event_hour": "amc",
       "tier": 3,
-      "date_confirmed": false,
+      "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "Okta, Inc."
     },
     {
       "ticker": "PD",
       "event_date": "2026-05-28",
-      "event_hour": "",
+      "event_hour": "amc",
       "tier": 3,
-      "date_confirmed": false,
+      "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "Pagerduty Inc"
     },
     {
       "ticker": "S",
       "event_date": "2026-05-28",
-      "event_hour": "",
+      "event_hour": "amc",
       "tier": 3,
-      "date_confirmed": false,
+      "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "SentinelOne Inc"
     },
