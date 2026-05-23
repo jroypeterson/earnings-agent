@@ -1,60 +1,15 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-05-22T20:53:39Z",
+  "generated_at": "2026-05-23T12:08:29Z",
   "window": {
-    "start": "2026-05-20",
-    "end": "2026-06-05"
+    "start": "2026-05-21",
+    "end": "2026-06-06"
   },
   "counts": {
-    "events": 38
+    "events": 34
   },
   "events": [
-    {
-      "ticker": "ACLX",
-      "event_date": "2026-05-20",
-      "event_hour": "amc",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Arcellx Inc"
-    },
-    {
-      "ticker": "BIAF",
-      "event_date": "2026-05-20",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "bioAffinity Technologies Inc"
-    },
-    {
-      "ticker": "GLMD",
-      "event_date": "2026-05-20",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Galmed Pharmaceuticals Ltd"
-    },
-    {
-      "ticker": "LYRA",
-      "event_date": "2026-05-20",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Lyra Therapeutics Inc"
-    },
-    {
-      "ticker": "REPL",
-      "event_date": "2026-05-20",
-      "event_hour": "amc",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Replimune Group Inc"
-    },
     {
       "ticker": "SLGL",
       "event_date": "2026-05-21",
@@ -351,6 +306,15 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "ServiceTitan Inc"
+    },
+    {
+      "ticker": "ICLR",
+      "event_date": "2026-06-06",
+      "event_hour": "amc",
+      "tier": 2,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "ICON PLC"
     }
   ]
 }
