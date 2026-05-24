@@ -1,24 +1,15 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-05-23T12:08:29Z",
+  "generated_at": "2026-05-24T12:12:13Z",
   "window": {
-    "start": "2026-05-21",
-    "end": "2026-06-06"
+    "start": "2026-05-22",
+    "end": "2026-06-07"
   },
   "counts": {
-    "events": 34
+    "events": 33
   },
   "events": [
-    {
-      "ticker": "SLGL",
-      "event_date": "2026-05-21",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Sol Gel Technologies Ltd"
-    },
     {
       "ticker": "ANIX",
       "event_date": "2026-05-26",
