@@ -572,7 +572,7 @@ def _format_results_line(r: ResultRow) -> str:
         f"{_move_marker(r.move)}"
     )
     return (
-        f"{markers}  *{r.ticker}*{name_part} · "
+        f"{markers}  `{r.ticker}`{name_part} · "
         f"{_fmt_eps_compact(r.eps_actual, r.eps_estimate)} · "
         f"{_fmt_rev_compact(r.rev_actual, r.rev_estimate)} · "
         f"{_fmt_move_compact(r.move)}"
