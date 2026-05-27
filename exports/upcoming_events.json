@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-05-26T21:05:17Z",
+  "generated_at": "2026-05-27T14:35:04Z",
   "window": {
-    "start": "2026-05-24",
-    "end": "2026-06-09"
+    "start": "2026-05-25",
+    "end": "2026-06-10"
   },
   "counts": {
     "events": 36
@@ -18,24 +18,6 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Anixa Biosciences Inc"
-    },
-    {
-      "ticker": "BOX",
-      "event_date": "2026-05-26",
-      "event_hour": "amc",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Box Inc"
-    },
-    {
-      "ticker": "ZS",
-      "event_date": "2026-05-26",
-      "event_hour": "amc",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Zscaler, Inc."
     },
     {
       "ticker": "A",
@@ -63,15 +45,6 @@
       "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "Salesforce, Inc."
-    },
-    {
-      "ticker": "MDWD",
-      "event_date": "2026-05-27",
-      "event_hour": "bmo",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Mediwound Ltd"
     },
     {
       "ticker": "NCNO",
@@ -193,9 +166,9 @@
     {
       "ticker": "GTLB",
       "event_date": "2026-06-02",
-      "event_hour": "",
+      "event_hour": "amc",
       "tier": 3,
-      "date_confirmed": false,
+      "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "GitLab Inc."
     },
@@ -245,15 +218,6 @@
       "company_name": "Medtronic plc"
     },
     {
-      "ticker": "MMED",
-      "event_date": "2026-06-03",
-      "event_hour": "",
-      "tier": 1,
-      "date_confirmed": false,
-      "call_datetime_utc": "2026-06-03T20:00:00+00:00",
-      "company_name": "MiniMed Group Inc"
-    },
-    {
       "ticker": "VEEV",
       "event_date": "2026-06-03",
       "event_hour": "amc",
@@ -290,6 +254,33 @@
       "company_name": "ServiceTitan Inc"
     },
     {
+      "ticker": "CFLT",
+      "event_date": "2026-06-05",
+      "event_hour": "amc",
+      "tier": 3,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Confluent, Inc."
+    },
+    {
+      "ticker": "DAWN",
+      "event_date": "2026-06-05",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Day One Biopharmaceuticals Inc"
+    },
+    {
+      "ticker": "ONTF",
+      "event_date": "2026-06-05",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "ON24 Inc"
+    },
+    {
       "ticker": "ICLR",
       "event_date": "2026-06-06",
       "event_hour": "amc",
@@ -315,6 +306,15 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Domo Inc"
+    },
+    {
+      "ticker": "RFL",
+      "event_date": "2026-06-09",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Rafael Holdings Inc"
     },
     {
       "ticker": "SAIL",
