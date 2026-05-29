@@ -1,24 +1,15 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-05-28T21:28:33Z",
+  "generated_at": "2026-05-29T00:22:03Z",
   "window": {
-    "start": "2026-05-26",
-    "end": "2026-06-11"
+    "start": "2026-05-27",
+    "end": "2026-06-12"
   },
   "counts": {
-    "events": 30
+    "events": 29
   },
   "events": [
-    {
-      "ticker": "ANIX",
-      "event_date": "2026-05-26",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Anixa Biosciences Inc"
-    },
     {
       "ticker": "NNOX",
       "event_date": "2026-05-27",
