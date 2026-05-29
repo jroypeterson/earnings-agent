@@ -1960,7 +1960,7 @@ def run_refresh_descriptions(dry_run: bool = False, days_ahead: int = 90):
                 # so a TBD->amc/bmo or all-day<->timed transition needs a
                 # full recreate to get the right time block.
                 delete_calendar_event(cal_service, GOOGLE_CALENDAR_ID, ev["id"])
-                create_calendar_event(
+                new_gcal_id = create_calendar_event(
                     cal_service, GOOGLE_CALENDAR_ID, ticker,
                     event_date, hour,
                     quarter=quarter_for_event,
@@ -1971,6 +1971,18 @@ def run_refresh_descriptions(dry_run: bool = False, days_ahead: int = 90):
                     hour_yf=hour_yf,
                     call_datetime_utc=call_dt_iso,
                 )
+                # Persist the recreated event's id so the DB stops pointing at
+                # the just-deleted event. Without this, the DB keeps the stale
+                # gcal_id, the next daily sync can't find it and recreates the
+                # event, and the following refresh sees "shape" drift again —
+                # an every-run delete/recreate churn (observed: ~140 recreates
+                # per run) that also multiplies duplicates for date-flapping
+                # tickers like ICLR. Mirrors the main-sync recreate path.
+                conn.execute(
+                    "UPDATE events SET gcal_id = ? WHERE id = ?",
+                    (new_gcal_id, db_row["id"]),
+                )
+                conn.commit()
             else:  # 'text'
                 update_calendar_event_description(
                     cal_service, GOOGLE_CALENDAR_ID, ev["id"],
