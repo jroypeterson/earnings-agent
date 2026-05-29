@@ -162,6 +162,31 @@ def expected_calendar_state(
     return summary, description, props
 
 
+def _wall_clock_et(dt_str: str) -> str:
+    """HH:MM wall-clock of an ISO-8601 calendar dateTime in America/New_York,
+    regardless of the timezone the Calendar API returned it in.
+
+    The API normalizes start.dateTime to the *calendar's* default timezone, so
+    a 07:00 ET event on a UTC-default calendar comes back as '...T11:00:00Z'.
+    A naive string slice would read "11:00" and report perpetual "shape" drift
+    against the expected "07:00"/"16:30", causing an every-run delete/recreate
+    churn. Converting to ET first makes the comparison correct for any calendar
+    timezone (the floridabusinessman calendars default to UTC, the legacy one
+    was ET).
+    """
+    if not dt_str:
+        return ""
+    try:
+        from zoneinfo import ZoneInfo
+        normalized = dt_str.replace("Z", "+00:00") if dt_str.endswith("Z") else dt_str
+        dt = datetime.fromisoformat(normalized)
+        if dt.tzinfo is None:
+            return dt.strftime("%H:%M")  # no offset: assume already ET wall-clock
+        return dt.astimezone(ZoneInfo("America/New_York")).strftime("%H:%M")
+    except (ValueError, TypeError):
+        return dt_str[11:16]
+
+
 def calendar_event_drift_kind(
     cal_event: dict,
     expected_summary: str,
@@ -194,9 +219,9 @@ def calendar_event_drift_kind(
     if expected_timed != has_datetime:
         return "shape"
 
-    # Both timed: check the wall-clock time portion (positions 11..16 = HH:MM)
+    # Both timed: check the wall-clock time portion in ET.
     if expected_timed:
-        existing_hm = (cal_start.get("dateTime") or "")[11:16]
+        existing_hm = _wall_clock_et(cal_start.get("dateTime") or "")
         expected_hm = "07:00" if expected_hour == "bmo" else "16:30"
         if existing_hm != expected_hm:
             return "shape"
