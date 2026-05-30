@@ -1,24 +1,15 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-05-29T21:20:34Z",
+  "generated_at": "2026-05-30T12:16:41Z",
   "window": {
-    "start": "2026-05-27",
-    "end": "2026-06-12"
+    "start": "2026-05-28",
+    "end": "2026-06-13"
   },
   "counts": {
-    "events": 23
+    "events": 22
   },
   "events": [
-    {
-      "ticker": "NNOX",
-      "event_date": "2026-05-27",
-      "event_hour": "",
-      "tier": 2,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Nano-X Imaging Ltd."
-    },
     {
       "ticker": "ENGN",
       "event_date": "2026-06-01",
@@ -67,18 +58,18 @@
     {
       "ticker": "CRWD",
       "event_date": "2026-06-03",
-      "event_hour": "",
+      "event_hour": "amc",
       "tier": 1,
-      "date_confirmed": false,
+      "date_confirmed": true,
       "call_datetime_utc": "2026-06-03T21:00:00+00:00",
       "company_name": "CrowdStrike Holdings, Inc."
     },
     {
       "ticker": "CXM",
       "event_date": "2026-06-03",
-      "event_hour": "",
+      "event_hour": "bmo",
       "tier": 3,
-      "date_confirmed": false,
+      "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "Sprinklr Inc"
     },
@@ -94,7 +85,7 @@
     {
       "ticker": "MDT",
       "event_date": "2026-06-03",
-      "event_hour": "amc",
+      "event_hour": "bmo",
       "tier": 2,
       "date_confirmed": true,
       "call_datetime_utc": null,
@@ -112,27 +103,27 @@
     {
       "ticker": "COO",
       "event_date": "2026-06-04",
-      "event_hour": "",
+      "event_hour": "amc",
       "tier": 2,
-      "date_confirmed": false,
+      "date_confirmed": true,
       "call_datetime_utc": "2026-06-04T21:00:00+00:00",
       "company_name": "The Cooper Companies, Inc."
     },
     {
       "ticker": "DOCU",
       "event_date": "2026-06-04",
-      "event_hour": "",
+      "event_hour": "amc",
       "tier": 3,
-      "date_confirmed": false,
+      "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "Docusign Inc"
     },
     {
       "ticker": "TTAN",
       "event_date": "2026-06-04",
-      "event_hour": "",
+      "event_hour": "amc",
       "tier": 3,
-      "date_confirmed": false,
+      "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "ServiceTitan Inc"
     },
