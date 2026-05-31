@@ -1860,12 +1860,19 @@ def run_reconcile_calendar(dry_run: bool = False):
 # ---------------------------------------------------------------------------
 
 
-def run_refresh_descriptions(dry_run: bool = False, days_ahead: int = 90):
+def run_refresh_descriptions(dry_run: bool = False, days_ahead: int = 90, days_back: int = 30):
     """
-    Rewrite title + description for every tagged upcoming Calendar event
-    using current DB state. Useful after adding a field (like
-    date_confirmed) so existing events pick up the new rendering
-    without waiting for a natural date change.
+    Rewrite title + description for every tagged Calendar event in the window
+    using current DB state. Useful after adding a field (like date_confirmed)
+    so existing events pick up the new rendering without waiting for a natural
+    date change.
+
+    The window reaches ``days_back`` days into the past (default 30) as well as
+    ``days_ahead`` forward, so recently-passed events drop a stale "(est.)"
+    marker once their expected date has elapsed (an estimate only makes sense
+    for a future date). The daily ``run()`` sync already re-renders events back
+    ~14 days; this look-back lets the manual/daily refresh also clean events
+    that passed without actuals ever being captured (e.g. delisted names).
     """
     from config import CALENDAR_PAGE_SIZE
 
@@ -1881,7 +1888,7 @@ def run_refresh_descriptions(dry_run: bool = False, days_ahead: int = 90):
         sys.exit(1)
 
     today = date.today()
-    time_min = today.isoformat() + "T00:00:00Z"
+    time_min = (today - timedelta(days=days_back)).isoformat() + "T00:00:00Z"
     time_max = (today + timedelta(days=days_ahead)).isoformat() + "T00:00:00Z"
 
     events = []

@@ -597,6 +597,42 @@ def test_expected_state_reported_drops_est_marker():
     assert "\nREPORTED" in description
 
 
+def test_expected_state_estimated_past_date_drops_est_marker():
+    """A Finnhub-estimated (empty-hour) event whose date has already passed must
+    NOT keep the '(est.)' marker — an estimate only makes sense for a future
+    date. With no actuals yet, the title is the neutral 'Earnings Release' and
+    the status reads 'Date passed (results pending)', not 'Estimated'."""
+    from datetime import date, timedelta
+    from calendar_sync import expected_calendar_state
+
+    past = (date.today() - timedelta(days=10)).isoformat()
+    summary, description, _ = expected_calendar_state(
+        "UFPT", "", 0.5, None, 100e6, None,
+        quarter="2026Q1", tier=2, source_fingerprint=f"UFPT:{past}",
+        earnings_date=past,
+    )
+    assert summary == "UFPT Earnings Release"
+    assert "(est.)" not in summary
+    assert "Status: Date passed (results pending)" in description
+    assert "Status: Estimated" not in description
+
+
+def test_expected_state_estimated_future_date_keeps_est_marker():
+    """The mirror case: an estimated event still in the future keeps '(est.)'
+    and the 'Estimated' status — the fix must not strip the marker early."""
+    from datetime import date, timedelta
+    from calendar_sync import expected_calendar_state
+
+    future = (date.today() + timedelta(days=30)).isoformat()
+    summary, description, _ = expected_calendar_state(
+        "UFPT", "", 0.5, None, 100e6, None,
+        quarter="2026Q1", tier=2, source_fingerprint=f"UFPT:{future}",
+        earnings_date=future,
+    )
+    assert summary == "UFPT Earnings Release (est.)"
+    assert "Status: Estimated" in description
+
+
 def test_parse_ticker_handles_both_title_formats():
     """Reported title shortened from '[REPORTED] X Earnings Release' to
     'X Rpt'd Earnings' — parser must accept both during the transition."""
@@ -1257,10 +1293,12 @@ if __name__ == "__main__":
     test_expected_state_confirmed_amc()
     test_expected_state_estimated_no_hour()
     test_expected_state_reported_drops_est_marker()
+    test_expected_state_estimated_past_date_drops_est_marker()
+    test_expected_state_estimated_future_date_keeps_est_marker()
     test_drift_kind_fresh()
     test_drift_kind_text_only_summary()
     test_drift_kind_text_only_props()
     test_drift_kind_shape_all_day_to_amc()
     test_drift_kind_shape_bmo_to_amc()
     test_drift_kind_shape_amc_to_all_day()
-    print("\nAll 21 tests passed!")
+    print("\nAll 23 tests passed!")

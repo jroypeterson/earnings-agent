@@ -95,6 +95,31 @@ def _is_confirmed_hour(hour: str | None) -> bool:
     return (hour or "").lower() in ("bmo", "amc", "dmh")
 
 
+def _today_et() -> date:
+    """Today's calendar date in America/New_York (the market's timezone)."""
+    from zoneinfo import ZoneInfo
+    return datetime.now(ZoneInfo("America/New_York")).date()
+
+
+def _date_has_passed(earnings_date: str | None) -> bool:
+    """True when ``earnings_date`` (YYYY-MM-DD) is strictly before today (ET).
+
+    An estimate qualifier only makes sense for a future release date. Once the
+    expected date has passed, Finnhub's projected-vs-confirmed distinction is
+    moot, so the title's "(est.)" marker and the description's "Estimated"
+    status are stale and misleading — callers drop them in favour of a neutral
+    "date passed, results pending" presentation. Today is NOT treated as past
+    (an estimate for today is still live until the day ends). Unparseable or
+    missing dates are treated as not-past (safe: keeps prior behaviour).
+    """
+    if not earnings_date:
+        return False
+    try:
+        return date.fromisoformat(earnings_date) < _today_et()
+    except (ValueError, TypeError):
+        return False
+
+
 def expected_calendar_state(
     ticker: str,
     hour: str | None,
@@ -131,7 +156,15 @@ def expected_calendar_state(
     used_yf = bool(hour_yf and not hour)
 
     has_actuals = eps_actual is not None or revenue_actual is not None
-    est_marker = "" if (has_actuals or _is_confirmed_hour(effective_hour)) else " (est.)"
+    # "(est.)" flags a Finnhub-projected (not company-confirmed) future date.
+    # Drop it once we have actuals, once the timing is confirmed, OR once the
+    # date has passed — a stale "(est.)" lingering on a past date is misleading
+    # since an estimate only makes sense for a date still ahead of us.
+    est_marker = (
+        ""
+        if (has_actuals or _is_confirmed_hour(effective_hour) or _date_has_passed(earnings_date))
+        else " (est.)"
+    )
     if has_actuals:
         # Compact title once results are in — the calendar event is now
         # historical context, no need for a verbose "[REPORTED] ... Release".
@@ -322,7 +355,11 @@ def build_description(
 
     has_actuals = eps_actual is not None or revenue_actual is not None
     if not has_actuals:
-        if _is_confirmed_hour(hour):
+        if _date_has_passed(earnings_date):
+            # Expected date came and went without actuals captured yet — it is
+            # no longer an estimate, so don't keep calling it one.
+            status = "Date passed (results pending)"
+        elif _is_confirmed_hour(hour):
             status = "Confirmed (yfinance)" if hour_source == "yfinance" else "Confirmed"
         else:
             status = "Estimated (Finnhub has no timing)"
