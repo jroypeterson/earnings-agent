@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-05-31T12:21:13Z",
+  "generated_at": "2026-06-01T16:50:53Z",
   "window": {
-    "start": "2026-05-29",
-    "end": "2026-06-14"
+    "start": "2026-05-30",
+    "end": "2026-06-15"
   },
   "counts": {
-    "events": 22
+    "events": 27
   },
   "events": [
     {
@@ -20,6 +20,15 @@
       "company_name": "enGene Holdings Inc"
     },
     {
+      "ticker": "GLMD",
+      "event_date": "2026-06-01",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Galmed Pharmaceuticals Ltd"
+    },
+    {
       "ticker": "NCNA",
       "event_date": "2026-06-01",
       "event_hour": "",
@@ -27,6 +36,15 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "NuCana PLC"
+    },
+    {
+      "ticker": "NNOX",
+      "event_date": "2026-06-01",
+      "event_hour": "",
+      "tier": 2,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Nano-X Imaging Ltd."
     },
     {
       "ticker": "FIVE",
@@ -45,6 +63,15 @@
       "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "GitLab Inc."
+    },
+    {
+      "ticker": "ICLR",
+      "event_date": "2026-06-02",
+      "event_hour": "amc",
+      "tier": 2,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "ICON PLC"
     },
     {
       "ticker": "PANW",
@@ -155,15 +182,6 @@
       "company_name": "ON24 Inc"
     },
     {
-      "ticker": "ICLR",
-      "event_date": "2026-06-06",
-      "event_hour": "amc",
-      "tier": 2,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "ICON PLC"
-    },
-    {
       "ticker": "CELU",
       "event_date": "2026-06-08",
       "event_hour": "",
@@ -207,6 +225,33 @@
       "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "Adobe Inc"
+    },
+    {
+      "ticker": "GLSI",
+      "event_date": "2026-06-15",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Greenwich Lifesciences Inc"
+    },
+    {
+      "ticker": "SNOA",
+      "event_date": "2026-06-15",
+      "event_hour": "amc",
+      "tier": 3,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Sonoma Pharmaceuticals Inc"
+    },
+    {
+      "ticker": "VTGN",
+      "event_date": "2026-06-15",
+      "event_hour": "amc",
+      "tier": 3,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Vistagen Therapeutics Inc"
     }
   ]
 }
