@@ -1,4 +1,11 @@
 # Earnings Intelligence System
+> Earnings-event orchestrator: monitors upcoming earnings (Finnhub), validates dates across EDGAR/yfinance/IR, and syncs Google Calendar + TickTick review tasks with beat/miss results to Slack.
+
+- **Status:** live
+- **Runtime/trigger:** Python via GitHub Actions (daily 11:13 + 19:23 UTC; reconcile 14/17/20:09 UTC; post-earnings 22:37 UTC; weekly digest Sun 16:43 UTC; watchdog 3×/day)
+- **Reads:** Finnhub (earnings calendar) · Coverage Manager exports (universe/tiers) · Google Calendar · yfinance · SEC EDGAR 8-K Item 2.02 · Gmail IR alerts · Slack replies
+- **Writes:** Google Calendar · TickTick (per-quarter review lists) · SQLite `earnings_events.db` (schema v12) · Slack `#earnings` (results/digest) + `#status-reports` (date-disagreement alerts) · `exports/upcoming_events.json`
+- **Run:** `python main.py` (daily sync; also `--dry-run`, `--cross-check`, `--weekly-digest`)  ·  **Entry points:** `main.py`, `calendar_sync.py`, `storage.py`, `notifications.py`
 
 An earnings review execution system that monitors upcoming earnings, syncs to Google Calendar, creates review tasks in TickTick, and tracks your coverage workflow. Powered by Finnhub, Coverage Manager, and the TickTick API.
 
