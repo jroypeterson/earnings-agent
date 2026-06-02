@@ -47,6 +47,75 @@ class NotificationError(RuntimeError):
 
 
 # ---------------------------------------------------------------------------
+# Transient-network resilience (shared by every outbound Slack POST)
+# ---------------------------------------------------------------------------
+# A transient DNS/network blip shouldn't lose a Slack post. We make 4 attempts
+# total, sleeping 5s/15s/30s BEFORE attempts 2/3/4, and retry ONLY on transient
+# transport errors (the requests/urllib network-error families). A successful
+# HTTP exchange that carries a bad status is NOT retried here — callers keep
+# their own success/non-200 handling, so failure behavior is unchanged once the
+# transport itself succeeds. See the Coverage Manager reporting/slack.py
+# reference impl (urlopen_with_retry).
+_RETRY_BACKOFF = (5, 15, 30)  # seconds to wait BEFORE retry attempts 2..N
+
+
+def _retry_sleep(seconds: float) -> None:
+    # Skip the wall-clock wait under pytest (which sets PYTEST_CURRENT_TEST) so
+    # the network-error tests don't sleep through the full backoff.
+    import os
+    import time
+    if not os.environ.get("PYTEST_CURRENT_TEST"):
+        time.sleep(seconds)
+
+
+def post_with_retry(*args, attempts: int = 4, label: str = "slack post", **kwargs):
+    """``requests.post`` with backoff retry on transient transport errors.
+
+    Re-raises the last ``requests.exceptions.RequestException`` if every attempt
+    fails, so existing callers keep their fallback/raise behavior on a genuine
+    outage — this only rides through momentary blips. Calls ``requests.post`` by
+    name so test monkeypatches still intercept it. Does NOT inspect the response
+    status; a successful-but-bad-status response is returned to the caller as-is.
+    """
+    last = None
+    for i in range(attempts):
+        try:
+            return requests.post(*args, **kwargs)
+        except requests.exceptions.RequestException as exc:
+            last = exc
+            if i < attempts - 1:
+                delay = _RETRY_BACKOFF[min(i, len(_RETRY_BACKOFF) - 1)]
+                logger.warning("%s attempt %d/%d failed (%s); retrying in %ds",
+                               label, i + 1, attempts, exc, delay)
+                _retry_sleep(delay)
+    raise last
+
+
+def urlopen_with_retry(req, *, timeout: int = 10, attempts: int = 4,
+                       label: str = "slack post"):
+    """``urllib.request.urlopen`` with backoff retry on transient transport errors.
+
+    Re-raises the last ``urllib.error.URLError`` if every attempt fails, so
+    existing callers keep their swallow/return behavior on a genuine outage.
+    Calls ``urllib.request.urlopen`` by name so monkeypatches still intercept it.
+    """
+    import urllib.request
+    import urllib.error
+    last = None
+    for i in range(attempts):
+        try:
+            return urllib.request.urlopen(req, timeout=timeout)
+        except urllib.error.URLError as exc:
+            last = exc
+            if i < attempts - 1:
+                delay = _RETRY_BACKOFF[min(i, len(_RETRY_BACKOFF) - 1)]
+                logger.warning("%s attempt %d/%d failed (%s); retrying in %ds",
+                               label, i + 1, attempts, exc, delay)
+                _retry_sleep(delay)
+    raise last
+
+
+# ---------------------------------------------------------------------------
 # Shared formatting helpers
 # ---------------------------------------------------------------------------
 
@@ -224,11 +293,13 @@ def post_slack(webhook_url: str, blocks: list[dict], fallback_text: str) -> None
     """POST a Block Kit message. Raises NotificationError on failure."""
     payload = {"text": fallback_text, "blocks": blocks}
     try:
-        resp = requests.post(
+        # Retry transient network blips; non-200 handling stays below unchanged.
+        resp = post_with_retry(
             webhook_url,
             data=json.dumps(payload),
             headers={"Content-Type": "application/json"},
             timeout=SLACK_TIMEOUT,
+            label="Slack webhook",
         )
     except requests.RequestException as exc:
         raise NotificationError(f"Slack POST failed: {exc}") from exc

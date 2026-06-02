@@ -105,6 +105,7 @@ from notifications import (
     build_urgent_move_thread_fallback,
     post_slack,
     post_heartbeat,
+    urlopen_with_retry,
     NotificationError,
     ResultRow,
     DriftRow,
@@ -273,7 +274,8 @@ def _alert_coverage_stale_if_needed(conn, health: CoverageHealth) -> None:
             data=_json.dumps({"text": text}).encode("utf-8"),
             headers={"Content-Type": "application/json"},
         )
-        urllib.request.urlopen(req, timeout=10).read()
+        # Retry transient network blips; preserves swallow-on-error below.
+        urlopen_with_retry(req, timeout=10, label="Coverage staleness alert").read()
         kv_set(conn, dedup_key, "alerted")
     except Exception as exc:
         logger.error(f"Coverage staleness Slack post failed: {exc}")
@@ -412,7 +414,8 @@ def _alert_coverage_changes_if_needed(conn, coverage) -> None:
             data=__json.dumps({"text": text}).encode("utf-8"),
             headers={"Content-Type": "application/json"},
         )
-        urllib.request.urlopen(req, timeout=10).read()
+        # Retry transient network blips; preserves swallow-on-error below.
+        urlopen_with_retry(req, timeout=10, label="Coverage diff alert").read()
     except Exception as exc:
         logger.error(f"Coverage diff Slack post failed: {exc}")
 

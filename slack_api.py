@@ -19,6 +19,8 @@ from dataclasses import dataclass
 
 import requests
 
+from notifications import post_with_retry
+
 logger = logging.getLogger("earnings_agent")
 
 _API_BASE = "https://slack.com/api"
@@ -38,7 +40,10 @@ class SlackReply:
 
 
 def _post(token: str, method: str, payload: dict) -> dict:
-    resp = requests.post(
+    # Retry transient network blips on the transport; the ok/raise_for_status
+    # handling below is unchanged (a successful-but-bad-status reply is NOT
+    # retried by post_with_retry).
+    resp = post_with_retry(
         f"{_API_BASE}/{method}",
         json=payload,
         headers={
@@ -46,6 +51,7 @@ def _post(token: str, method: str, payload: dict) -> dict:
             "Content-Type": "application/json; charset=utf-8",
         },
         timeout=_HTTP_TIMEOUT,
+        label=f"Slack {method}",
     )
     resp.raise_for_status()
     body = resp.json()
