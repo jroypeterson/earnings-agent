@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-06-01T22:19:51Z",
+  "generated_at": "2026-06-02T15:11:00Z",
   "window": {
-    "start": "2026-05-30",
-    "end": "2026-06-15"
+    "start": "2026-05-31",
+    "end": "2026-06-16"
   },
   "counts": {
-    "events": 27
+    "events": 29
   },
   "events": [
     {
@@ -252,6 +252,24 @@
       "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "Vistagen Therapeutics Inc"
+    },
+    {
+      "ticker": "ORCL",
+      "event_date": "2026-06-16",
+      "event_hour": "amc",
+      "tier": 3,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Oracle Corp"
+    },
+    {
+      "ticker": "RFL",
+      "event_date": "2026-06-16",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Rafael Holdings Inc"
     }
   ]
 }
