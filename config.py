@@ -55,9 +55,14 @@ EMAIL_TO = os.getenv("EMAIL_TO")
 
 # SEC EDGAR fair-access policy requires a User-Agent with contact info.
 # Default uses the repo owner's public email; override via env var if needed.
-SEC_EDGAR_USER_AGENT = os.getenv(
-    "SEC_EDGAR_USER_AGENT",
-    "earnings-agent (jroypeterson@gmail.com)",
+# NB: use `or` not getenv's default arg — CI passes the env var through as an
+# EMPTY string when the (optional) SEC_EDGAR_USER_AGENT secret is unset, and
+# os.getenv treats "" as present, which would send an empty User-Agent and
+# get every EDGAR request rejected (403/malformed) — silently breaking the
+# 8-K auto-correction and the missed-results backstop.
+SEC_EDGAR_USER_AGENT = (
+    os.getenv("SEC_EDGAR_USER_AGENT")
+    or "earnings-agent (jroypeterson@gmail.com)"
 )
 
 # Database
