@@ -1,51 +1,15 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-06-03T22:09:26Z",
+  "generated_at": "2026-06-04T14:11:49Z",
   "window": {
-    "start": "2026-06-01",
-    "end": "2026-06-17"
+    "start": "2026-06-02",
+    "end": "2026-06-18"
   },
   "counts": {
-    "events": 24
+    "events": 19
   },
   "events": [
-    {
-      "ticker": "ENGN",
-      "event_date": "2026-06-01",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "enGene Holdings Inc"
-    },
-    {
-      "ticker": "GLMD",
-      "event_date": "2026-06-01",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Galmed Pharmaceuticals Ltd"
-    },
-    {
-      "ticker": "NCNA",
-      "event_date": "2026-06-01",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "NuCana PLC"
-    },
-    {
-      "ticker": "NNOX",
-      "event_date": "2026-06-01",
-      "event_hour": "",
-      "tier": 2,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Nano-X Imaging Ltd."
-    },
     {
       "ticker": "FIVE",
       "event_date": "2026-06-02",
@@ -56,13 +20,13 @@
       "company_name": "Five Below Inc"
     },
     {
-      "ticker": "CRWD",
-      "event_date": "2026-06-03",
+      "ticker": "ICLR",
+      "event_date": "2026-06-02",
       "event_hour": "amc",
-      "tier": 1,
+      "tier": 2,
       "date_confirmed": true,
-      "call_datetime_utc": "2026-06-03T21:00:00+00:00",
-      "company_name": "CrowdStrike Holdings, Inc."
+      "call_datetime_utc": null,
+      "company_name": "ICON PLC"
     },
     {
       "ticker": "LULU",
@@ -72,15 +36,6 @@
       "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "Lululemon Athletica Inc."
-    },
-    {
-      "ticker": "VEEV",
-      "event_date": "2026-06-03",
-      "event_hour": "amc",
-      "tier": 2,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Veeva Systems Inc."
     },
     {
       "ticker": "COO",
@@ -173,6 +128,15 @@
       "company_name": "Yext Inc"
     },
     {
+      "ticker": "ORCL",
+      "event_date": "2026-06-10",
+      "event_hour": "amc",
+      "tier": 3,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Oracle Corp"
+    },
+    {
       "ticker": "ADBE",
       "event_date": "2026-06-11",
       "event_hour": "amc",
@@ -207,15 +171,6 @@
       "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "Vistagen Therapeutics Inc"
-    },
-    {
-      "ticker": "ORCL",
-      "event_date": "2026-06-16",
-      "event_hour": "amc",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Oracle Corp"
     },
     {
       "ticker": "RFL",
