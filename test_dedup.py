@@ -815,6 +815,52 @@ def test_coverage_freshness_missing(tmp_path, monkeypatch):
     assert h.age_days is None
 
 
+def test_reported_row_survives_same_quarter_phantom_upsert():
+    """Regression for the ICLR re-post spam (2026-06).
+
+    Finnhub double-lists date-flapping names: a real reported event (with
+    actuals) plus a phantom forward listing with no actuals, both mapping to
+    the same reporting quarter. The old same-quarter cleanup DELETE in
+    upsert_event would wipe the reported row when the phantom was inserted,
+    so the actuals re-posted every run. The DELETE must now spare reported=1
+    rows.
+    """
+    from storage import (
+        init_db, upsert_event, find_existing_event,
+        find_reported_event_for_quarter, date_to_quarter,
+    )
+
+    conn = init_db(":memory:")
+
+    # Real ICON results land and get marked reported.
+    upsert_event(
+        conn, "ICLR", "2026-05-27", "amc", None,
+        quarter=date_to_quarter("2026-05-27"),
+        eps_estimate=3.18, eps_actual=2.52,
+        rev_estimate=2.0e9, rev_actual=2.11e9,
+        reported=True, tier=2, company_name="ICON PLC",
+    )
+    assert find_existing_event(conn, "ICLR", "2026-05-27")["reported"] is True
+
+    # A phantom forward listing (no actuals, same quarter, different date) is
+    # upserted as a brand-new row — the INSERT branch runs its quarter cleanup.
+    upsert_event(
+        conn, "ICLR", "2026-06-02", "amc", None,
+        quarter=date_to_quarter("2026-06-02"),
+        eps_estimate=2.59, reported=False, tier=2, company_name="ICON PLC",
+    )
+
+    # The reported actuals row must still be intact.
+    survived = find_existing_event(conn, "ICLR", "2026-05-27")
+    assert survived is not None, "reported actuals row was clobbered by phantom"
+    assert survived["reported"] is True
+    assert survived["eps_actual"] == 2.52
+
+    # And it is discoverable as the quarter's reported event.
+    rq = find_reported_event_for_quarter(conn, "ICLR", date_to_quarter("2026-05-27"))
+    assert rq is not None and rq["event_date"] == "2026-05-27"
+
+
 def test_coverage_alert_deduplicates_per_day(tmp_path, monkeypatch):
     """Verify kv_store dedup so we don't spam Slack across multiple runs."""
     import main, coverage
@@ -1043,14 +1089,31 @@ def test_description_same_day_call_renders_compactly():
 
 
 def test_description_split_day_call_includes_weekday_and_date():
-    """Split-day case (UFPT): 'Conference call: Tue May 5 8:30 AM ET'."""
+    """Split-day case (UFPT): AMC release day X, BMO call day X+1.
+
+    Uses a date relative to today so the 'Confirmed' (upcoming) status path is
+    always exercised — a hardcoded past date instead drifts into the
+    'Date passed (results pending)' branch once it ages.
+    """
     from calendar_sync import build_description
+    from datetime import date as _date, timedelta as _td, datetime as _dt, timezone as _tz
+    from zoneinfo import ZoneInfo
+
+    rel = _date.today() + _td(days=30)
+    call_day = rel + _td(days=1)
+    # 8:30 AM ET on day X+1 — build in ET then store as UTC so the displayed
+    # "8:30 AM ET" is DST-correct regardless of when the test runs.
+    call_et = _dt(call_day.year, call_day.month, call_day.day, 8, 30,
+                  tzinfo=ZoneInfo("America/New_York"))
     desc = build_description("UFPT", "amc", 0.5, None, 1e8, None,
                              hour_source="yfinance",
-                             earnings_date="2026-05-04",
-                             call_datetime_utc="2026-05-05T12:30:00+00:00")
+                             earnings_date=rel.isoformat(),
+                             call_datetime_utc=call_et.astimezone(_tz.utc).isoformat())
+    expected_call = (
+        f"Conference call: {call_day.strftime('%a %b ')}{call_day.day} 8:30 AM ET"
+    )
     assert "Press release: After Market Close" in desc
-    assert "Conference call: Tue May 5 8:30 AM ET" in desc
+    assert expected_call in desc
     assert "Status: Confirmed (yfinance)" in desc
 
 

@@ -39,6 +39,7 @@ from storage import (
     init_db,
     find_existing_event,
     find_event_for_ticker_near_date,
+    find_reported_event_for_quarter,
     upsert_event,
     record_estimate_snapshot,
     date_to_quarter,
@@ -106,6 +107,7 @@ from notifications import (
     post_slack,
     post_heartbeat,
     urlopen_with_retry,
+    _short_company_name,
     NotificationError,
     ResultRow,
     DriftRow,
@@ -142,7 +144,7 @@ from market_data import (
     fetch_yfinance_hour_for_date,
     fetch_yfinance_call_for_date,
 )
-from edgar_client import infer_cadence_signal, find_earnings_release_filing
+from edgar_client import infer_cadence_signal, find_earnings_release_filing, get_cik
 
 logger = logging.getLogger("earnings_agent")
 
@@ -589,6 +591,23 @@ def run(
         source_fingerprint = f"{ticker}:{earnings_date}"
 
         has_actuals = eps_act is not None or rev_act is not None
+
+        # Phantom / duplicate-listing guard. Once this ticker's reporting
+        # quarter has been recorded with actuals and posted (reported=1), any
+        # *other* Finnhub entry for the same quarter at a different date is
+        # noise: a date-flapping forward listing (Finnhub double-lists names
+        # like ICLR — real 2026-05-27 actuals + a phantom 2026-06-xx with no
+        # actuals) or a same-quarter duplicate. Processing it re-posts the
+        # actuals every run and churns the calendar. Skip it outright so the
+        # reported row stays authoritative.
+        reported_quarter = find_reported_event_for_quarter(conn, ticker, quarter)
+        if reported_quarter and reported_quarter["event_date"] != earnings_date:
+            logger.info(
+                f"Skipping {'phantom' if not has_actuals else 'duplicate'} "
+                f"Finnhub entry {ticker} {earnings_date} ({quarter}) — already "
+                f"reported on {reported_quarter['event_date']}"
+            )
+            continue
 
         # Record estimate snapshot for revision tracking
         if eps_est is not None or rev_est is not None:
@@ -1433,6 +1452,16 @@ def run_check_results(
             skipped_already_reported += 1
             continue
 
+        # Same phantom/duplicate guard as the daily sync: if this quarter is
+        # already reported at a different date, this is a duplicate Finnhub
+        # listing — don't re-post.
+        reported_quarter = find_reported_event_for_quarter(
+            conn, ticker, date_to_quarter(event_date)
+        )
+        if reported_quarter and reported_quarter["event_date"] != event_date:
+            skipped_already_reported += 1
+            continue
+
         info = coverage_map.get(ticker)
         tier = info.tier if info else (existing.get("tier", 3) if existing else 3)
         company_name = (info.company_name if info else "") or (
@@ -1605,6 +1634,205 @@ def run_check_results(
     logger.info(f"Marked {len(ready)} results as reported in DB")
     conn.close()
     _emit_heartbeat()
+
+
+# ---------------------------------------------------------------------------
+# EDGAR results fallback — catch Tier 1/2 names that reported but Finnhub
+# hasn't produced actuals for (the FIVE-class silent miss).
+# ---------------------------------------------------------------------------
+
+# How many days past the expected date we keep probing EDGAR for a missing
+# Tier 1/2 result before giving up (covers a Fri report not seen until Mon +
+# typical Finnhub backfill lag).
+_MISSED_RESULTS_LOOKBACK_DAYS = 10
+
+
+def run_edgar_results_fallback(dry_run: bool = False, skip_heartbeat: bool = False):
+    """Detect Tier 1/2 earnings that have happened (confirmed by an SEC 8-K
+    Item 2.02 filing) but for which Finnhub still has no actuals, and alert
+    loudly to #earnings.
+
+    Finnhub is the only source feeding `run_check_results`, so when it lags or
+    parks an event on the wrong date, a name reports and the agent says
+    nothing (e.g. FIVE: reported 2026-06-03, Finnhub stuck at 2026-06-02 with
+    no actuals). SEC EDGAR is authoritative and free — an Item 2.02 filing IS
+    the earnings release. We use it as a backstop so important names can't be
+    silently missed (see `feedback_no_silent_failures.md`).
+
+    Alert-only by design: EDGAR confirms *that* a company reported and *when*,
+    but the beat/miss figures still come from Finnhub on a later sweep (the
+    daily sync's 14-day look-back posts them once Finnhub backfills). Dedup'd
+    per ticker+quarter via kv_store so it alerts once, not every run.
+    """
+    start_ts = time.monotonic()
+    today = date.today()
+
+    coverage = load_coverage()
+    if not coverage:
+        logger.error("No tickers loaded. Cannot run EDGAR results fallback.")
+        sys.exit(1)
+    coverage_map = {t.ticker: t for t in coverage}
+
+    conn = init_db()
+
+    # Tier 1/2 events that are overdue (date has passed, within the lookback
+    # window), not yet reported, and have no actuals from Finnhub.
+    lookback_iso = (today - timedelta(days=_MISSED_RESULTS_LOOKBACK_DAYS)).isoformat()
+    cur = conn.execute(
+        "SELECT ticker, quarter, event_date, tier, company_name "
+        "FROM events "
+        "WHERE tier <= 2 AND reported = 0 "
+        "AND eps_actual IS NULL AND rev_actual IS NULL "
+        "AND event_date <= ? AND event_date >= ? "
+        "ORDER BY event_date",
+        (today.isoformat(), lookback_iso),
+    )
+    candidates = cur.fetchall()
+    logger.info(
+        f"EDGAR results fallback: {len(candidates)} overdue Tier 1/2 "
+        f"event(s) with no Finnhub actuals to probe"
+    )
+
+    confirmed_missed: list[dict] = []
+    for ticker, quarter, event_date, tier, company_name in candidates:
+        # Only probe names still in coverage (avoid noise from dropped tickers).
+        if ticker not in coverage_map:
+            continue
+        # Dedup: alert once per ticker+quarter.
+        dedup_key = f"missed_results_alerted:{ticker}:{quarter}"
+        if kv_get(conn, dedup_key):
+            continue
+        try:
+            ed = date.fromisoformat(event_date)
+        except ValueError:
+            continue
+        # Search a small window around the expected date: a few days early
+        # (companies sometimes pre-announce) through today.
+        filing = find_earnings_release_filing(
+            ticker, ed - timedelta(days=3), today
+        )
+        if not filing:
+            continue  # Genuinely hasn't reported yet — estimated date slipped.
+
+        confirmed_missed.append({
+            "ticker": ticker,
+            "company_name": company_name or (
+                coverage_map[ticker].company_name if ticker in coverage_map else ""
+            ),
+            "quarter": quarter,
+            "event_date": event_date,
+            "tier": tier,
+            "filing_date": filing.filing_date,
+            "filing_url": _edgar_filing_url(ticker, filing.accession),
+            "dedup_key": dedup_key,
+        })
+
+    def _emit_heartbeat():
+        if skip_heartbeat or dry_run or not (SLACK_WEBHOOK_STATUS or SLACK_WEBHOOK_EARNINGS):
+            return
+        post_heartbeat(
+            SLACK_WEBHOOK_STATUS or SLACK_WEBHOOK_EARNINGS,
+            "Missed-results check",
+            {
+                "probed": len(candidates),
+                "confirmed_missed": len(confirmed_missed),
+            },
+            duration_sec=time.monotonic() - start_ts,
+        )
+
+    if not confirmed_missed:
+        logger.info("EDGAR results fallback: no silently-missed results found")
+        conn.close()
+        _emit_heartbeat()
+        return
+
+    logger.warning(
+        f"EDGAR results fallback: {len(confirmed_missed)} Tier 1/2 name(s) "
+        f"reported (per SEC) but Finnhub has no actuals: "
+        + ", ".join(r["ticker"] for r in confirmed_missed)
+    )
+
+    if dry_run:
+        for r in confirmed_missed:
+            logger.info(
+                f"  [dry-run] would alert: {r['ticker']} {r['quarter']} — "
+                f"8-K 2.02 filed {r['filing_date']}, Finnhub actuals missing "
+                f"({r['filing_url']})"
+            )
+        conn.close()
+        return
+
+    webhook = SLACK_WEBHOOK_EARNINGS or SLACK_WEBHOOK_STATUS
+    if not webhook:
+        logger.warning("Missed-results alert suppressed (no webhook configured)")
+        conn.close()
+        return
+
+    try:
+        post_slack(
+            webhook,
+            _build_missed_results_blocks(confirmed_missed, today),
+            _build_missed_results_fallback(confirmed_missed),
+        )
+        # Only set dedup keys after a successful post so a failed post retries.
+        for r in confirmed_missed:
+            kv_set(conn, r["dedup_key"], f"alerted:{today.isoformat()}")
+        logger.info(
+            f"Posted missed-results alert for {len(confirmed_missed)} name(s)"
+        )
+    except NotificationError as exc:
+        logger.error(f"Missed-results Slack post failed: {exc}")
+
+    conn.close()
+    _emit_heartbeat()
+
+
+def _edgar_filing_url(ticker: str, accession: str) -> str:
+    """Build a clickable SEC filing-index URL from a ticker + accession."""
+    cik = get_cik(ticker)
+    acc_nodash = accession.replace("-", "")
+    if cik:
+        cik_int = cik.lstrip("0") or "0"
+        return (
+            f"https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany"
+            f"&CIK={cik_int}&type=8-K"
+        ) if not acc_nodash else (
+            f"https://www.sec.gov/Archives/edgar/data/{cik_int}/{acc_nodash}/"
+            f"{accession}-index.htm"
+        )
+    return "https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&type=8-K"
+
+
+def _build_missed_results_blocks(rows: list[dict], as_of: date) -> list[dict]:
+    """Block Kit for the missed-results alert (#earnings)."""
+    # Cross-platform "Wed Jun 4" (no %-d / %#d portability headache).
+    header = (
+        f":rotating_light: *Possible missed results* — "
+        f"{as_of.strftime('%a %b ')}{as_of.day}"
+    )
+    lines = []
+    for r in rows:
+        tier_tag = "T1" if r["tier"] == 1 else "T2"
+        lines.append(
+            f"{tier_tag} `{r['ticker']}` {_short_company_name(r['company_name'])} "
+            f"({r['quarter']}) — SEC 8-K 2.02 filed *{r['filing_date']}*, "
+            f"Finnhub actuals still missing · <{r['filing_url']}|filing>"
+        )
+    body = (
+        "These names filed an earnings release with the SEC but Finnhub hasn't "
+        "published actuals, so the beat/miss post is delayed. Verify manually; "
+        "the figures will auto-post once Finnhub backfills.\n\n" + "\n".join(lines)
+    )
+    return [
+        {"type": "section", "text": {"type": "mrkdwn", "text": header}},
+        {"type": "section", "text": {"type": "mrkdwn", "text": body}},
+    ]
+
+
+def _build_missed_results_fallback(rows: list[dict]) -> str:
+    return "Possible missed results: " + ", ".join(
+        f"{r['ticker']} ({r['quarter']}, 8-K {r['filing_date']})" for r in rows
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -3041,6 +3269,12 @@ def main():
         help="Check for newly-reported earnings on --date (default: today); post results to Slack",
     )
     parser.add_argument(
+        "--check-missed-results",
+        action="store_true",
+        help="EDGAR backstop: alert when a Tier 1/2 name reported (SEC 8-K "
+             "Item 2.02) but Finnhub has no actuals yet (the FIVE-class miss)",
+    )
+    parser.add_argument(
         "--date",
         type=str,
         default=None,
@@ -3115,6 +3349,11 @@ def main():
     elif args.check_results:
         run_check_results(
             target_date=args.date,
+            dry_run=args.dry_run,
+            skip_heartbeat=args.no_heartbeat,
+        )
+    elif args.check_missed_results:
+        run_edgar_results_fallback(
             dry_run=args.dry_run,
             skip_heartbeat=args.no_heartbeat,
         )

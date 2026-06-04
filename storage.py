@@ -388,6 +388,29 @@ def find_event_by_ticker_quarter(conn: sqlite3.Connection, ticker: str, quarter:
     return None
 
 
+def find_reported_event_for_quarter(
+    conn: sqlite3.Connection, ticker: str, quarter: str
+) -> dict | None:
+    """
+    Return an already-reported (reported=1) event for this ticker+reporting
+    quarter, if one exists. Used to suppress duplicate / phantom Finnhub
+    listings: once a company's quarter has been recorded with actuals and
+    posted, a second Finnhub entry for the same quarter at a *different* date
+    (a date-flapping forward listing, or a same-quarter duplicate row) is
+    noise — processing it re-posts the actuals and churns the calendar.
+    """
+    cur = conn.execute(
+        "SELECT event_date, eps_actual, rev_actual FROM events "
+        "WHERE ticker = ? AND quarter = ? AND reported = 1 "
+        "ORDER BY event_date LIMIT 1",
+        (ticker, quarter),
+    )
+    row = cur.fetchone()
+    if row:
+        return {"event_date": row[0], "eps_actual": row[1], "rev_actual": row[2]}
+    return None
+
+
 def find_event_for_ticker_near_date(
     conn: sqlite3.Connection, ticker: str, event_date: str, window_days: int = 14
 ) -> dict | None:
@@ -498,10 +521,22 @@ def upsert_event(
         )
     else:
         # For old DBs with UNIQUE(ticker, quarter), delete any existing row
-        # for this ticker+quarter before inserting with the new date
+        # for this ticker+quarter before inserting with the new date.
+        #
+        # NEVER delete a row already marked reported=1. A reported event has
+        # already happened, so its date doesn't move — but a date-flapping
+        # *no-actuals* phantom from the same reporting quarter (e.g. Finnhub
+        # double-listing ICLR: real 2026-05-27 actuals + a phantom forward
+        # date) would otherwise clobber the reported row here, wiping the
+        # `reported` flag and causing the same actuals to re-post every run.
+        # Guarding on reported=0 keeps the actuals row alive. Worst case a
+        # genuine post-report date correction leaves a harmless duplicate
+        # (skipped by the actuals detector; cleaned by --cleanup), which is
+        # far better than losing the actuals.
         if quarter:
             conn.execute(
-                "DELETE FROM events WHERE ticker = ? AND quarter = ? AND event_date != ?",
+                "DELETE FROM events WHERE ticker = ? AND quarter = ? "
+                "AND event_date != ? AND reported = 0",
                 (ticker, quarter, event_date),
             )
         conn.execute(
