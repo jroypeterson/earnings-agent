@@ -372,3 +372,53 @@ def test_check_results_fmp_corrected_date_moves_calendar_first(monkeypatch, tmp_
     assert _row(db_path, "FIVE", "2026-06-02") is None          # old row migrated
     assert ("FIVE", "2026-05-27") in created and "OLD" in deleted  # create-first move
     assert notified == ["FIVE"]
+
+
+def test_check_results_raises_on_slack_failure(monkeypatch, tmp_path):
+    """A failed results Slack post must leave reported=0 AND raise, so the
+    workflow goes red (you hear about it within a day) rather than green."""
+    db_path = str(tmp_path / "crfail.db")
+    c = storage.init_db(db_path)
+    storage.upsert_event(c, ticker="FIVE", event_date="2026-05-27",
+                         event_hour="amc", gcal_id="G",
+                         quarter=storage.date_to_quarter("2026-05-27"),
+                         eps_estimate=1.77, reported=False, tier=1,
+                         company_name="Five Below")
+    c.close()
+    monkeypatch.setattr(main, "init_db", lambda *a, **k: storage.init_db(db_path))
+    monkeypatch.setattr(main, "load_coverage", lambda: [_tkr("FIVE", tier=1)])
+    monkeypatch.setattr(main, "FINNHUB_API_KEY", "x")
+    monkeypatch.setattr(main, "GOOGLE_CALENDAR_ID", "cal")
+    monkeypatch.setattr(main, "get_finnhub_client", lambda: object())
+    monkeypatch.setattr(main, "get_calendar_service", lambda: object())
+    monkeypatch.setattr(main, "fetch_post_earnings_move",
+                        lambda *a, **k: SimpleNamespace(move_pct=5.0, window_label="1d"))
+    monkeypatch.setattr(main, "update_calendar_event_description", lambda *a, **k: None)
+    monkeypatch.setattr(main, "_fetch_earnings_source", lambda *a, **k: [
+        {"symbol": "FIVE", "date": "2026-05-27", "hour": "amc",
+         "epsEstimate": 1.77, "epsActual": 2.22,
+         "revenueEstimate": 1.2e9, "revenueActual": 1.285e9},
+    ])
+    monkeypatch.setattr(main, "notify_results", lambda *a, **k: False)  # Slack FAILS
+
+    with pytest.raises(RuntimeError, match="Results Slack post failed"):
+        main.run_check_results(target_date="2026-05-27", skip_heartbeat=True)
+
+    row = _row(db_path, "FIVE", "2026-05-27")
+    assert row is not None and row["reported"] is False   # left for retry
+
+
+def test_edgar_fallback_raises_on_degraded_edgar(monkeypatch, tmp_path):
+    """If most EDGAR requests hard-fail, the missed-results backstop must NOT
+    emit a falsely-reassuring 'no misses' — it raises so the run goes red."""
+    db_path = str(tmp_path / "edg.db")
+    storage.init_db(db_path).close()
+    monkeypatch.setattr(main, "init_db", lambda *a, **k: storage.init_db(db_path))
+    monkeypatch.setattr(main, "load_coverage", lambda: [_tkr("FIVE", tier=1)])
+    monkeypatch.setattr(main, "find_earnings_release_filing", lambda *a, **k: None)
+    monkeypatch.setattr(main, "get_cik", lambda t: "1")
+    # Simulate a degraded SEC: 8 of 10 requests hard-failed this run.
+    monkeypatch.setattr(main, "edgar_get_request_stats", lambda: (10, 8))
+
+    with pytest.raises(RuntimeError, match="EDGAR degraded"):
+        main.run_edgar_results_fallback(dry_run=False, skip_heartbeat=True)

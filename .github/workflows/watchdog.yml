@@ -45,35 +45,65 @@ jobs:
           WEBHOOK="${SLACK_WEBHOOK_STATUS:-$SLACK_WEBHOOK_EARNINGS}"
           NOW_EPOCH=$(date +%s)
 
-          # label | workflow_file | max_age_hours | recent_failure_window_hours
-          # max_age_hours: alert when last successful run is older than this
-          # recent_failure_window_hours: if there's a failure newer than the
-          #   last success and within this window, do NOT auto-dispatch (the
-          #   workflow is broken, not skipped — let its own failure alert
-          #   drive triage instead of looping recovery dispatches).
+          # SCHEDULE-AWARE staleness: instead of a flat "last success < N hours"
+          # (which can't tell a skipped Friday weekday run from a normal weekend
+          # gap, so a Fri-evening miss wouldn't alert until Mon), we compute the
+          # most-recent EXPECTED trigger for each workflow's cadence and alert
+          # when no success has landed since it (plus a grace window). This
+          # guarantees a within-~24h alert for any skipped weekday run while
+          # never false-alarming on weekends.
+          #
+          # most_recent_trigger(schedule, hourUTC): the latest scheduled trigger
+          # at or before now, respecting the cadence's allowed days.
+          most_recent_trigger() {
+            local sched="$1" hh="$2" cand dow i
+            cand=$(date -u -d "$(date -u +%F) ${hh}:00:00" +%s)
+            [ "$NOW_EPOCH" -lt "$cand" ] && cand=$((cand - 86400))
+            for i in $(seq 0 7); do
+              dow=$(date -u -d "@$cand" +%u)   # 1=Mon .. 7=Sun
+              case "$sched" in
+                daily)   break ;;
+                weekday) [ "$dow" -le 5 ] && break ;;
+                sun)     [ "$dow" -eq 7 ] && break ;;
+              esac
+              cand=$((cand - 86400))
+            done
+            echo "$cand"
+          }
+
+          # label | workflow_file | schedule | latest_trigger_hour_UTC | grace_hours | recent_failure_window_hours
+          #   schedule/hour: the cadence + the LATEST daily trigger hour (UTC).
+          #   grace_hours: time allowed after the trigger for the run to land
+          #     (cron delay + runtime + watchdog cadence) before we call it stale.
+          #   recent_failure_window_hours: if a failure is newer than the last
+          #     success and within this window, the workflow is broken (not
+          #     skipped) — don't auto-dispatch; let its own failure alert triage.
           WORKFLOWS=(
-            "Daily Earnings Check|daily_earnings_check.yml|27|24"
-            "Reconcile Calendar|reconcile_calendar.yml|70|24"
-            "Post-Earnings Results Check|post_earnings_check.yml|75|24"
-            "Weekly Earnings Digest|weekly_digest.yml|192|168"
+            "Daily Earnings Check|daily_earnings_check.yml|daily|11|6|24"
+            "Reconcile Calendar|reconcile_calendar.yml|weekday|20|6|24"
+            "Post-Earnings Results Check|post_earnings_check.yml|weekday|22|5|24"
+            "Weekly Earnings Digest|weekly_digest.yml|sun|16|24|168"
           )
 
           stale_lines=()
           for entry in "${WORKFLOWS[@]}"; do
-            IFS='|' read -r label file max_hours fail_window <<< "$entry"
+            IFS='|' read -r label file sched hh grace_h fail_window <<< "$entry"
 
             last=$(gh run list -R "$REPO" -w "$file" -s success -L 1 --json createdAt --jq '.[0].createdAt // ""')
             last_failure=$(gh run list -R "$REPO" -w "$file" -s failure -L 1 --json createdAt --jq '.[0].createdAt // ""')
 
             if [ -z "$last" ]; then
               age_str="never"
-              age_h=999999
               last_epoch=0
             else
               last_epoch=$(date -d "$last" +%s)
               age_h=$(( (NOW_EPOCH - last_epoch) / 3600 ))
               age_str="${age_h}h ago (${last})"
             fi
+
+            expected=$(most_recent_trigger "$sched" "$hh")
+            grace_epoch=$(( expected + grace_h * 3600 ))
+            exp_str=$(date -u -d "@$expected" +'%Y-%m-%dT%H:%MZ')
 
             # Detect "broken, not skipped": failure newer than last success
             # AND within the per-workflow recent-failure window.
@@ -89,18 +119,20 @@ jobs:
               fi
             fi
 
-            if [ "$age_h" -gt "$max_hours" ]; then
-              echo "STALE: $label — $age_str (threshold ${max_hours}h)"
+            # Stale = the most-recent expected run is past its grace window and
+            # no success has landed since that trigger.
+            if [ "$NOW_EPOCH" -ge "$grace_epoch" ] && [ "$last_epoch" -lt "$expected" ]; then
+              echo "STALE: $label — no success since expected ${exp_str} run (+${grace_h}h grace); last success $age_str"
               if $broken; then
                 echo "  -> $broken_str within ${fail_window}h window; NOT dispatching"
-                stale_lines+=("• \`$label\` — last success $age_str (threshold ${max_hours}h). :no_entry: ${broken_str}; not dispatching (workflow is broken, see its own failure alert).")
+                stale_lines+=("• \`$label\` — no success since the expected ${exp_str} run (last: $age_str). :no_entry: ${broken_str}; not dispatching (workflow is broken, see its own failure alert).")
               elif gh workflow run "$file" -R "$REPO" --ref main; then
-                stale_lines+=("• \`$label\` — last success $age_str (threshold ${max_hours}h). :arrows_counterclockwise: Recovery dispatched.")
+                stale_lines+=("• \`$label\` — no success since the expected ${exp_str} run (last: $age_str). :arrows_counterclockwise: Recovery dispatched.")
               else
-                stale_lines+=("• \`$label\` — last success $age_str (threshold ${max_hours}h). :warning: Recovery dispatch FAILED.")
+                stale_lines+=("• \`$label\` — no success since the expected ${exp_str} run (last: $age_str). :warning: Recovery dispatch FAILED.")
               fi
             else
-              echo "OK: $label — last success $age_str"
+              echo "OK: $label — last success $age_str (expected by ${exp_str}+${grace_h}h)"
             fi
           done
 

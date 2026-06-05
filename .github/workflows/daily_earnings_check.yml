@@ -179,9 +179,10 @@ jobs:
 
       # Poll Slack threads for replies on open questions and apply any
       # commands to DB state. No-op when SLACK_BOT_TOKEN/SLACK_CHANNEL_ID
-      # are unset.
+      # are unset. Slack replies drive manual locks/corrections, so failures
+      # must be loud: --check-replies is wrapped in _run_safeguard (posts a
+      # degraded-health alert + re-raises), hence NOT continue-on-error.
       - name: Check Slack replies on open questions
-        continue-on-error: true
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
           SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }}

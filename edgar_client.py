@@ -58,22 +58,48 @@ def _sleep_for_rate_limit():
     _last_request_ts = time.monotonic()
 
 
+# Request-health counters so callers can detect SYSTEMIC EDGAR degradation
+# (network down, SEC blocking/rate-limiting, malformed responses) vs a
+# legitimate 404 (no such filing/CIK). Without this, a total SEC outage looks
+# identical to "no filings found" — which would make the missed-results
+# backstop silently useless. Callers reset before a batch and read after.
+_edgar_requests = 0
+_edgar_failures = 0
+
+
+def reset_request_stats() -> None:
+    global _edgar_requests, _edgar_failures
+    _edgar_requests = 0
+    _edgar_failures = 0
+
+
+def get_request_stats() -> tuple[int, int]:
+    """Return (requests_made, hard_failures) since the last reset. A 404 is NOT
+    counted as a failure — it's a valid 'not found'."""
+    return _edgar_requests, _edgar_failures
+
+
 def _get_json(url: str) -> dict | None:
+    global _edgar_requests, _edgar_failures
+    _edgar_requests += 1
     _sleep_for_rate_limit()
     try:
         r = requests.get(url, headers=_SEC_HEADERS, timeout=30)
     except requests.RequestException as exc:
         logger.debug(f"EDGAR GET failed {url}: {exc}")
+        _edgar_failures += 1
         return None
     if r.status_code == 404:
-        return None
+        return None  # legitimate "not found" — not a degradation
     if r.status_code != 200:
         logger.debug(f"EDGAR GET {url}: HTTP {r.status_code}")
+        _edgar_failures += 1
         return None
     try:
         return r.json()
     except ValueError:
         logger.debug(f"EDGAR GET {url}: non-JSON response")
+        _edgar_failures += 1
         return None
 
 

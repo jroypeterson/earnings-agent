@@ -146,7 +146,11 @@ from market_data import (
     fetch_yfinance_hour_for_date,
     fetch_yfinance_call_for_date,
 )
-from edgar_client import infer_cadence_signal, find_earnings_release_filing, get_cik
+from edgar_client import (
+    infer_cadence_signal, find_earnings_release_filing, get_cik,
+    reset_request_stats as edgar_reset_request_stats,
+    get_request_stats as edgar_get_request_stats,
+)
 
 logger = logging.getLogger("earnings_agent")
 
@@ -1914,13 +1918,17 @@ def run_check_results(
 
     posted = notify_results(conn, ready, target)
 
-    # Only mark reported=True after Slack has been handled. If the post failed
-    # and we have a webhook configured, leave records unmarked so the next
-    # run retries. Deferred rows are intentionally left as reported=False so
-    # the next sweep picks them up again with fresh move data.
+    # Only mark reported=True after Slack has been handled. If the post failed,
+    # leave records unmarked (reported=0) so the next run retries — AND raise so
+    # the workflow goes red and the if:failure() Slack alert fires. The
+    # beat/miss post is the channel's primary user-facing output; a silent
+    # failure there must not pass as a green run (24h-awareness goal).
     if not posted:
         conn.close()
-        return
+        raise RuntimeError(
+            f"Results Slack post failed for {target_iso} "
+            f"({len(ready)} result(s)) — left reported=0 for retry next run"
+        )
 
     for r in ready:
         existing = find_existing_event(conn, r.ticker, r.event_date)
@@ -1990,6 +1998,11 @@ def run_edgar_results_fallback(dry_run: bool = False, skip_heartbeat: bool = Fal
     coverage_map = {t.ticker: t for t in coverage}
 
     conn = init_db()
+
+    # Track EDGAR request health for this run. A systemic SEC outage makes every
+    # probe return "no filing", which would make a clean "no misses" result a
+    # lie. We reset here and check the failure rate at the end.
+    edgar_reset_request_stats()
 
     # Tier 1/2 events that are overdue (date has passed, within the lookback
     # window), not yet reported, and have no actuals from Finnhub.
@@ -2092,6 +2105,19 @@ def run_edgar_results_fallback(dry_run: bool = False, skip_heartbeat: bool = Fal
         f"EDGAR results fallback: Tier-1 blind sweep probed {swept} name(s) "
         f"not already covered by DB candidates"
     )
+
+    # Degradation guard: if a large fraction of EDGAR requests hard-failed
+    # (network/SEC-block/malformed — NOT 404s), this run's "no misses" verdict
+    # is untrustworthy. Raise so the workflow goes red + the if:failure() Slack
+    # fires, rather than emitting a falsely-reassuring all-clear + heartbeat.
+    edgar_made, edgar_failed = edgar_get_request_stats()
+    if edgar_made >= 5 and edgar_failed / edgar_made >= 0.5:
+        conn.close()
+        raise RuntimeError(
+            f"EDGAR degraded: {edgar_failed}/{edgar_made} requests hard-failed "
+            f"this run — missed-results backstop is unreliable; not trusting the "
+            f"'no misses' result. Check SEC reachability / user-agent."
+        )
 
     def _emit_heartbeat():
         if skip_heartbeat or dry_run or not (SLACK_WEBHOOK_STATUS or SLACK_WEBHOOK_EARNINGS):
@@ -3938,7 +3964,10 @@ def main():
     elif args.check_ir_emails:
         run_check_ir_emails(dry_run=args.dry_run)
     elif args.check_replies:
-        run_check_replies(dry_run=args.dry_run)
+        _run_safeguard(
+            "Slack reply processing",
+            lambda: run_check_replies(dry_run=args.dry_run),
+        )
     elif args.cleanup:
         conn = init_db()
         cleanup_duplicates(conn, dry_run=args.dry_run)
