@@ -64,7 +64,12 @@ def _run_env(monkeypatch, tmp_path, *, coverage, events,
     monkeypatch.setattr(main, "load_coverage", lambda: coverage)
     monkeypatch.setattr(main, "FINNHUB_API_KEY", "x")
     monkeypatch.setattr(main, "GOOGLE_CALENDAR_ID", "cal")
+    # Full Slack isolation so tests never reach hooks.slack.com via any path
+    # (coverage/unseen/move-unavailable/urgent), regardless of local .env.
     monkeypatch.setattr(main, "SLACK_WEBHOOK_EARNINGS", None)
+    monkeypatch.setattr(main, "SLACK_WEBHOOK_STATUS", None)
+    monkeypatch.setattr(main, "SLACK_BOT_TOKEN", None)
+    monkeypatch.setattr(main, "post_slack", lambda *a, **k: None)
     monkeypatch.setattr(main, "get_finnhub_client", lambda: object())
     monkeypatch.setattr(main, "get_calendar_service", lambda: _FakeCal(cal_events))
     monkeypatch.setattr(main, "compute_coverage_freshness", lambda: None)
@@ -305,6 +310,11 @@ def test_reconcile_preserves_reported_and_does_not_flip_on_actuals(monkeypatch, 
     monkeypatch.setattr(main, "load_coverage", lambda: [_tkr("WXYZ", tier=1)])
     monkeypatch.setattr(main, "FINNHUB_API_KEY", "x")
     monkeypatch.setattr(main, "GOOGLE_CALENDAR_ID", "cal")
+    # Isolate Slack: stub post_slack (reconcile posts a drift-fix summary, and
+    # now RAISES on delivery failure) so the test never reaches hooks.slack.com.
+    monkeypatch.setattr(main, "post_slack", lambda *a, **k: None)
+    monkeypatch.setattr(main, "SLACK_WEBHOOK_STATUS", "https://example.invalid/wh")
+    monkeypatch.setattr(main, "SLACK_WEBHOOK_EARNINGS", None)
     monkeypatch.setattr(main, "get_calendar_service",
                         lambda: _ReconcileCal("WXYZ", "OLD", "2026-06-20"))
     monkeypatch.setattr(main, "get_finnhub_client", lambda: object())
@@ -483,3 +493,46 @@ def test_post_urgent_alert_returns_false_on_failure(monkeypatch):
     assert main._post_urgent_alert([row], _date(2026, 6, 3)) is False
     # No rows -> trivially OK (nothing to deliver).
     assert main._post_urgent_alert([], _date(2026, 6, 3)) is True
+
+
+# --- out-of-band failure-email backup -------------------------------------
+
+def _load_send_failure_email():
+    import importlib.util, pathlib
+    p = pathlib.Path(__file__).parent / "scripts" / "send_failure_email.py"
+    spec = importlib.util.spec_from_file_location("send_failure_email", p)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_failure_email_noop_without_creds(monkeypatch):
+    """Opt-in: with no Gmail creds, the backup no-ops (returns False), never raises."""
+    sfe = _load_send_failure_email()
+    monkeypatch.delenv("GMAIL_ADDRESS", raising=False)
+    monkeypatch.delenv("GMAIL_APP_PASSWORD", raising=False)
+    assert sfe.send("subj", "body") is False
+
+
+def test_failure_email_sends_with_creds(monkeypatch):
+    """With creds, it logs in and sends a message to ALERT_EMAIL_TO."""
+    sfe = _load_send_failure_email()
+    monkeypatch.setenv("GMAIL_ADDRESS", "bot@gmail.com")
+    monkeypatch.setenv("GMAIL_APP_PASSWORD", "app-pw")
+    monkeypatch.setenv("ALERT_EMAIL_TO", "jroypeterson+alerts@gmail.com")
+
+    sent = {}
+    class _FakeSMTP:
+        def __init__(self, host, port, timeout=None): sent["host"] = host
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def login(self, u, p): sent["login"] = (u, p)
+        def send_message(self, msg):
+            sent["to"] = msg["To"]; sent["from"] = msg["From"]; sent["subj"] = msg["Subject"]
+    monkeypatch.setattr(sfe.smtplib, "SMTP_SSL", _FakeSMTP)
+
+    assert sfe.send("earnings_agent: X failed", "details") is True
+    assert sent["host"] == "smtp.gmail.com"
+    assert sent["login"] == ("bot@gmail.com", "app-pw")
+    assert sent["to"] == "jroypeterson+alerts@gmail.com"
+    assert sent["subj"] == "earnings_agent: X failed"

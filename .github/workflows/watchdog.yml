@@ -178,3 +178,34 @@ jobs:
               --data "{\"text\":\":rotating_light: *Workflow Watchdog* itself failed — <${RUN_URL}|run details>. Sibling workflow staleness is no longer being checked.\"}" \
               "$WEBHOOK"
           fi
+
+      # Out-of-band email backup. The watchdog has no repo checkout, so send
+      # inline via the runner's python3 (stdlib smtplib). Covers both a
+      # watchdog crash AND a stale-detected-but-Slack-down case (the stale
+      # alert's curl runs under `set -e`, so a Slack outage fails the step).
+      - name: Email backup on watchdog failure
+        if: failure()
+        env:
+          GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          ALERT_EMAIL_TO: jroypeterson+alerts@gmail.com
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          python3 - <<'PY'
+          import os, smtplib
+          from email.mime.text import MIMEText
+          addr = os.environ.get("GMAIL_ADDRESS", "").strip()
+          pw = os.environ.get("GMAIL_APP_PASSWORD", "").strip()
+          to = os.environ.get("ALERT_EMAIL_TO", "jroypeterson+alerts@gmail.com").strip()
+          if not addr or not pw:
+              print("watchdog email backup: GMAIL creds unset — skipping"); raise SystemExit(0)
+          body = ("Workflow Watchdog failed or could not deliver a staleness "
+                  "alert (Slack may be down). Sibling-workflow monitoring is "
+                  f"degraded. Run: {os.environ.get('RUN_URL','')}")
+          msg = MIMEText(body, "plain")
+          msg["Subject"] = "earnings_agent: Workflow Watchdog failed"
+          msg["From"] = addr; msg["To"] = to
+          with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=30) as s:
+              s.login(addr, pw); s.send_message(msg)
+          print(f"watchdog email backup: sent to {to}")
+          PY

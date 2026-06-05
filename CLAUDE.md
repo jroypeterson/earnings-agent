@@ -153,6 +153,8 @@ All workflows sparse-checkout `jroypeterson/Coverage-Manager/exports/` (the repo
 
 Strongly recommended: `FMP_API_KEY` (set 2026-06-04) — enables the FMP co-primary earnings merge (breadth + actuals timeliness). Same key as Coverage Manager's Starter plan. When unset the agent degrades to Finnhub-only (logged loudly). Wired into the daily-sync, post-earnings populate/check, and weekly-digest populate steps.
 
+Out-of-band failure email (set 2026-06-05): `GMAIL_ADDRESS` + `GMAIL_APP_PASSWORD` (the existing Gmail app-password creds, same as 13F Analyzer — see AUTHENTICATIONS.md). Every workflow's `if: failure()` block, after the Slack curl, calls `scripts/send_failure_email.py` (stdlib smtplib, Gmail SMTP_SSL) to email `jroypeterson+alerts@gmail.com` — the non-Slack backup for when Slack itself is the failure point (watchdog sends inline since it has no checkout). Fires ONLY on failures (which is what every critical alert-delivery failure now is — they raise), never on normal posts. Opt-in: no creds → the script no-ops. The 24h-awareness backstop of last resort.
+
 Optional for Slack-reply flow: `SLACK_BOT_TOKEN` (xoxb-...) + `SLACK_CHANNEL_ID` (Cxxx) for the earnings channel. Bot needs `chat:write` and `channels:history` (or `groups:history` for private channels) scopes. When unset, the agent falls back to webhook-only batched messages with no reply support.
 
 Optional for status-reports routing: `SLACK_WEBHOOK_STATUS` + `SLACK_STATUS_CHANNEL_ID`. Cross-check / unseen / reconcile alerts post here instead of #earnings. Bot must be a member of #status-reports for threaded replies to work. Falls back to the earnings webhook/channel when unset.

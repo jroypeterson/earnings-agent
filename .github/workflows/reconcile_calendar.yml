@@ -141,6 +141,19 @@ jobs:
               "$SLACK_WEBHOOK_EARNINGS"
           fi
 
+      # Out-of-band backup: also email, in case Slack itself is the failure.
+      - name: Email backup on failure
+        if: failure()
+        env:
+          GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          ALERT_EMAIL_TO: jroypeterson+alerts@gmail.com
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          python scripts/send_failure_email.py \
+            "earnings_agent: Reconcile Calendar failed" \
+            "The Reconcile Calendar workflow failed (drift-fix / reply alerting may be down). Run: $RUN_URL"
+
       - name: Cleanup credentials
         if: always()
         run: rm -f credentials.json
