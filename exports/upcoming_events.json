@@ -1,24 +1,15 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-06-04T23:13:06Z",
+  "generated_at": "2026-06-05T00:42:54Z",
   "window": {
-    "start": "2026-06-02",
-    "end": "2026-06-18"
+    "start": "2026-06-03",
+    "end": "2026-06-19"
   },
   "counts": {
-    "events": 17
+    "events": 16
   },
   "events": [
-    {
-      "ticker": "FIVE",
-      "event_date": "2026-06-02",
-      "event_hour": "",
-      "tier": 1,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Five Below Inc"
-    },
     {
       "ticker": "LULU",
       "event_date": "2026-06-03",
