@@ -273,6 +273,93 @@ def _fetch_earnings_source(
     return merged
 
 
+def _move_calendar_event(
+    cal_service, ticker: str, old_gcal_id: str, new_date: str, hour,
+    *, quarter, eps_est, eps_act, rev_est, rev_act, tier,
+    source_fingerprint, hour_yf, call_dt_iso,
+) -> str | None:
+    """Move a tagged calendar event to `new_date` using create-FIRST-then-delete.
+
+    Ordering matters: if we deleted first and the create then failed, the event
+    would be GONE — and nothing heals it (later syncs find the DB row, see no
+    drift, skip; reconcile only scans events that still exist). Creating first
+    means a failure leaves the OLD event in place (recoverable: reconcile sees
+    the surviving event vs the new DB/Finnhub date and re-moves it). A delete
+    failure after a successful create leaves a duplicate, which `--cleanup`/
+    reconcile dedupe — also recoverable. Returns the gcal_id to persist: the new
+    event's id on success, else the old id (never None — never an orphan).
+    """
+    try:
+        new_id = create_calendar_event(
+            cal_service, GOOGLE_CALENDAR_ID, ticker, new_date, hour,
+            quarter=quarter, eps_estimate=eps_est, eps_actual=eps_act,
+            revenue_estimate=rev_est, revenue_actual=rev_act, tier=tier,
+            source_fingerprint=source_fingerprint, hour_yf=hour_yf,
+            call_datetime_utc=call_dt_iso,
+        )
+    except CalendarError as exc:
+        logger.error(
+            f"Failed to create moved event for {ticker} at {new_date}: {exc} "
+            f"— keeping old event (no orphan; reconcile will re-move it)"
+        )
+        return old_gcal_id
+    try:
+        delete_calendar_event(cal_service, GOOGLE_CALENDAR_ID, old_gcal_id)
+    except CalendarError as exc:
+        logger.warning(
+            f"Created moved event for {ticker} but couldn't delete the old one: "
+            f"{exc} (duplicate; reconcile/--cleanup will dedupe)"
+        )
+    logger.info(f"Moved calendar event with actuals for {ticker} -> {new_date}")
+    return new_id
+
+
+def _record_actuals(
+    conn, today, sync_results, *, ticker, earnings_date, hour, quarter,
+    eps_est, eps_act, rev_est, rev_act, tier, company_name,
+    source_fingerprint, hour_yf, call_dt_iso, call_source, gcal_id, info,
+    dry_run,
+) -> bool:
+    """Persist a just-reported event's actuals and queue its beat/miss alert.
+
+    Upserts with reported=FALSE — the flag is flipped to 1 only after
+    notify_results() succeeds in the post-loop, so a Slack failure retries
+    rather than silently skipping the name next run. Shared by BOTH the
+    existing-event actuals path and the brand-new-event path, so a result FMP
+    surfaces that Finnhub never put in SQLite still gets a beat/miss post
+    instead of being silently marked reported. Returns True if queued for
+    Slack, False if deferred (stock-move data not yet available).
+    """
+    move = None if dry_run else fetch_post_earnings_move(ticker, earnings_date, hour)
+    defer_post = _should_defer_post(move, earnings_date, today)
+    upsert_event(
+        conn, ticker, earnings_date, hour, gcal_id,
+        quarter=quarter, eps_estimate=eps_est, eps_actual=eps_act,
+        rev_estimate=rev_est, rev_actual=rev_act, reported=False,
+        tier=tier, company_name=company_name,
+        source_fingerprint=source_fingerprint, event_hour_yf=hour_yf,
+        call_datetime_utc=call_dt_iso, call_source=call_source,
+    )
+    if defer_post:
+        logger.info(
+            f"Deferring Slack post for {ticker} {earnings_date}: stock-move "
+            f"data not yet available, will retry next sweep"
+        )
+        return False
+    if not dry_run:
+        sync_results.append(ResultRow(
+            ticker=ticker, company_name=company_name or "",
+            event_date=earnings_date, event_hour=hour,
+            eps_actual=eps_act, eps_estimate=eps_est,
+            rev_actual=rev_act, rev_estimate=rev_est, tier=tier, move=move,
+            sector=info.sector if info else "",
+            subsector=info.subsector if info else "",
+            position=info.position if info else "",
+        ))
+        return True
+    return False
+
+
 def _run_safeguard(label: str, fn):
     """Run a verify-layer safeguard (cross-check, missed-results backstop) so
     its failures are LOUD, never silent.
@@ -792,36 +879,19 @@ def run(
                 # stored event — e.g. FMP wins with actuals on the real date
                 # while the calendar still sits on Finnhub's earlier estimate
                 # (existing may have been matched by near-date lookup). If so,
-                # MOVE the calendar event (delete + recreate at the real date),
-                # not just restamp the stale-dated one — otherwise Calendar and
-                # SQLite/Slack disagree. Respect a date lock (human override).
+                # MOVE the calendar event (create-first, see _move_calendar_event)
+                # so Calendar/SQLite/Slack agree. Respect a date lock.
                 date_moved = existing["event_date"] != earnings_date
 
                 if not dry_run and gcal_id and cal_service:
                     if date_moved and not existing.get("date_locked"):
-                        try:
-                            delete_calendar_event(
-                                cal_service, GOOGLE_CALENDAR_ID, gcal_id
-                            )
-                            gcal_id = create_calendar_event(
-                                cal_service, GOOGLE_CALENDAR_ID, ticker,
-                                earnings_date, hour,
-                                quarter=quarter, eps_estimate=eps_est,
-                                eps_actual=eps_act, revenue_estimate=rev_est,
-                                revenue_actual=rev_act, tier=tier,
-                                source_fingerprint=source_fingerprint,
-                                hour_yf=hour_yf, call_datetime_utc=call_dt_iso,
-                            )
-                            logger.info(
-                                f"Moved calendar event with actuals for {ticker}: "
-                                f"{existing['event_date']} -> {earnings_date}"
-                            )
-                        except CalendarError as exc:
-                            logger.error(f"Failed to move event for {ticker}: {exc}")
-                            # Don't persist a pointer to the (possibly deleted)
-                            # old event — drop the id so the next sync/reconcile
-                            # recreates cleanly at the new date.
-                            gcal_id = None
+                        gcal_id = _move_calendar_event(
+                            cal_service, ticker, gcal_id, earnings_date, hour,
+                            quarter=quarter, eps_est=eps_est, eps_act=eps_act,
+                            rev_est=rev_est, rev_act=rev_act, tier=tier,
+                            source_fingerprint=source_fingerprint,
+                            hour_yf=hour_yf, call_dt_iso=call_dt_iso,
+                        )
                     else:
                         if date_moved:  # locked: keep date, just restamp
                             logger.warning(
@@ -848,57 +918,19 @@ def run(
                         except CalendarError as exc:
                             logger.error(f"Failed to update event for {ticker}: {exc}")
 
-                # Fetch the post-earnings move first so we can decide whether
-                # to post Slack now or defer until the next sweep (when the
-                # comparison close will exist). Skip the call in dry-run.
-                move = None
-                if not dry_run:
-                    move = fetch_post_earnings_move(ticker, earnings_date, hour)
-                defer_post = _should_defer_post(move, earnings_date, today)
-
-                # Persist the actuals + (possibly new) gcal_id, but DO NOT flip
-                # `reported` yet — that happens only after Slack succeeds
-                # (mirrors run_check_results), so a failed post doesn't leave a
-                # row marked-reported-but-unannounced for the next run to skip.
-                upsert_event(
-                    conn, ticker, earnings_date, hour, gcal_id,
-                    quarter=quarter, eps_estimate=eps_est, eps_actual=eps_act,
-                    rev_estimate=rev_est, rev_actual=rev_act,
-                    reported=False,
-                    tier=tier, company_name=company_name,
-                    source_fingerprint=source_fingerprint,
-                    event_hour_yf=hour_yf,
-                    call_datetime_utc=call_dt_iso,
-                    call_source=call_source_val,
+                # Persist actuals (reported=False — flipped to 1 only after
+                # Slack succeeds) and queue the beat/miss alert.
+                _record_actuals(
+                    conn, today, sync_results,
+                    ticker=ticker, earnings_date=earnings_date, hour=hour,
+                    quarter=quarter, eps_est=eps_est, eps_act=eps_act,
+                    rev_est=rev_est, rev_act=rev_act, tier=tier,
+                    company_name=company_name,
+                    source_fingerprint=source_fingerprint, hour_yf=hour_yf,
+                    call_dt_iso=call_dt_iso, call_source=call_source_val,
+                    gcal_id=gcal_id, info=info, dry_run=dry_run,
                 )
                 actuals_count += 1
-
-                if defer_post:
-                    logger.info(
-                        f"Deferring Slack post for {ticker} {earnings_date}: "
-                        f"stock-move data not yet available, will retry next sweep"
-                    )
-                    continue
-
-                # Collect for Slack + TickTick post-loop notification
-                if not dry_run:
-                    sync_results.append(
-                        ResultRow(
-                            ticker=ticker,
-                            company_name=company_name or "",
-                            event_date=earnings_date,
-                            event_hour=hour,
-                            eps_actual=eps_act,
-                            eps_estimate=eps_est,
-                            rev_actual=rev_act,
-                            rev_estimate=rev_est,
-                            tier=tier,
-                            move=move,
-                            sector=info.sector if info else "",
-                            subsector=info.subsector if info else "",
-                            position=info.position if info else "",
-                        )
-                    )
                 continue
 
             # --- Check if date or timing changed ---
@@ -1184,16 +1216,33 @@ def run(
             else:
                 logger.debug(f"New earnings (Tier 3, no calendar): {ticker} {quarter} on {earnings_date}")
 
-            upsert_event(
-                conn, ticker, earnings_date, hour, gcal_id,
-                quarter=quarter, eps_estimate=eps_est, eps_actual=eps_act,
-                rev_estimate=rev_est, rev_actual=rev_act, reported=has_actuals,
-                tier=tier, company_name=company_name,
-                source_fingerprint=source_fingerprint,
-                event_hour_yf=hour_yf,
-                call_datetime_utc=call_dt_iso,
-                call_source=call_source_val,
-            )
+            if has_actuals:
+                # Brand-new event that ALREADY has actuals — typically a name
+                # FMP surfaced that Finnhub never put in SQLite (the breadth
+                # case the merge exists for). Route it through the same path as
+                # existing-event actuals so it gets a beat/miss post and is
+                # marked reported only after Slack — never silently reported.
+                _record_actuals(
+                    conn, today, sync_results,
+                    ticker=ticker, earnings_date=earnings_date, hour=hour,
+                    quarter=quarter, eps_est=eps_est, eps_act=eps_act,
+                    rev_est=rev_est, rev_act=rev_act, tier=tier,
+                    company_name=company_name,
+                    source_fingerprint=source_fingerprint, hour_yf=hour_yf,
+                    call_dt_iso=call_dt_iso, call_source=call_source_val,
+                    gcal_id=gcal_id, info=info, dry_run=dry_run,
+                )
+            else:
+                upsert_event(
+                    conn, ticker, earnings_date, hour, gcal_id,
+                    quarter=quarter, eps_estimate=eps_est, eps_actual=eps_act,
+                    rev_estimate=rev_est, rev_actual=rev_act, reported=False,
+                    tier=tier, company_name=company_name,
+                    source_fingerprint=source_fingerprint,
+                    event_hour_yf=hour_yf,
+                    call_datetime_utc=call_dt_iso,
+                    call_source=call_source_val,
+                )
             new_count += 1
 
     # --- Summary ---

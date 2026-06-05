@@ -963,6 +963,91 @@ def test_merge_finnhub_actuals_kept_filled_from_fmp():
     assert m[0]["revenueActual"] == 5e8          # filled from FMP
 
 
+def test_record_actuals_new_name_not_silently_reported(monkeypatch):
+    """Regression: a brand-new event with actuals (e.g. FMP surfaced a name
+    Finnhub never listed) must be queued for a beat/miss post and left
+    reported=0 until Slack — NOT silently marked reported."""
+    import main
+    from storage import init_db, find_existing_event
+    from datetime import date as _date
+
+    conn = init_db(":memory:")
+    monkeypatch.setattr(main, "fetch_post_earnings_move", lambda *a, **k: 5.0)  # move avail
+    sync = []
+    queued = main._record_actuals(
+        conn, _date(2026, 6, 4), sync,
+        ticker="AAPL", earnings_date="2026-05-01", hour="amc", quarter="2026Q1",
+        eps_est=1.5, eps_act=1.6, rev_est=9e10, rev_act=9.1e10, tier=1,
+        company_name="Apple", source_fingerprint="AAPL:2026-05-01",
+        hour_yf=None, call_dt_iso=None, call_source=None, gcal_id=None,
+        info=None, dry_run=False,
+    )
+    assert queued is True
+    row = find_existing_event(conn, "AAPL", "2026-05-01")
+    assert row is not None and row["reported"] is False   # not silently reported
+    assert row["eps_actual"] == 1.6
+    assert [r.ticker for r in sync] == ["AAPL"]            # queued for Slack
+
+
+def test_record_actuals_defers_without_move(monkeypatch):
+    """No stock-move yet (recent AMC) -> deferred: persisted but not queued,
+    still reported=0 for the next sweep."""
+    import main
+    from storage import init_db, find_existing_event
+    from datetime import date as _date
+
+    conn = init_db(":memory:")
+    monkeypatch.setattr(main, "fetch_post_earnings_move", lambda *a, **k: None)
+    sync = []
+    queued = main._record_actuals(
+        conn, _date(2026, 6, 4), sync,
+        ticker="XYZ", earnings_date="2026-06-03", hour="amc", quarter="2026Q1",
+        eps_est=1.0, eps_act=1.1, rev_est=None, rev_act=None, tier=2,
+        company_name="XYZ", source_fingerprint="XYZ:2026-06-03",
+        hour_yf=None, call_dt_iso=None, call_source=None, gcal_id=None,
+        info=None, dry_run=False,
+    )
+    assert queued is False and sync == []
+    assert find_existing_event(conn, "XYZ", "2026-06-03")["reported"] is False
+
+
+def test_move_calendar_no_orphan_on_create_failure(monkeypatch):
+    """Create-first: if the new event can't be created, the OLD event is left
+    untouched (no orphan) and its id is returned."""
+    import main
+    from calendar_sync import CalendarError
+
+    deleted = []
+    def boom_create(*a, **k):
+        raise CalendarError("create failed")
+    monkeypatch.setattr(main, "create_calendar_event", boom_create)
+    monkeypatch.setattr(main, "delete_calendar_event",
+                        lambda *a, **k: deleted.append(a))
+    result = main._move_calendar_event(
+        object(), "FIVE", "OLD", "2026-06-03", "amc",
+        quarter="2026Q1", eps_est=1.0, eps_act=1.1, rev_est=None, rev_act=None,
+        tier=1, source_fingerprint="FIVE:2026-06-03", hour_yf=None, call_dt_iso=None,
+    )
+    assert result == "OLD"     # keep old pointer
+    assert deleted == []       # old event NOT deleted -> no orphan
+
+
+def test_move_calendar_success_deletes_old(monkeypatch):
+    """Create-first happy path: new event created, then old one deleted."""
+    import main
+    monkeypatch.setattr(main, "create_calendar_event", lambda *a, **k: "NEW")
+    deleted = []
+    monkeypatch.setattr(main, "delete_calendar_event",
+                        lambda svc, cal, gid: deleted.append(gid))
+    result = main._move_calendar_event(
+        object(), "FIVE", "OLD", "2026-06-03", "amc",
+        quarter="2026Q1", eps_est=1.0, eps_act=1.1, rev_est=None, rev_act=None,
+        tier=1, source_fingerprint="FIVE:2026-06-03", hour_yf=None, call_dt_iso=None,
+    )
+    assert result == "NEW"
+    assert deleted == ["OLD"]
+
+
 def test_edgar_date_corroborated_logic():
     """Corroboration gate: only an EDGAR date within ±1d of a yfinance date
     counts as corroborated; a third distinct date or no yfinance does not."""
