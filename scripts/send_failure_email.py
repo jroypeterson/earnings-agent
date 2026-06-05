@@ -2,9 +2,13 @@
 
 Slack is the primary alert channel — but every Slack alert (including the
 if:failure() ones) rides Slack, so if Slack itself is down a red run would only
-be visible in the GitHub UI. This is the non-Slack backup: each workflow's
-if:failure() block calls it AFTER the Slack curl, so a failed run (or a
-Slack-down critical-alert delivery failure) still reaches a human inbox.
+be visible in the GitHub UI. The non-Slack backup is an email sent from each
+workflow's if:failure() block.
+
+NOTE: the workflows INLINE this logic (runner python3 + stdlib) rather than
+calling this file, so the backup keeps working even if `actions/checkout`
+itself is what failed. This module is the canonical, unit-tested reference for
+that logic (keep them in sync) and is usable for manual/local sends.
 
 By design it fires ONLY on failures (wired into if:failure()), not on normal
 earnings posts — keeping it signal, not noise.

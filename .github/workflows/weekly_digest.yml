@@ -82,14 +82,28 @@ jobs:
           fi
 
       # Out-of-band backup: also email, in case Slack itself is the failure.
+      # Inline (no repo-checkout dependency).
       - name: Email backup on failure
         if: failure()
         env:
           GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           ALERT_EMAIL_TO: jroypeterson+alerts@gmail.com
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          ALERT_SUBJECT: "earnings_agent: Weekly Earnings Digest failed"
+          ALERT_BODY: "The Weekly Earnings Digest workflow failed. Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
         run: |
-          python scripts/send_failure_email.py \
-            "earnings_agent: Weekly Earnings Digest failed" \
-            "The Weekly Earnings Digest workflow failed. Run: $RUN_URL"
+          python3 - <<'PY'
+          import os, smtplib
+          from email.mime.text import MIMEText
+          addr = os.environ.get("GMAIL_ADDRESS", "").strip()
+          pw = os.environ.get("GMAIL_APP_PASSWORD", "").strip()
+          to = os.environ.get("ALERT_EMAIL_TO", "jroypeterson+alerts@gmail.com").strip()
+          if not addr or not pw:
+              print("email backup: GMAIL creds unset - skipping"); raise SystemExit(0)
+          msg = MIMEText(os.environ.get("ALERT_BODY", "") or os.environ.get("ALERT_SUBJECT", ""), "plain")
+          msg["Subject"] = os.environ.get("ALERT_SUBJECT", "earnings_agent alert")
+          msg["From"] = addr; msg["To"] = to
+          with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=30) as s:
+              s.login(addr, pw); s.send_message(msg)
+          print(f"email backup: sent to {to}")
+          PY

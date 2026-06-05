@@ -38,6 +38,9 @@ jobs:
           REPO: ${{ github.repository }}
           SLACK_WEBHOOK_STATUS: ${{ secrets.SLACK_WEBHOOK_STATUS }}
           SLACK_WEBHOOK_EARNINGS: ${{ secrets.SLACK_WEBHOOK_EARNINGS }}
+          GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          ALERT_EMAIL_TO: jroypeterson+alerts@gmail.com
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
@@ -161,9 +164,34 @@ jobs:
             --arg footer "Watchdog run: $RUN_URL" \
             '{text: ($header + "\n" + $body + "\n" + $footer)}')
 
-          curl -sS -X POST -H 'Content-Type: application/json' \
-            --data "$payload" \
-            "$WEBHOOK" >/dev/null
+          # Post to Slack; if that delivery FAILS (e.g. Slack is down), email
+          # the stale detail out-of-band so a stale workflow isn't missed just
+          # because Slack is also down. The stale lines are passed as a single
+          # env var (STALE_BODY) and the message is built in Python — avoids a
+          # multi-line YAML literal (which would break the block scalar).
+          if ! curl -sS -X POST -H 'Content-Type: application/json' \
+                --data "$payload" "$WEBHOOK" >/dev/null; then
+            echo "Slack post of stale alert failed — emailing stale detail"
+            STALE_BODY="$body_text" python3 - <<'PY'
+          import os, smtplib
+          from email.mime.text import MIMEText
+          addr = os.environ.get("GMAIL_ADDRESS", "").strip()
+          pw = os.environ.get("GMAIL_APP_PASSWORD", "").strip()
+          to = os.environ.get("ALERT_EMAIL_TO", "jroypeterson+alerts@gmail.com").strip()
+          if not addr or not pw:
+              print("watchdog stale email: GMAIL creds unset - skipping"); raise SystemExit(0)
+          body = ("Slack delivery of the watchdog staleness alert FAILED "
+                  "(Slack may be down).\n\nStale workflows:\n"
+                  + os.environ.get("STALE_BODY", "")
+                  + "\n\nWatchdog run: " + os.environ.get("RUN_URL", ""))
+          msg = MIMEText(body, "plain")
+          msg["Subject"] = "earnings_agent: stale workflow(s) + Slack delivery failed"
+          msg["From"] = addr; msg["To"] = to
+          with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=30) as s:
+              s.login(addr, pw); s.send_message(msg)
+          print(f"watchdog stale email: sent to {to}")
+          PY
+          fi
 
       - name: Notify Slack on watchdog failure
         if: failure()
