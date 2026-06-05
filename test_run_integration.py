@@ -47,7 +47,8 @@ class _FakeCal:
 
 
 def _run_env(monkeypatch, tmp_path, *, coverage, events,
-             seed=None, cal_events=None, notify_ok=True, move=5.0):
+             seed=None, cal_events=None, notify_ok=True, move=5.0,
+             find_event=None):
     """Wire all I/O stubs, seed the DB, run main.run(), and return
     (db_path, recorded) where recorded captures calendar + notify activity."""
     db_path = str(tmp_path / "ea.db")
@@ -93,6 +94,8 @@ def _run_env(monkeypatch, tmp_path, *, coverage, events,
     monkeypatch.setattr(main, "delete_calendar_event", fake_delete)
     monkeypatch.setattr(main, "update_calendar_event_description", fake_update)
     monkeypatch.setattr(main, "notify_results", fake_notify)
+    if find_event is not None:
+        monkeypatch.setattr(main, "find_calendar_event", find_event)
 
     main.run(skip_ticktick=True, skip_heartbeat=True)
     return db_path, recorded
@@ -187,3 +190,83 @@ def test_run_same_quarter_phantom_skipped_no_churn(monkeypatch, tmp_path):
     kept = _row(db, "ICLR", "2026-05-27")
     assert kept is not None and kept["reported"] is True
     assert _row(db, "ICLR", "2026-06-02") is None
+
+
+def test_run_calendar_backfill_actuals_not_silently_reported(monkeypatch, tmp_path):
+    """No DB row but a calendar event already exists for this date+ticker
+    (the backfill path). With actuals present it must post and mark reported
+    only after Slack — not silently set reported=has_actuals."""
+    def fake_find(svc, cal, ticker, ev_date, **k):
+        # A matching tagged calendar event already exists on this date.
+        return {"id": "CALX", "start": {"date": "2026-05-01"},
+                "summary": f"{ticker} Earnings", "extendedProperties": {}}
+
+    db, rec = _run_env(
+        monkeypatch, tmp_path,
+        coverage=[_tkr("BKFL", tier=2)],
+        events=[_ev("BKFL", "2026-05-01", eps_act=0.9, rev_act=4e8)],
+        find_event=fake_find,
+    )
+    row = _row(db, "BKFL", "2026-05-01")
+    assert row is not None and row["reported"] is True   # reported AFTER post
+    assert rec["notify"] == ["BKFL"]                      # beat/miss posted
+
+
+# --- reconcile_calendar integration -----------------------------------------
+
+class _ReconcileCal:
+    """cal_service for run_reconcile_calendar: serves one tagged event."""
+    def __init__(self, ticker, gcal_id, start_date):
+        self._items = [{
+            "id": gcal_id, "start": {"date": start_date},
+            "extendedProperties": {"private": {"ticker": ticker}},
+        }]
+    def events(self):
+        return self
+    def list(self, **kwargs):
+        return self
+    def execute(self):
+        return {"items": self._items}
+
+
+def test_reconcile_preserves_reported_and_does_not_flip_on_actuals(monkeypatch, tmp_path):
+    """A market-hours drift fix must NOT mark a result reported just because
+    Finnhub now carries actuals — reconcile only fixes dates. reported must
+    reflect the prior DB state (0 here), and the move is create-first."""
+    db_path = str(tmp_path / "rec.db")
+    # Seed: future-dated event, reported=0, on the OLD (calendar) date.
+    c = storage.init_db(db_path)
+    storage.upsert_event(c, ticker="WXYZ", event_date="2026-06-20",
+                         event_hour="amc", gcal_id="OLD", quarter="2026Q2",
+                         eps_estimate=1.0, reported=False, tier=1,
+                         company_name="WXYZ")
+    c.close()
+
+    monkeypatch.setattr(main, "init_db", lambda *a, **k: storage.init_db(db_path))
+    monkeypatch.setattr(main, "load_coverage", lambda: [_tkr("WXYZ", tier=1)])
+    monkeypatch.setattr(main, "GOOGLE_CALENDAR_ID", "cal")
+    monkeypatch.setattr(main, "get_calendar_service",
+                        lambda: _ReconcileCal("WXYZ", "OLD", "2026-06-20"))
+    monkeypatch.setattr(main, "get_finnhub_client", lambda: object())
+    monkeypatch.setattr(main, "is_ticker_date_locked", lambda *a, **k: False)
+    monkeypatch.setattr(main, "fetch_yfinance_hour_for_date", lambda *a, **k: None)
+    monkeypatch.setattr(main, "fetch_yfinance_call_for_date", lambda *a, **k: None)
+    # Finnhub now says a DIFFERENT date AND carries actuals (the risky case).
+    monkeypatch.setattr(main, "fetch_earnings", lambda *a, **k: [
+        {"symbol": "WXYZ", "date": "2026-06-23", "hour": "amc",
+         "epsEstimate": 1.0, "epsActual": 1.2,
+         "revenueEstimate": 1e9, "revenueActual": 1.1e9},
+    ])
+    created, deleted = [], []
+    monkeypatch.setattr(main, "create_calendar_event",
+                        lambda svc, cal, tk, d, h, **k: created.append((tk, d)) or "NEW")
+    monkeypatch.setattr(main, "delete_calendar_event",
+                        lambda svc, cal, gid: deleted.append(gid))
+
+    main.run_reconcile_calendar(dry_run=False)
+
+    moved = _row(db_path, "WXYZ", "2026-06-23")
+    assert moved is not None
+    assert moved["reported"] is False        # NOT flipped by Finnhub actuals
+    assert _row(db_path, "WXYZ", "2026-06-20") is None   # old row removed
+    assert ("WXYZ", "2026-06-23") in created and "OLD" in deleted  # create-first

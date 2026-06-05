@@ -310,7 +310,7 @@ def _move_calendar_event(
             f"Created moved event for {ticker} but couldn't delete the old one: "
             f"{exc} (duplicate; reconcile/--cleanup will dedupe)"
         )
-    logger.info(f"Moved calendar event with actuals for {ticker} -> {new_date}")
+    logger.info(f"Moved calendar event for {ticker} -> {new_date}")
     return new_id
 
 
@@ -1026,11 +1026,17 @@ def run(
             else:
                 gcal_id = existing.get("gcal_id")
 
+            # Date/hour/calendar-drift fix on an EXISTING row: never touch the
+            # reported flag here. Recomputing it as has_actuals could un-report
+            # a previously-reported event if the fetched actuals momentarily
+            # flap to null (→ a spurious re-post). Only _record_actuals /
+            # run_check_results may transition actuals→reported.
             upsert_event(
                 conn, ticker, earnings_date, hour,
                 gcal_id if tier <= 2 else existing.get("gcal_id"),
                 quarter=quarter, eps_estimate=eps_est, eps_actual=eps_act,
-                rev_estimate=rev_est, rev_actual=rev_act, reported=has_actuals,
+                rev_estimate=rev_est, rev_actual=rev_act,
+                reported=bool(existing["reported"]),
                 tier=tier, company_name=company_name,
                 source_fingerprint=source_fingerprint,
                 event_hour_yf=hour_yf,
@@ -1090,17 +1096,35 @@ def run(
                                 logger.error(
                                     f"Failed to recreate event for {ticker}: {exc}"
                                 )
-                            upsert_event(
-                                conn, ticker, earnings_date, hour, gcal_id,
-                                quarter=quarter, eps_estimate=eps_est,
-                                eps_actual=eps_act, rev_estimate=rev_est,
-                                rev_actual=rev_act, reported=has_actuals,
-                                tier=tier, company_name=company_name,
-                                source_fingerprint=source_fingerprint,
-                                event_hour_yf=hour_yf,
-                                call_datetime_utc=call_dt_iso,
-                                call_source=call_source_val,
-                            )
+                            # No DB row but a calendar event existed (backfill).
+                            # If actuals are present this is a just-reported
+                            # result — route through the shared path so it gets
+                            # a beat/miss post and reported flips only after
+                            # Slack, never silently here.
+                            if has_actuals:
+                                _record_actuals(
+                                    conn, today, sync_results,
+                                    ticker=ticker, earnings_date=earnings_date,
+                                    hour=hour, quarter=quarter, eps_est=eps_est,
+                                    eps_act=eps_act, rev_est=rev_est, rev_act=rev_act,
+                                    tier=tier, company_name=company_name,
+                                    source_fingerprint=source_fingerprint,
+                                    hour_yf=hour_yf, call_dt_iso=call_dt_iso,
+                                    call_source=call_source_val, gcal_id=gcal_id,
+                                    info=info, dry_run=dry_run,
+                                )
+                            else:
+                                upsert_event(
+                                    conn, ticker, earnings_date, hour, gcal_id,
+                                    quarter=quarter, eps_estimate=eps_est,
+                                    eps_actual=eps_act, rev_estimate=rev_est,
+                                    rev_actual=rev_act, reported=False,
+                                    tier=tier, company_name=company_name,
+                                    source_fingerprint=source_fingerprint,
+                                    event_hour_yf=hour_yf,
+                                    call_datetime_utc=call_dt_iso,
+                                    call_source=call_source_val,
+                                )
                             updated_count += 1
                             continue
 
@@ -1181,17 +1205,34 @@ def run(
                                     f"{cal_event.get('summary')!r} -> {exp_summary!r}"
                                 )
 
-                        upsert_event(
-                            conn, ticker, earnings_date, hour, gcal_id,
-                            quarter=quarter, eps_estimate=eps_est,
-                            eps_actual=eps_act, rev_estimate=rev_est,
-                            rev_actual=rev_act, reported=has_actuals,
-                            tier=tier, company_name=company_name,
-                            source_fingerprint=source_fingerprint,
-                            event_hour_yf=hour_yf,
-                            call_datetime_utc=call_dt_iso,
-                            call_source=call_source_val,
-                        )
+                        # Backfill DB from an existing calendar event (no DB
+                        # row). If actuals are present, route through the shared
+                        # result path (post + reported-after-Slack) instead of
+                        # silently marking reported here.
+                        if has_actuals:
+                            _record_actuals(
+                                conn, today, sync_results,
+                                ticker=ticker, earnings_date=earnings_date,
+                                hour=hour, quarter=quarter, eps_est=eps_est,
+                                eps_act=eps_act, rev_est=rev_est, rev_act=rev_act,
+                                tier=tier, company_name=company_name,
+                                source_fingerprint=source_fingerprint,
+                                hour_yf=hour_yf, call_dt_iso=call_dt_iso,
+                                call_source=call_source_val, gcal_id=gcal_id,
+                                info=info, dry_run=dry_run,
+                            )
+                        else:
+                            upsert_event(
+                                conn, ticker, earnings_date, hour, gcal_id,
+                                quarter=quarter, eps_estimate=eps_est,
+                                eps_actual=eps_act, rev_estimate=rev_est,
+                                rev_actual=rev_act, reported=False,
+                                tier=tier, company_name=company_name,
+                                source_fingerprint=source_fingerprint,
+                                event_hour_yf=hour_yf,
+                                call_datetime_utc=call_dt_iso,
+                                call_source=call_source_val,
+                            )
                         logger.info(f"Backfilled DB from calendar for {ticker} {quarter}")
                         skip_count += 1
                         continue
@@ -2288,40 +2329,45 @@ def run_reconcile_calendar(dry_run: bool = False):
             ))
             continue
 
-        try:
-            delete_calendar_event(cal_service, GOOGLE_CALENDAR_ID, old_gcal_id)
-        except CalendarError as exc:
-            logger.warning(f"  Could not delete stale event for {ticker}: {exc}")
+        # Preserve the prior reported flag — reconcile fixes DATES, it must
+        # never transition a result to reported (that's _record_actuals /
+        # run_check_results only). Recomputing has_actuals here could mark an
+        # event reported during a market-hours drift fix, before the
+        # post-earnings notification path posts it.
+        existing_old = find_existing_event(conn, ticker, old_date)
+        prior_reported = bool(existing_old["reported"]) if existing_old else False
 
-        new_gcal_id = None
-        try:
-            new_gcal_id = create_calendar_event(
-                cal_service, GOOGLE_CALENDAR_ID, ticker,
-                new_date, hour,
-                quarter=quarter,
-                eps_estimate=eps_est, eps_actual=eps_act,
-                revenue_estimate=rev_est, revenue_actual=rev_act,
-                tier=tier,
-                source_fingerprint=source_fingerprint,
-                hour_yf=hour_yf,
-                call_datetime_utc=call_dt_iso,
-            )
-        except CalendarError as exc:
-            logger.error(f"  Failed to recreate event for {ticker}: {exc}")
-            continue
+        # Create-first/delete-second (via _move_calendar_event) so a failed
+        # create can't orphan the event.
+        new_gcal_id = _move_calendar_event(
+            cal_service, ticker, old_gcal_id, new_date, hour,
+            quarter=quarter, eps_est=eps_est, eps_act=eps_act,
+            rev_est=rev_est, rev_act=rev_act, tier=tier,
+            source_fingerprint=source_fingerprint, hour_yf=hour_yf,
+            call_dt_iso=call_dt_iso,
+        )
 
         upsert_event(
             conn, ticker, new_date, hour, new_gcal_id,
             quarter=quarter,
             eps_estimate=eps_est, eps_actual=eps_act,
             rev_estimate=rev_est, rev_actual=rev_act,
-            reported=has_actuals, tier=tier,
+            reported=prior_reported, tier=tier,
             company_name=company_name,
             source_fingerprint=source_fingerprint,
             event_hour_yf=hour_yf,
             call_datetime_utc=call_dt_iso,
             call_source=call_source_val,
         )
+        # Remove the old-date row (the moved event now lives at new_date). The
+        # upsert's same-quarter cleanup only drops reported=0 rows, so delete
+        # explicitly to cover a (rare) reported old row too.
+        if old_date != new_date:
+            conn.execute(
+                "DELETE FROM events WHERE ticker = ? AND event_date = ?",
+                (ticker, old_date),
+            )
+            conn.commit()
         logger.info(f"  Fixed {ticker} (T{tier}): {old_date} -> {new_date}")
         fixed.append(DriftRow(
             ticker=ticker, old_date=old_date, new_date=new_date,
@@ -2993,36 +3039,29 @@ def _apply_edgar_auto_correction(
     )
     conn.commit()
 
-    # Move the calendar event. Best-effort — DB has already been
-    # corrected, so a calendar API hiccup leaves us in a recoverable
-    # state (next reconcile will re-create from DB).
+    # Move the calendar event using create-first/delete-second so a failed
+    # create can't orphan it (delete-first would leave the event gone — and
+    # reconcile can't recreate missing events from the DB, it only moves ones
+    # that still exist). Worst case is a stale-but-present old event.
     old_gcal_id = existing.get("gcal_id")
     if old_gcal_id and cal_service:
-        try:
-            delete_calendar_event(cal_service, GOOGLE_CALENDAR_ID, old_gcal_id)
-        except CalendarError as exc:
-            logger.warning(f"Could not delete old calendar event for {ticker}: {exc}")
-        try:
-            new_gcal_id = create_calendar_event(
-                cal_service, GOOGLE_CALENDAR_ID, ticker,
-                new_event_date, existing.get("event_hour"),
-                quarter=existing.get("quarter"),
-                eps_estimate=existing.get("eps_estimate"),
-                eps_actual=existing.get("eps_actual"),
-                revenue_estimate=existing.get("rev_estimate"),
-                revenue_actual=existing.get("rev_actual"),
-                tier=existing.get("tier", 3),
-                source_fingerprint=f"{ticker}:{new_event_date}",
-                hour_yf=new_hour_yf,
-                call_datetime_utc=new_call_iso,
-            )
-            conn.execute(
-                "UPDATE events SET gcal_id = ? WHERE ticker = ? AND event_date = ?",
-                (new_gcal_id, ticker, new_event_date),
-            )
-            conn.commit()
-        except CalendarError as exc:
-            logger.error(f"Could not create new calendar event for {ticker}: {exc}")
+        new_gcal_id = _move_calendar_event(
+            cal_service, ticker, old_gcal_id, new_event_date,
+            existing.get("event_hour"),
+            quarter=existing.get("quarter"),
+            eps_est=existing.get("eps_estimate"),
+            eps_act=existing.get("eps_actual"),
+            rev_est=existing.get("rev_estimate"),
+            rev_act=existing.get("rev_actual"),
+            tier=existing.get("tier", 3),
+            source_fingerprint=f"{ticker}:{new_event_date}",
+            hour_yf=new_hour_yf, call_dt_iso=new_call_iso,
+        )
+        conn.execute(
+            "UPDATE events SET gcal_id = ? WHERE ticker = ? AND event_date = ?",
+            (new_gcal_id, ticker, new_event_date),
+        )
+        conn.commit()
 
     logger.info(
         f"EDGAR auto-correction: {ticker} moved {old_event_date} -> {new_event_date} "
