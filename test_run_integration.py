@@ -432,3 +432,54 @@ def test_edgar_fallback_raises_on_degraded_edgar(monkeypatch, tmp_path):
 
     with pytest.raises(RuntimeError, match="EDGAR degraded"):
         main.run_edgar_results_fallback(dry_run=False, skip_heartbeat=True)
+
+
+def test_edgar_fallback_raises_on_alert_delivery_failure(monkeypatch, tmp_path):
+    """If EDGAR finds a missed result but the Slack alert FAILS to deliver, the
+    backstop must raise (and NOT set dedup) — a real miss can't be dropped on a
+    green run."""
+    from edgar_client import Filing8K
+    from notifications import NotificationError
+    db_path = str(tmp_path / "edg2.db")
+    storage.init_db(db_path).close()
+    monkeypatch.setattr(main, "init_db", lambda *a, **k: storage.init_db(db_path))
+    monkeypatch.setattr(main, "load_coverage", lambda: [_tkr("FIVE", tier=1)])
+    monkeypatch.setattr(main, "get_cik", lambda t: "1")
+    monkeypatch.setattr(main, "find_earnings_release_filing",
+                        lambda tk, a, b: Filing8K(form="8-K", filing_date="2026-06-03",
+                                                  accession="0001-26-1", primary_doc_title="Q1",
+                                                  items=("2.02",)))
+    monkeypatch.setattr(main, "SLACK_WEBHOOK_EARNINGS", "https://example.invalid/wh")
+    monkeypatch.setattr(main, "SLACK_WEBHOOK_STATUS", None)
+    def boom(*a, **k):
+        raise NotificationError("slack down")
+    monkeypatch.setattr(main, "post_slack", boom)
+
+    with pytest.raises(RuntimeError, match="Missed-results alert delivery failed"):
+        main.run_edgar_results_fallback(dry_run=False, skip_heartbeat=True)
+
+    # Dedup must NOT have been set — next run retries.
+    conn = sqlite3.connect(db_path)
+    try:
+        from storage import kv_get
+        assert kv_get(conn, "missed_results_alerted:FIVE:2026Q1") is None
+    finally:
+        conn.close()
+
+
+def test_post_urgent_alert_returns_false_on_failure(monkeypatch):
+    """The urgent-alert helper signals delivery failure (False) so run()/
+    reconcile can fail loud on a dropped Tier-1 date-move alert."""
+    from notifications import UrgentMoveRow, NotificationError
+    monkeypatch.setattr(main, "SLACK_BOT_TOKEN", None)   # force webhook path
+    monkeypatch.setattr(main, "SLACK_WEBHOOK_EARNINGS", "https://example.invalid/wh")
+    def boom(*a, **k):
+        raise NotificationError("slack down")
+    monkeypatch.setattr(main, "post_slack", boom)
+    row = UrgentMoveRow(ticker="FIVE", company_name="Five Below",
+                        old_date="2026-06-02", new_date="2026-06-05", hour="amc",
+                        biz_days_until=2, source="sync")
+    from datetime import date as _date
+    assert main._post_urgent_alert([row], _date(2026, 6, 3)) is False
+    # No rows -> trivially OK (nothing to deliver).
+    assert main._post_urgent_alert([], _date(2026, 6, 3)) is True

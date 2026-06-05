@@ -627,9 +627,11 @@ def _alert_coverage_changes_if_needed(conn, coverage) -> None:
         logger.error(f"Coverage diff Slack post failed: {exc}")
 
 
-def _post_urgent_alert(rows: list[UrgentMoveRow], as_of: date, conn=None):
+def _post_urgent_alert(rows: list[UrgentMoveRow], as_of: date, conn=None) -> bool:
     """
-    Post the A3 Tier 1 urgent Slack alert. Swallows its own errors.
+    Post the A3 Tier 1 urgent Slack alert. Returns True if delivered (or there
+    was nothing to deliver / no webhook configured), False if a post FAILED —
+    these are Tier 1 date moves, so the caller raises on False (fail loud).
 
     With SLACK_BOT_TOKEN+SLACK_CHANNEL_ID set, posts a summary header +
     one threaded parent per row and persists thread_ts via open_question
@@ -637,7 +639,7 @@ def _post_urgent_alert(rows: list[UrgentMoveRow], as_of: date, conn=None):
     post otherwise. `conn` is required for the bot-token path.
     """
     if not rows:
-        return
+        return True
     bot_path = bool(SLACK_BOT_TOKEN and SLACK_CHANNEL_ID and conn is not None)
     if bot_path:
         try:
@@ -664,9 +666,10 @@ def _post_urgent_alert(rows: list[UrgentMoveRow], as_of: date, conn=None):
                 )
         except SlackAPIError as exc:
             logger.error(f"Urgent T1 alert Slack post failed (bot path): {exc}")
-        return
+            return False
+        return True
     if not SLACK_WEBHOOK_EARNINGS:
-        return
+        return True
     try:
         post_slack(
             SLACK_WEBHOOK_EARNINGS,
@@ -675,6 +678,8 @@ def _post_urgent_alert(rows: list[UrgentMoveRow], as_of: date, conn=None):
         )
     except NotificationError as exc:
         logger.error(f"Urgent T1 alert Slack post failed: {exc}")
+        return False
+    return True
 
 
 def run(
@@ -1348,6 +1353,7 @@ def run(
     # surfaced it this run. Increment a per-event counter and alert when it
     # hits 2 consecutive daily syncs. Tickers not in current coverage are
     # skipped to avoid noise from Coverage Manager drops.
+    unseen_ok = True
     if not dry_run:
         seen_pairs = {
             (e.get("symbol", "").upper(), e.get("date"))
@@ -1425,6 +1431,7 @@ def run(
                         )
                 except SlackAPIError as exc:
                     logger.error(f"Unseen-ticker Slack post failed (bot path): {exc}")
+                    unseen_ok = False
             elif unseen_webhook:
                 try:
                     post_slack(
@@ -1434,6 +1441,7 @@ def run(
                     )
                 except NotificationError as exc:
                     logger.error(f"Unseen-ticker Slack post failed: {exc}")
+                    unseen_ok = False
 
     # --- TickTick task sync (Tier 1 + Tier 2 only) ---
     tt_stats: dict | None = None
@@ -1472,16 +1480,34 @@ def run(
     else:
         logger.info("TickTick sync skipped (--no-ticktick)")
 
-    conn.close()
-
     # --- A3: post urgent Tier 1 alert (if any) ---
+    # NB: keep conn OPEN here — the bot-token path persists thread_ts via
+    # open_question(conn, ...). (conn.close() was previously *before* this,
+    # which would hit a closed DB on the bot path.)
+    urgent_ok = True
     if urgent_moves:
         logger.warning(
             f"A3: {len(urgent_moves)} Tier 1 date move(s) within "
             f"{A3_URGENT_BIZ_DAYS} business days"
         )
         if not dry_run:
-            _post_urgent_alert(urgent_moves, today, conn=conn)
+            urgent_ok = _post_urgent_alert(urgent_moves, today, conn=conn)
+
+    conn.close()
+
+    # Critical Tier-1/2 alert delivery failures fail the workflow (and skip the
+    # success heartbeat below): urgent T1 date moves inside 5 business days, and
+    # persistent-unseen Tier-1/2 events missing from Finnhub. Dedup/counters are
+    # left intact so the next run retries.
+    if not urgent_ok or not unseen_ok:
+        failed = []
+        if not urgent_ok:
+            failed.append(f"urgent T1 move ({len(urgent_moves)})")
+        if not unseen_ok:
+            failed.append("persistent-unseen")
+        raise RuntimeError(
+            f"Critical alert delivery failed: {', '.join(failed)} — left for retry"
+        )
 
     # --- Heartbeat ---
     if not skip_heartbeat and not dry_run and SLACK_WEBHOOK_EARNINGS:
@@ -2171,14 +2197,23 @@ def run_edgar_results_fallback(dry_run: bool = False, skip_heartbeat: bool = Fal
             _build_missed_results_blocks(confirmed_missed, today),
             _build_missed_results_fallback(confirmed_missed),
         )
-        # Only set dedup keys after a successful post so a failed post retries.
-        for r in confirmed_missed:
-            kv_set(conn, r["dedup_key"], f"alerted:{today.isoformat()}")
-        logger.info(
-            f"Posted missed-results alert for {len(confirmed_missed)} name(s)"
-        )
     except NotificationError as exc:
+        # The alert IS the entire output of this safeguard — if it didn't reach
+        # Slack, a green run would hide a real missed result. Leave dedup unset
+        # (retry next run) and raise so the workflow goes red. (_run_safeguard
+        # also posts a degraded-health alert.)
         logger.error(f"Missed-results Slack post failed: {exc}")
+        conn.close()
+        raise RuntimeError(
+            f"Missed-results alert delivery failed for "
+            f"{len(confirmed_missed)} name(s) — not silently dropping a real miss"
+        ) from exc
+    # Only set dedup keys after a successful post so a failed post retries.
+    for r in confirmed_missed:
+        kv_set(conn, r["dedup_key"], f"alerted:{today.isoformat()}")
+    logger.info(
+        f"Posted missed-results alert for {len(confirmed_missed)} name(s)"
+    )
 
     conn.close()
     _emit_heartbeat()
@@ -2473,11 +2508,12 @@ def run_reconcile_calendar(dry_run: bool = False):
                     source="reconcile",
                 ))
 
-    conn.close()
-
     # Slack summary — only when we actually did something. Routes to the
     # status-reports channel; falls back to the earnings webhook if unset.
+    # Keep conn OPEN until after the urgent path (its bot-token branch persists
+    # thread_ts via open_question — closing first would hit a closed DB).
     reconcile_webhook = SLACK_WEBHOOK_STATUS or SLACK_WEBHOOK_EARNINGS
+    summary_ok = True
     if fixed and not dry_run and reconcile_webhook:
         blocks = build_reconcile_blocks(fixed, today)
         fallback = build_reconcile_fallback(fixed, today)
@@ -2485,15 +2521,29 @@ def run_reconcile_calendar(dry_run: bool = False):
             post_slack(reconcile_webhook, blocks, fallback)
         except NotificationError as exc:
             logger.error(f"Reconcile Slack post failed: {exc}")
+            summary_ok = False
 
     # A3: separate urgent alert for T1 moves inside the 5-biz-day window
+    urgent_ok = True
     if urgent_moves:
         logger.warning(
             f"A3: {len(urgent_moves)} Tier 1 date move(s) within "
             f"{A3_URGENT_BIZ_DAYS} business days"
         )
         if not dry_run:
-            _post_urgent_alert(urgent_moves, today, conn=conn)
+            urgent_ok = _post_urgent_alert(urgent_moves, today, conn=conn)
+
+    conn.close()
+
+    # Date-correctness alerts (drift-fix summary + urgent T1 moves): fail the
+    # workflow on delivery failure so it's visible within a day.
+    if not summary_ok or not urgent_ok:
+        failed = []
+        if not summary_ok:
+            failed.append(f"reconcile summary ({len(fixed)})")
+        if not urgent_ok:
+            failed.append(f"urgent T1 move ({len(urgent_moves)})")
+        raise RuntimeError(f"Reconcile alert delivery failed: {', '.join(failed)}")
 
 
 # ---------------------------------------------------------------------------
@@ -3474,6 +3524,16 @@ def run_cross_check(dry_run: bool = False, days_ahead: int = 14):
             )
         conn.commit()
     conn.close()
+
+    # Date-disagreement alerts are part of the date-correctness layer; if
+    # delivery failed, fail the workflow (dedup left untouched → retry next
+    # run). run_cross_check runs under _run_safeguard, so this also posts a
+    # degraded-health alert.
+    if not dry_run and not posted:
+        raise RuntimeError(
+            f"Cross-check disagreement alert delivery failed for "
+            f"{len(disagreement_rows)} row(s) — left for retry"
+        )
 
 
 # ---------------------------------------------------------------------------
