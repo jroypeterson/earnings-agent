@@ -1165,8 +1165,9 @@ def test_slack_lock_to_new_date_moves_calendar_first(monkeypatch):
 
     q = {"ticker": "FIVE", "event_date": "2026-06-02"}
     action = ParsedAction(action=ACT_LOCK, payload={"date": "2026-05-27"}, ack="ok")
-    main._apply_action(conn, q, action, _date(2026, 6, 5), cal_service=object())
+    override = main._apply_action(conn, q, action, _date(2026, 6, 5), cal_service=object())
 
+    assert override is None   # success -> caller uses the parser's default ack
     new = find_existing_event(conn, "FIVE", "2026-05-27")
     assert new is not None and new["date_locked"] is True and new["gcal_id"] == "NEW"
     assert find_existing_event(conn, "FIVE", "2026-06-02") is None
@@ -1189,9 +1190,11 @@ def test_slack_lock_new_date_defers_without_calendar(monkeypatch):
     monkeypatch.setattr(main, "update_question_state", lambda *a, **k: None)
 
     q = {"ticker": "FIVE", "event_date": "2026-06-02"}
-    action = ParsedAction(action=ACT_LOCK, payload={"date": "2026-05-27"}, ack="ok")
-    main._apply_action(conn, q, action, _date(2026, 6, 5), cal_service=None)
+    action = ParsedAction(action=ACT_LOCK, payload={"date": "2026-05-27"}, ack="locked FIVE")
+    override = main._apply_action(conn, q, action, _date(2026, 6, 5), cal_service=None)
 
+    # Deferred -> caller must post THIS override, not the parser's success ack.
+    assert override is not None and "not applied" in override.lower()
     old = find_existing_event(conn, "FIVE", "2026-06-02")
     assert old is not None and old["date_locked"] is False   # not locked, retriable
     assert find_existing_event(conn, "FIVE", "2026-05-27") is None

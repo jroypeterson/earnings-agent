@@ -3440,8 +3440,14 @@ def _apply_action(
     action: ParsedAction,
     today: date,
     cal_service=None,
-) -> None:
-    """Apply a ParsedAction to DB state. No-ops on UNKNOWN/HELP."""
+) -> str | None:
+    """Apply a ParsedAction to DB state. No-ops on UNKNOWN/HELP.
+
+    Returns an OVERRIDE ack string to post in-thread instead of the parser's
+    default `action.ack`, or None to use the default. Used so a deferred date-
+    changing lock doesn't post the parser's success text ("locked …") when the
+    lock wasn't actually applied.
+    """
     from storage import kv_set  # local import to keep the top of file tidy
     ticker = q["ticker"]
     event_date = q["event_date"]
@@ -3461,14 +3467,22 @@ def _apply_action(
             )
             if not moved:
                 # Calendar unavailable/failed (Tier 1/2) — lock NOT applied;
-                # leave the question open so the user retries.
+                # leave the question open and tell the user (don't let the
+                # parser's success ack imply the date is pinned).
                 logger.warning(
                     f"Slack lock for {ticker} {event_date}->{new_date} deferred "
                     f"(calendar move failed); not locking — will retry"
                 )
-                return
+                return (
+                    f":warning: Calendar unavailable — *lock not applied* for "
+                    f"`{ticker}` → {new_date}. Will retry on the next sync."
+                )
             update_question_state(conn, ticker, new_date, "resolved")
-            return
+            return None
+        # Locking the CURRENT date: no calendar move needed.
+        set_date_lock(conn, ticker, new_date, True)
+        update_question_state(conn, ticker, new_date, "resolved")
+        return None
         # Locking the CURRENT date: no calendar move needed.
         set_date_lock(conn, ticker, new_date, True)
         update_question_state(conn, ticker, new_date, "resolved")
@@ -3629,9 +3643,15 @@ def run_check_replies(dry_run: bool = False, days_lookback: int = 14):
                     )
             else:
                 if not dry_run:
-                    _apply_action(conn, q, action, today, cal_service=cal_service)
-                    if action.ack:
-                        _ack_in_thread(thread_ts, action.ack, channel_id)
+                    override_ack = _apply_action(
+                        conn, q, action, today, cal_service=cal_service
+                    )
+                    # An override (e.g. a deferred lock) replaces the parser's
+                    # default success ack so we never tell the user a date is
+                    # pinned when it isn't.
+                    ack_text = override_ack if override_ack is not None else action.ack
+                    if ack_text:
+                        _ack_in_thread(thread_ts, ack_text, channel_id)
 
             latest_ts = reply.ts
             processed += 1
