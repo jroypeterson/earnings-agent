@@ -2997,15 +2997,18 @@ def _apply_edgar_auto_correction(
 ) -> bool:
     """Move an event from old_event_date to new_event_date and lock it.
 
-    Used when SEC EDGAR Item 2.02 confirms a press-release date that
-    differs from what's stored. Atomically:
-      - inserts a new DB row at the EDGAR date, copying forward fields,
-        with date_locked=1 to prevent Finnhub from overriding next run
-      - deletes the old DB row
-      - delete+recreates the calendar event at the new date
+    Used when SEC EDGAR Item 2.02 confirms a press-release date that differs
+    from what's stored. Because the corrected row is `date_locked=1`,
+    reconcile/daily-sync will refuse to move its calendar event afterward — so
+    unlike an ordinary date move, a calendar failure here is NOT self-healing.
+    Therefore we do the CALENDAR FIRST and only commit the DB move + lock once
+    the calendar event is actually at the new date. If the calendar can't be
+    updated (create fails, or unavailable while an event exists), we leave the
+    old DB row untouched and return False so the next cross-check retries —
+    rather than freezing a locked DB/calendar date mismatch.
 
     Idempotent: if old_event_date == new_event_date, no-op.
-    Returns True if a correction was applied.
+    Returns True only if the correction (calendar + DB) was fully applied.
     """
     if old_event_date == new_event_date:
         return False
@@ -3030,9 +3033,64 @@ def _apply_edgar_auto_correction(
     except Exception:
         pass
 
-    # Insert new row at the EDGAR date, then delete old row.
+    # --- Calendar FIRST. Only proceed to the DB move+lock if the calendar
+    #     event ends up at the new date (the lock would otherwise freeze a
+    #     mismatch reconcile can't fix). ---
+    old_gcal_id = existing.get("gcal_id")
+    new_gcal_id = None
+    if old_gcal_id:
+        if not cal_service:
+            logger.error(
+                f"EDGAR auto-correction for {ticker}: calendar unavailable — "
+                f"deferring DB move+lock (old row intact, will retry)"
+            )
+            return False
+        new_gcal_id, created = _move_calendar_event(
+            cal_service, ticker, old_gcal_id, new_event_date,
+            existing.get("event_hour"),
+            quarter=existing.get("quarter"),
+            eps_est=existing.get("eps_estimate"),
+            eps_act=existing.get("eps_actual"),
+            rev_est=existing.get("rev_estimate"),
+            rev_act=existing.get("rev_actual"),
+            tier=existing.get("tier", 3),
+            source_fingerprint=f"{ticker}:{new_event_date}",
+            hour_yf=new_hour_yf, call_dt_iso=new_call_iso,
+        )
+        if not created:
+            logger.error(
+                f"EDGAR auto-correction for {ticker}: calendar create failed — "
+                f"deferring DB move+lock (old row intact, will retry)"
+            )
+            return False
+    elif cal_service:
+        # No existing calendar event to move — create one at the new date.
+        try:
+            new_gcal_id = create_calendar_event(
+                cal_service, GOOGLE_CALENDAR_ID, ticker, new_event_date,
+                existing.get("event_hour"),
+                quarter=existing.get("quarter"),
+                eps_estimate=existing.get("eps_estimate"),
+                eps_actual=existing.get("eps_actual"),
+                revenue_estimate=existing.get("rev_estimate"),
+                revenue_actual=existing.get("rev_actual"),
+                tier=existing.get("tier", 3),
+                source_fingerprint=f"{ticker}:{new_event_date}",
+                hour_yf=new_hour_yf, call_datetime_utc=new_call_iso,
+            )
+        except CalendarError as exc:
+            logger.error(
+                f"EDGAR auto-correction for {ticker}: calendar create failed "
+                f"({exc}) — deferring DB move+lock (old row intact, will retry)"
+            )
+            return False
+    # else: no old calendar event AND no cal_service — nothing can get stuck;
+    # move the DB now and a later run creates the calendar event.
+
+    # --- Calendar is at the new date (or N/A). Commit the DB move + lock. ---
     upsert_event(
-        conn, ticker, new_event_date, existing.get("event_hour"), gcal_id=None,
+        conn, ticker, new_event_date, existing.get("event_hour"),
+        gcal_id=new_gcal_id,
         quarter=existing.get("quarter"),
         eps_estimate=existing.get("eps_estimate"),
         eps_actual=existing.get("eps_actual"),
@@ -3052,30 +3110,6 @@ def _apply_edgar_auto_correction(
         (ticker, old_event_date),
     )
     conn.commit()
-
-    # Move the calendar event using create-first/delete-second so a failed
-    # create can't orphan it (delete-first would leave the event gone — and
-    # reconcile can't recreate missing events from the DB, it only moves ones
-    # that still exist). Worst case is a stale-but-present old event.
-    old_gcal_id = existing.get("gcal_id")
-    if old_gcal_id and cal_service:
-        new_gcal_id, _ = _move_calendar_event(   # date move; old id safe on failure
-            cal_service, ticker, old_gcal_id, new_event_date,
-            existing.get("event_hour"),
-            quarter=existing.get("quarter"),
-            eps_est=existing.get("eps_estimate"),
-            eps_act=existing.get("eps_actual"),
-            rev_est=existing.get("rev_estimate"),
-            rev_act=existing.get("rev_actual"),
-            tier=existing.get("tier", 3),
-            source_fingerprint=f"{ticker}:{new_event_date}",
-            hour_yf=new_hour_yf, call_dt_iso=new_call_iso,
-        )
-        conn.execute(
-            "UPDATE events SET gcal_id = ? WHERE ticker = ? AND event_date = ?",
-            (new_gcal_id, ticker, new_event_date),
-        )
-        conn.commit()
 
     logger.info(
         f"EDGAR auto-correction: {ticker} moved {old_event_date} -> {new_event_date} "

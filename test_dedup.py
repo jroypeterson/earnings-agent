@@ -1049,6 +1049,59 @@ def test_move_calendar_success_deletes_old(monkeypatch):
     assert deleted == ["OLD"]
 
 
+def test_edgar_auto_correction_calendar_fail_does_not_move_or_lock(monkeypatch):
+    """EDGAR correction locks the new date, so reconcile can't heal a calendar
+    failure. If the Calendar create fails, the DB must stay put (old row, not
+    locked) and the function returns False for retry."""
+    import main
+    from storage import init_db, find_existing_event, upsert_event
+    from calendar_sync import CalendarError
+
+    conn = init_db(":memory:")
+    upsert_event(conn, "FIVE", "2026-06-02", "amc", "OLD", quarter="2026Q1",
+                 eps_estimate=1.0, reported=False, tier=1, company_name="Five Below")
+    monkeypatch.setattr(main, "fetch_yfinance_hour_for_date", lambda *a, **k: None)
+    monkeypatch.setattr(main, "fetch_yfinance_call_for_date", lambda *a, **k: None)
+    monkeypatch.setattr(main, "create_calendar_event",
+                        lambda *a, **k: (_ for _ in ()).throw(CalendarError("boom")))
+    deleted = []
+    monkeypatch.setattr(main, "delete_calendar_event", lambda *a, **k: deleted.append(a))
+
+    result = main._apply_edgar_auto_correction(
+        conn, object(), "FIVE", "2026-06-02", "2026-05-27")
+    assert result is False
+    old = find_existing_event(conn, "FIVE", "2026-06-02")
+    assert old is not None
+    assert old["date_locked"] is False and old["gcal_id"] == "OLD"   # DB untouched
+    assert find_existing_event(conn, "FIVE", "2026-05-27") is None    # not moved
+    assert deleted == []                                              # old event intact
+
+
+def test_edgar_auto_correction_success_moves_and_locks(monkeypatch):
+    """Happy path: calendar created at the new date, then DB moved + locked,
+    old row + calendar event removed."""
+    import main
+    from storage import init_db, find_existing_event, upsert_event
+
+    conn = init_db(":memory:")
+    upsert_event(conn, "FIVE", "2026-06-02", "amc", "OLD", quarter="2026Q1",
+                 eps_estimate=1.0, reported=False, tier=1, company_name="Five Below")
+    monkeypatch.setattr(main, "fetch_yfinance_hour_for_date", lambda *a, **k: None)
+    monkeypatch.setattr(main, "fetch_yfinance_call_for_date", lambda *a, **k: None)
+    monkeypatch.setattr(main, "create_calendar_event", lambda *a, **k: "NEW")
+    deleted = []
+    monkeypatch.setattr(main, "delete_calendar_event",
+                        lambda svc, cal, gid: deleted.append(gid))
+
+    result = main._apply_edgar_auto_correction(
+        conn, object(), "FIVE", "2026-06-02", "2026-05-27")
+    assert result is True
+    new = find_existing_event(conn, "FIVE", "2026-05-27")
+    assert new is not None and new["date_locked"] is True and new["gcal_id"] == "NEW"
+    assert find_existing_event(conn, "FIVE", "2026-06-02") is None
+    assert deleted == ["OLD"]
+
+
 def test_edgar_date_corroborated_logic():
     """Corroboration gate: only an EDGAR date within ±1d of a yfinance date
     counts as corroborated; a third distinct date or no yfinance does not."""
