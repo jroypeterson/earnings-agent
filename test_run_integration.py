@@ -48,7 +48,7 @@ class _FakeCal:
 
 def _run_env(monkeypatch, tmp_path, *, coverage, events,
              seed=None, cal_events=None, notify_ok=True, move=5.0,
-             find_event=None):
+             find_event=None, create_fails=False):
     """Wire all I/O stubs, seed the DB, run main.run(), and return
     (db_path, recorded) where recorded captures calendar + notify activity."""
     db_path = str(tmp_path / "ea.db")
@@ -81,6 +81,9 @@ def _run_env(monkeypatch, tmp_path, *, coverage, events,
 
     def fake_create(svc, cal, ticker, ev_date, hour, **k):
         recorded["created"].append((ticker, ev_date))
+        if create_fails:
+            from calendar_sync import CalendarError
+            raise CalendarError("create failed")
         return f"NEW-{ticker}-{ev_date}"
     def fake_delete(svc, cal, gid):
         recorded["deleted"].append(gid)
@@ -212,6 +215,30 @@ def test_run_date_change_moves_calendar_create_first(monkeypatch, tmp_path):
     assert moved is not None and moved["reported"] is False
     assert _row(db, "MOVE", "2026-06-20") is None
     assert rec["notify"] == []   # no actuals -> no results post
+
+
+def test_run_same_date_shape_recreate_failure_does_not_advance_db(monkeypatch, tmp_path):
+    """A same-date hour/shape change whose calendar create FAILS must not
+    advance the DB hour — otherwise next run's date/hour/stale checks all read
+    false and the wrong-shape event is hidden. The row must stay at the old
+    hour so the next sync re-detects the drift and retries."""
+    q = storage.date_to_quarter("2026-06-25")
+    db, rec = _run_env(
+        monkeypatch, tmp_path,
+        coverage=[_tkr("SHAPE", tier=1)],
+        seed=[dict(ticker="SHAPE", event_date="2026-06-25", event_hour="",
+                   gcal_id="OLD", quarter=q, eps_estimate=1.0,
+                   reported=False, tier=1, company_name="Shaper")],
+        # Same date, hour now known (bmo) -> hour_changed shape recreate.
+        events=[_ev("SHAPE", "2026-06-25", eps_act=None, rev_act=None, hour="bmo")],
+        move=None,
+        create_fails=True,
+    )
+    row = _row(db, "SHAPE", "2026-06-25")
+    assert row is not None
+    assert row["event_hour"] == ""          # NOT advanced to bmo -> retriable
+    assert row["gcal_id"] == "OLD"          # still points at the intact old event
+    assert rec["deleted"] == []             # old event preserved (create failed first)
 
 
 def test_run_calendar_backfill_actuals_not_silently_reported(monkeypatch, tmp_path):

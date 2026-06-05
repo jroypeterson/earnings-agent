@@ -277,17 +277,25 @@ def _move_calendar_event(
     cal_service, ticker: str, old_gcal_id: str, new_date: str, hour,
     *, quarter, eps_est, eps_act, rev_est, rev_act, tier,
     source_fingerprint, hour_yf, call_dt_iso,
-) -> str | None:
-    """Move a tagged calendar event to `new_date` using create-FIRST-then-delete.
+) -> tuple[str | None, bool]:
+    """Move/recreate a tagged calendar event at `new_date` using create-FIRST-
+    then-delete. Returns `(gcal_id_to_persist, created)`.
 
     Ordering matters: if we deleted first and the create then failed, the event
     would be GONE — and nothing heals it (later syncs find the DB row, see no
     drift, skip; reconcile only scans events that still exist). Creating first
-    means a failure leaves the OLD event in place (recoverable: reconcile sees
-    the surviving event vs the new DB/Finnhub date and re-moves it). A delete
-    failure after a successful create leaves a duplicate, which `--cleanup`/
-    reconcile dedupe — also recoverable. Returns the gcal_id to persist: the new
-    event's id on success, else the old id (never None — never an orphan).
+    means a failure leaves the OLD event in place. A delete failure after a
+    successful create leaves a duplicate, which `--cleanup`/reconcile dedupe —
+    also recoverable. Never returns None — never an orphan.
+
+    `created` tells the caller whether the new event actually got created:
+      - True  → new event made (old deleted); gcal_id is the new id.
+      - False → create failed; gcal_id is the OLD id (event intact).
+    For DATE moves, created=False is safe to persist — calendar-stale detection
+    sees the date mismatch and re-moves it. For SAME-DATE shape recreates the
+    caller must NOT advance DB state on created=False (date/hour/stale checks
+    would all read false next run and the wrong-shape event would be hidden
+    until --refresh-descriptions); it should leave state for retry instead.
     """
     try:
         new_id = create_calendar_event(
@@ -300,9 +308,9 @@ def _move_calendar_event(
     except CalendarError as exc:
         logger.error(
             f"Failed to create moved event for {ticker} at {new_date}: {exc} "
-            f"— keeping old event (no orphan; reconcile will re-move it)"
+            f"— keeping old event (no orphan)"
         )
-        return old_gcal_id
+        return old_gcal_id, False
     try:
         delete_calendar_event(cal_service, GOOGLE_CALENDAR_ID, old_gcal_id)
     except CalendarError as exc:
@@ -311,7 +319,7 @@ def _move_calendar_event(
             f"{exc} (duplicate; reconcile/--cleanup will dedupe)"
         )
     logger.info(f"Moved calendar event for {ticker} -> {new_date}")
-    return new_id
+    return new_id, True
 
 
 def _record_actuals(
@@ -885,7 +893,9 @@ def run(
 
                 if not dry_run and gcal_id and cal_service:
                     if date_moved and not existing.get("date_locked"):
-                        gcal_id = _move_calendar_event(
+                        # Date move: created=False is safe to persist (the old
+                        # event stays put and calendar-stale heals the date).
+                        gcal_id, _ = _move_calendar_event(
                             cal_service, ticker, gcal_id, earnings_date, hour,
                             quarter=quarter, eps_est=eps_est, eps_act=eps_act,
                             rev_est=rev_est, rev_act=rev_act, tier=tier,
@@ -1004,13 +1014,24 @@ def run(
             # it). When there's no old event to move, just create.
             if tier <= 2 and not dry_run and cal_service:
                 if old_gcal_id:
-                    gcal_id = _move_calendar_event(
+                    gcal_id, created = _move_calendar_event(
                         cal_service, ticker, old_gcal_id, earnings_date, hour,
                         quarter=quarter, eps_est=eps_est, eps_act=eps_act,
                         rev_est=rev_est, rev_act=rev_act, tier=tier,
                         source_fingerprint=source_fingerprint,
                         hour_yf=hour_yf, call_dt_iso=call_dt_iso,
                     )
+                    # Same-date shape recreate that FAILED to create: don't
+                    # advance DB state, or hour/date/stale checks all read false
+                    # next run and the wrong-shape calendar is hidden. Leave the
+                    # row untouched so the next sync re-detects hour drift and
+                    # retries. (Date moves are safe — calendar-stale heals them.)
+                    if not created and not date_changed and not calendar_stale:
+                        logger.warning(
+                            f"Shape recreate failed for {ticker} {quarter} "
+                            f"(same date {earnings_date}) — leaving DB to retry"
+                        )
+                        continue
                 else:
                     try:
                         gcal_id = create_calendar_event(
@@ -1077,8 +1098,9 @@ def run(
                                 f"calendar={cal_start_date}, Finnhub={earnings_date}. Recreating."
                             )
                             # Create-first/delete-second so a failed create
-                            # can't orphan the event.
-                            gcal_id = _move_calendar_event(
+                            # can't orphan the event. Date move: created=False
+                            # is safe (calendar-stale heals the date next run).
+                            gcal_id, _ = _move_calendar_event(
                                 cal_service, ticker, gcal_id, earnings_date, hour,
                                 quarter=quarter, eps_est=eps_est, eps_act=eps_act,
                                 rev_est=rev_est, rev_act=rev_act, tier=tier,
@@ -1143,7 +1165,7 @@ def run(
                             if not dry_run:
                                 # Same-date shape recreate via the create-first
                                 # helper (no orphan on create failure).
-                                gcal_id = _move_calendar_event(
+                                gcal_id, created = _move_calendar_event(
                                     cal_service, ticker, gcal_id, earnings_date,
                                     hour, quarter=quarter, eps_est=eps_est,
                                     eps_act=eps_act, rev_est=rev_est,
@@ -1151,6 +1173,15 @@ def run(
                                     source_fingerprint=source_fingerprint,
                                     hour_yf=hour_yf, call_dt_iso=call_dt_iso,
                                 )
+                                if not created:
+                                    # Don't backfill a DB row for a wrong-shape
+                                    # event — leave it absent so the next run
+                                    # re-enters this path and retries.
+                                    logger.warning(
+                                        f"Shape recreate failed for {ticker} "
+                                        f"{quarter} (backfill) — leaving for retry"
+                                    )
+                                    continue
                                 logger.info(
                                     f"Recreated calendar event for {ticker} "
                                     f"{quarter} (shape drift)"
@@ -2318,8 +2349,9 @@ def run_reconcile_calendar(dry_run: bool = False):
         prior_reported = bool(existing_old["reported"]) if existing_old else False
 
         # Create-first/delete-second (via _move_calendar_event) so a failed
-        # create can't orphan the event.
-        new_gcal_id = _move_calendar_event(
+        # create can't orphan the event. Date move: created=False is safe to
+        # persist — next reconcile/sync sees the date mismatch and re-moves it.
+        new_gcal_id, _ = _move_calendar_event(
             cal_service, ticker, old_gcal_id, new_date, hour,
             quarter=quarter, eps_est=eps_est, eps_act=eps_act,
             rev_est=rev_est, rev_act=rev_act, tier=tier,
@@ -2504,13 +2536,19 @@ def run_refresh_descriptions(dry_run: bool = False, days_ahead: int = 90, days_b
                 # so a TBD->amc/bmo or all-day<->timed transition needs a
                 # full recreate to get the right time block. Create-first/
                 # delete-second (shared helper) so a failed create can't orphan.
-                new_gcal_id = _move_calendar_event(
+                new_gcal_id, created = _move_calendar_event(
                     cal_service, ticker, ev["id"], event_date, hour,
                     quarter=quarter_for_event, eps_est=eps_est, eps_act=eps_act,
                     rev_est=rev_est, rev_act=rev_act, tier=tier_for_event,
                     source_fingerprint=source_fingerprint,
                     hour_yf=hour_yf, call_dt_iso=call_dt_iso,
                 )
+                if not created:
+                    # Same-date recreate failed; the live calendar event is
+                    # still wrong-shape and the next refresh re-detects it.
+                    # Don't touch the DB (gcal_id unchanged).
+                    logger.warning(f"Shape recreate failed for {ticker} {event_date} — will retry")
+                    continue
                 # Persist the recreated event's id so the DB stops pointing at
                 # the just-deleted event. Without this, the DB keeps the stale
                 # gcal_id, the next daily sync can't find it and recreates the
@@ -3021,7 +3059,7 @@ def _apply_edgar_auto_correction(
     # that still exist). Worst case is a stale-but-present old event.
     old_gcal_id = existing.get("gcal_id")
     if old_gcal_id and cal_service:
-        new_gcal_id = _move_calendar_event(
+        new_gcal_id, _ = _move_calendar_event(   # date move; old id safe on failure
             cal_service, ticker, old_gcal_id, new_event_date,
             existing.get("event_hour"),
             quarter=existing.get("quarter"),

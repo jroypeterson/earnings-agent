@@ -1023,12 +1023,13 @@ def test_move_calendar_no_orphan_on_create_failure(monkeypatch):
     monkeypatch.setattr(main, "create_calendar_event", boom_create)
     monkeypatch.setattr(main, "delete_calendar_event",
                         lambda *a, **k: deleted.append(a))
-    result = main._move_calendar_event(
+    gcal_id, created = main._move_calendar_event(
         object(), "FIVE", "OLD", "2026-06-03", "amc",
         quarter="2026Q1", eps_est=1.0, eps_act=1.1, rev_est=None, rev_act=None,
         tier=1, source_fingerprint="FIVE:2026-06-03", hour_yf=None, call_dt_iso=None,
     )
-    assert result == "OLD"     # keep old pointer
+    assert gcal_id == "OLD"    # keep old pointer
+    assert created is False     # signals failure so same-date callers can retry
     assert deleted == []       # old event NOT deleted -> no orphan
 
 
@@ -1039,12 +1040,12 @@ def test_move_calendar_success_deletes_old(monkeypatch):
     deleted = []
     monkeypatch.setattr(main, "delete_calendar_event",
                         lambda svc, cal, gid: deleted.append(gid))
-    result = main._move_calendar_event(
+    gcal_id, created = main._move_calendar_event(
         object(), "FIVE", "OLD", "2026-06-03", "amc",
         quarter="2026Q1", eps_est=1.0, eps_act=1.1, rev_est=None, rev_act=None,
         tier=1, source_fingerprint="FIVE:2026-06-03", hour_yf=None, call_dt_iso=None,
     )
-    assert result == "NEW"
+    assert gcal_id == "NEW" and created is True
     assert deleted == ["OLD"]
 
 
