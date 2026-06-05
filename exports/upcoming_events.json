@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-06-05T03:39:19Z",
+  "generated_at": "2026-06-05T13:08:01Z",
   "window": {
     "start": "2026-06-03",
     "end": "2026-06-19"
@@ -74,15 +74,6 @@
       "company_name": "HUTCHMED (China) Ltd"
     },
     {
-      "ticker": "REPL",
-      "event_date": "2026-06-04",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Replimune Group Inc"
-    },
-    {
       "ticker": "TTAN",
       "event_date": "2026-06-04",
       "event_hour": "amc",
@@ -126,6 +117,15 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "ON24 Inc"
+    },
+    {
+      "ticker": "REPL",
+      "event_date": "2026-06-05",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Replimune Group Inc"
     },
     {
       "ticker": "CELU",
