@@ -28,12 +28,23 @@ import time
 import urllib.request
 import urllib.error
 from collections import defaultdict
+from dataclasses import dataclass
 from datetime import date, timedelta
 
 from config import FMP_API_KEY
 from storage import date_to_quarter
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class FMPFetch:
+    """Result of a chunked FMP fetch, carrying partial-failure counts so the
+    caller can alarm on silent coverage loss (some chunks failed but the run
+    still looks healthy)."""
+    events: list
+    failed_chunks: int
+    total_chunks: int
 
 _FMP_BASE = "https://financialmodelingprep.com/stable/earnings-calendar"
 _CHUNK_DAYS = 7          # weekly chunks dodge any server-side range cap
@@ -60,11 +71,15 @@ def _normalize(row: dict) -> dict | None:
 
 def fetch_fmp_earnings(
     tickers, from_iso: str, to_iso: str, *, timeout: int = 30
-) -> list[dict]:
+) -> FMPFetch:
     """Fetch the FMP earnings calendar over [from_iso, to_iso], filtered to
-    `tickers`, normalized to Finnhub's event shape. Chunked weekly. Raises on a
-    hard/auth failure so the caller can decide to degrade to Finnhub-only;
-    per-chunk transient errors are logged and skipped.
+    `tickers`, normalized to Finnhub's event shape. Chunked weekly.
+
+    Returns an FMPFetch carrying the events plus failed/total chunk counts so a
+    PARTIAL outage (some chunks failed) is observable rather than silently
+    shrinking the merge. Raises only on a hard/auth failure (401/403, or an
+    error payload), which the caller treats as a full FMP outage and degrades
+    to Finnhub-only.
     """
     if not FMP_API_KEY:
         raise RuntimeError("FMP_API_KEY not configured")
@@ -74,9 +89,11 @@ def fetch_fmp_earnings(
     start = date.fromisoformat(from_iso)
     end = date.fromisoformat(to_iso)
     cur = start
-    chunks = 0
+    total_chunks = 0
+    failed_chunks = 0
     while cur <= end:
         chunk_end = min(cur + timedelta(days=_CHUNK_DAYS - 1), end)
+        total_chunks += 1
         url = (
             f"{_FMP_BASE}?from={cur.isoformat()}&to={chunk_end.isoformat()}"
             f"&apikey={FMP_API_KEY}"
@@ -90,10 +107,12 @@ def fetch_fmp_earnings(
             if exc.code in (401, 403):
                 raise RuntimeError(f"FMP auth/plan error {exc.code}: {exc.reason}")
             logger.warning(f"FMP chunk {cur}..{chunk_end} HTTP {exc.code}; skipping")
+            failed_chunks += 1
             cur = chunk_end + timedelta(days=1)
             continue
         except Exception as exc:
             logger.warning(f"FMP chunk {cur}..{chunk_end} error: {exc}; skipping")
+            failed_chunks += 1
             cur = chunk_end + timedelta(days=1)
             continue
 
@@ -106,12 +125,16 @@ def fetch_fmp_earnings(
             ev = _normalize(row)
             if ev:
                 out.append(ev)
-        chunks += 1
         cur = chunk_end + timedelta(days=1)
         time.sleep(_CHUNK_SLEEP)
 
-    logger.info(f"FMP earnings: {len(out)} universe events over {chunks} chunk(s)")
-    return out
+    level = logger.warning if failed_chunks else logger.info
+    level(
+        f"FMP earnings: {len(out)} universe events over "
+        f"{total_chunks - failed_chunks}/{total_chunks} chunk(s)"
+        + (f" ({failed_chunks} FAILED)" if failed_chunks else "")
+    )
+    return FMPFetch(events=out, failed_chunks=failed_chunks, total_chunks=total_chunks)
 
 
 def _has_actuals(ev: dict) -> bool:
@@ -119,11 +142,22 @@ def _has_actuals(ev: dict) -> bool:
 
 
 def _fill_from(primary: dict, donor: dict) -> dict:
-    """Return primary with any missing est/actual fields filled from donor."""
+    """Return primary with missing est/actual fields — and the earnings hour —
+    filled from donor.
+
+    Preserving `hour` matters: FMP rows carry hour=None, so when an FMP actuals
+    row WINS over a Finnhub row that knew the session (e.g. Finnhub had `amc`
+    but no actuals yet), dropping the hour would mislead
+    `fetch_post_earnings_move` (which treats amc vs bmo/unknown differently for
+    the move window + deferral). So inherit the donor's hour when the chosen
+    row lacks one.
+    """
     merged = dict(primary)
     for k in ("epsEstimate", "epsActual", "revenueEstimate", "revenueActual"):
         if merged.get(k) is None and donor.get(k) is not None:
             merged[k] = donor[k]
+    if not merged.get("hour") and donor.get("hour"):
+        merged["hour"] = donor["hour"]
     # Note both contributors for observability.
     srcs = {primary.get("source", "finnhub"), donor.get("source", "finnhub")}
     merged["source"] = "+".join(sorted(srcs))
@@ -143,8 +177,15 @@ def merge_earnings(fh_events: list[dict], fmp_events: list[dict]) -> list[dict]:
                                           fill estimates from FMP.
       4. Only one source has it        -> take that one (breadth win, ~all FMP).
 
-    Multiple rows from one source within the same (ticker, quarter) are left
-    intact for the downstream same-quarter phantom guard to collapse.
+    Row-count behaviour, to be precise:
+      - Single-source (ticker, quarter): ALL of that source's rows pass through
+        intact (so e.g. a Finnhub same-quarter phantom + real row both reach
+        the downstream same-quarter phantom guard, which collapses them).
+      - Both-source (ticker, quarter): collapses to ONE representative row
+        (picked per the policy above, gaps filled from the other source). The
+        downstream guard still protects against phantoms that surface across
+        runs / against persisted DB state, so cross-source extras don't need to
+        pass through here.
     """
     for e in fh_events:
         e.setdefault("source", "finnhub")

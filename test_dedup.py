@@ -910,6 +910,48 @@ def test_merge_shared_upcoming_keeps_finnhub_date_authority():
     assert m[0]["epsEstimate"] == 1.5            # filled from FMP
 
 
+def test_merge_fmp_actuals_win_preserves_finnhub_hour():
+    """Regression: when an FMP actuals row wins over a Finnhub row that knew the
+    session (amc), the merged row must keep the Finnhub hour — otherwise the
+    post-earnings move window + deferral get the session wrong."""
+    from fmp_client import merge_earnings
+    fh = [_fh("MDT", "2026-05-20", hour="amc", epsEstimate=1.5)]   # amc, no actuals
+    fmp = [_fmp("MDT", "2026-05-21", epsEstimate=1.5, epsActual=1.6)]
+    m = merge_earnings(fh, fmp)
+    assert len(m) == 1
+    assert m[0]["date"] == "2026-05-21"          # FMP's real report date wins
+    assert m[0]["epsActual"] == 1.6
+    assert m[0]["hour"] == "amc"                  # Finnhub hour preserved
+
+
+def test_fmp_partial_failure_counts(monkeypatch):
+    """A partial outage (some chunks fail) is reported via FMPFetch counts so
+    the caller can alarm, instead of silently shrinking the merge."""
+    import fmp_client
+    import urllib.error
+
+    monkeypatch.setattr(fmp_client, "FMP_API_KEY", "test-key")
+    monkeypatch.setattr(fmp_client, "_CHUNK_SLEEP", 0)
+
+    class _FakeResp:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def read(self): return b"[]"
+
+    calls = {"n": 0}
+    def fake_urlopen(url, timeout=30):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return _FakeResp()            # chunk 1 ok (empty)
+        raise urllib.error.URLError("boom")  # chunk 2 fails
+    monkeypatch.setattr(fmp_client.urllib.request, "urlopen", fake_urlopen)
+
+    res = fmp_client.fetch_fmp_earnings(["FIVE"], "2026-06-01", "2026-06-09")
+    assert res.total_chunks == 2
+    assert res.failed_chunks == 1
+    assert res.events == []
+
+
 def test_merge_finnhub_actuals_kept_filled_from_fmp():
     """When Finnhub already has actuals, keep its row but backfill any missing
     fields (e.g. revenue) from FMP."""

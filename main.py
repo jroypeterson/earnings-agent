@@ -208,14 +208,36 @@ def _alert_move_unavailable(rows, as_of: date) -> None:
         logger.error(f"Move-unavailable Slack post failed: {exc}")
 
 
-def _fetch_earnings_source(fh_client, tickers, from_iso: str, to_iso: str) -> list[dict]:
+def _alert_fmp_degraded(message: str, dry_run: bool) -> None:
+    """Surface an FMP degradation (full or partial) to #status-reports so a
+    quietly-shrunk merge doesn't pass for a healthy run. Best-effort; suppressed
+    in dry-run/populate so the DB-seeding steps don't post."""
+    if dry_run:
+        return
+    webhook = SLACK_WEBHOOK_STATUS or SLACK_WEBHOOK_EARNINGS
+    if not webhook:
+        return
+    try:
+        post_slack(
+            webhook,
+            [{"type": "section", "text": {"type": "mrkdwn",
+              "text": f":warning: *Earnings source degraded* — {message}"}}],
+            f"Earnings source degraded: {message}",
+        )
+    except NotificationError as exc:
+        logger.error(f"FMP-degraded alert failed: {exc}")
+
+
+def _fetch_earnings_source(
+    fh_client, tickers, from_iso: str, to_iso: str, *, dry_run: bool = False
+) -> list[dict]:
     """Earnings calendar = Finnhub merged with FMP (co-primary).
 
     Finnhub keeps date authority on shared names; FMP adds the names Finnhub
     misses and the actuals Finnhub hasn't ingested yet (see fmp_client). When
-    FMP_API_KEY is unset, or an FMP fetch fails, we degrade to Finnhub-only —
-    logged loudly (never a silent coverage drop). Provider counts are logged
-    every run for observability.
+    FMP_API_KEY is unset, or an FMP fetch fails (fully or partially), we say so
+    loudly (log + #status-reports) and merge whatever we got — never a silent
+    coverage drop. Provider counts are logged every run for observability.
     """
     fh = fetch_earnings(fh_client, tickers, from_iso, to_iso)
     if not FMP_API_KEY:
@@ -225,15 +247,28 @@ def _fetch_earnings_source(fh_client, tickers, from_iso: str, to_iso: str) -> li
         )
         return fh
     try:
-        fmp = fetch_fmp_earnings(tickers, from_iso, to_iso)
+        res = fetch_fmp_earnings(tickers, from_iso, to_iso)
     except Exception as exc:
         logger.error(
             f"FMP earnings fetch failed ({exc}) — degrading to Finnhub-only this run"
         )
+        _alert_fmp_degraded(
+            f"FMP fetch failed entirely ({exc}); merge ran Finnhub-only", dry_run
+        )
         return fh
-    merged = merge_earnings(fh, fmp)
+    if res.failed_chunks:
+        # Partial outage: some chunks dropped, so the merge silently lost
+        # coverage for those date ranges. Alarm, don't paper over it.
+        msg = (
+            f"FMP partial degradation: {res.failed_chunks}/{res.total_chunks} "
+            f"calendar chunks failed — merge coverage reduced this run"
+        )
+        logger.warning(msg)
+        _alert_fmp_degraded(msg, dry_run)
+    merged = merge_earnings(fh, res.events)
     logger.info(
-        f"Earnings sources merged: Finnhub={len(fh)} FMP={len(fmp)} -> {len(merged)} events"
+        f"Earnings sources merged: Finnhub={len(fh)} FMP={len(res.events)} "
+        f"-> {len(merged)} events"
     )
     return merged
 
@@ -633,7 +668,9 @@ def run(
             logger.warning(f"Calendar preflight failed; drift detection disabled: {exc}")
 
     # --- Fetch earnings (Finnhub + FMP merged) ---
-    earnings = _fetch_earnings_source(fh_client, all_tickers, from_date, to_date)
+    earnings = _fetch_earnings_source(
+        fh_client, all_tickers, from_date, to_date, dry_run=dry_run
+    )
 
     new_count = 0
     updated_count = 0
@@ -1500,7 +1537,9 @@ def run_check_results(
     # (Finnhub + FMP) so FMP's timelier actuals are caught here too.
     to_iso = (target + timedelta(days=1)).isoformat()
     earnings = [
-        e for e in _fetch_earnings_source(fh_client, all_tickers, target_iso, to_iso)
+        e for e in _fetch_earnings_source(
+            fh_client, all_tickers, target_iso, to_iso, dry_run=dry_run
+        )
         if e.get("date") == target_iso
     ]
     logger.info(f"Earnings entries for {target_iso}: {len(earnings)}")
