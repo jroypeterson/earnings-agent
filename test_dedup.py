@@ -861,6 +861,66 @@ def test_reported_row_survives_same_quarter_phantom_upsert():
     assert rq is not None and rq["event_date"] == "2026-05-27"
 
 
+def _fh(sym, d, **kw):
+    base = {"symbol": sym, "date": d, "hour": kw.get("hour", ""),
+            "epsEstimate": kw.get("epsEstimate"), "epsActual": kw.get("epsActual"),
+            "revenueEstimate": kw.get("revenueEstimate"),
+            "revenueActual": kw.get("revenueActual")}
+    return base
+
+
+def _fmp(sym, d, **kw):
+    return {"symbol": sym, "date": d, "hour": None,
+            "epsEstimate": kw.get("epsEstimate"), "epsActual": kw.get("epsActual"),
+            "revenueEstimate": kw.get("revenueEstimate"),
+            "revenueActual": kw.get("revenueActual"), "source": "fmp"}
+
+
+def test_merge_fmp_actuals_beat_finnhub_lag():
+    """The FIVE case: Finnhub has the event without actuals on the wrong day;
+    FMP has it WITH actuals on the right day (same quarter). FMP wins."""
+    from fmp_client import merge_earnings
+    fh = [_fh("FIVE", "2026-06-02", epsEstimate=1.77)]
+    fmp = [_fmp("FIVE", "2026-06-03", epsEstimate=1.77, epsActual=2.22,
+                revenueActual=1.285e9)]
+    m = merge_earnings(fh, fmp)
+    assert len(m) == 1
+    assert m[0]["date"] == "2026-06-03"          # FMP's real report date
+    assert m[0]["epsActual"] == 2.22             # FMP's actuals
+    assert "fmp" in m[0]["source"]
+
+
+def test_merge_breadth_fmp_only_name_included():
+    """A name only FMP lists is carried through (the breadth win)."""
+    from fmp_client import merge_earnings
+    m = merge_earnings([], [_fmp("AAPL", "2026-05-01", epsActual=1.6)])
+    assert [e["symbol"] for e in m] == ["AAPL"]
+
+
+def test_merge_shared_upcoming_keeps_finnhub_date_authority():
+    """When both have an UPCOMING (no-actuals) event, Finnhub's date + hour win
+    (date arbitration stays with Finnhub/cross-check, dodging FMP date errors);
+    FMP only fills missing estimates."""
+    from fmp_client import merge_earnings
+    fh = [_fh("MDT", "2026-07-10", hour="bmo")]                       # no estimate
+    fmp = [_fmp("MDT", "2026-07-12", epsEstimate=1.5)]                # diff date
+    m = merge_earnings(fh, fmp)
+    assert len(m) == 1
+    assert m[0]["date"] == "2026-07-10" and m[0]["hour"] == "bmo"
+    assert m[0]["epsEstimate"] == 1.5            # filled from FMP
+
+
+def test_merge_finnhub_actuals_kept_filled_from_fmp():
+    """When Finnhub already has actuals, keep its row but backfill any missing
+    fields (e.g. revenue) from FMP."""
+    from fmp_client import merge_earnings
+    fh = [_fh("XYZ", "2026-05-10", epsEstimate=1.0, epsActual=1.1)]   # no revenue
+    fmp = [_fmp("XYZ", "2026-05-10", epsActual=1.1, revenueActual=5e8)]
+    m = merge_earnings(fh, fmp)
+    assert m[0]["epsActual"] == 1.1
+    assert m[0]["revenueActual"] == 5e8          # filled from FMP
+
+
 def test_edgar_date_corroborated_logic():
     """Corroboration gate: only an EDGAR date within ±1d of a yfinance date
     counts as corroborated; a third distinct date or no yfinance does not."""

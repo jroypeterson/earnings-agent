@@ -46,6 +46,7 @@ jobs:
       - name: Populate events from Finnhub
         env:
           FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
+          FMP_API_KEY: ${{ secrets.FMP_API_KEY }}
           GOOGLE_CALENDAR_ID: ${{ secrets.GOOGLE_CALENDAR_ID }}
           COVERAGE_MANAGER_PATH: ${{ github.workspace }}/coverage-manager
         run: python main.py --populate-db-only --no-ticktick

@@ -104,6 +104,7 @@ jobs:
       - name: Run earnings agent
         env:
           FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
+          FMP_API_KEY: ${{ secrets.FMP_API_KEY }}
           GOOGLE_CALENDAR_ID: ${{ secrets.GOOGLE_CALENDAR_ID }}
           GOOGLE_CREDENTIALS_PATH: credentials.json
           COVERAGE_MANAGER_PATH: ${{ github.workspace }}/coverage-manager

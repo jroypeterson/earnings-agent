@@ -20,6 +20,12 @@ load_dotenv()
 # Finnhub
 FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY")
 
+# FMP (Financial Modeling Prep) — co-primary earnings source merged with
+# Finnhub for breadth + actuals timeliness. Optional: when unset, the agent
+# degrades to Finnhub-only (logged loudly, not silent). Same key as Coverage
+# Manager's Starter plan.
+FMP_API_KEY = os.getenv("FMP_API_KEY")
+
 # Google Calendar
 GOOGLE_CALENDAR_ID = os.getenv("GOOGLE_CALENDAR_ID")
 GOOGLE_CREDENTIALS_PATH = os.getenv(

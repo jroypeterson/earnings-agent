@@ -54,6 +54,8 @@ from storage import (
     kv_set,
 )
 from finnhub_client import get_client as get_finnhub_client, fetch_earnings, FinnhubError
+from fmp_client import fetch_fmp_earnings, merge_earnings
+from config import FMP_API_KEY
 from calendar_sync import (
     get_calendar_service,
     find_calendar_event,
@@ -204,6 +206,36 @@ def _alert_move_unavailable(rows, as_of: date) -> None:
         )
     except NotificationError as exc:
         logger.error(f"Move-unavailable Slack post failed: {exc}")
+
+
+def _fetch_earnings_source(fh_client, tickers, from_iso: str, to_iso: str) -> list[dict]:
+    """Earnings calendar = Finnhub merged with FMP (co-primary).
+
+    Finnhub keeps date authority on shared names; FMP adds the names Finnhub
+    misses and the actuals Finnhub hasn't ingested yet (see fmp_client). When
+    FMP_API_KEY is unset, or an FMP fetch fails, we degrade to Finnhub-only —
+    logged loudly (never a silent coverage drop). Provider counts are logged
+    every run for observability.
+    """
+    fh = fetch_earnings(fh_client, tickers, from_iso, to_iso)
+    if not FMP_API_KEY:
+        logger.warning(
+            "FMP_API_KEY not set — earnings source is Finnhub-only "
+            "(reduced breadth + slower actuals; set the secret to enable FMP merge)"
+        )
+        return fh
+    try:
+        fmp = fetch_fmp_earnings(tickers, from_iso, to_iso)
+    except Exception as exc:
+        logger.error(
+            f"FMP earnings fetch failed ({exc}) — degrading to Finnhub-only this run"
+        )
+        return fh
+    merged = merge_earnings(fh, fmp)
+    logger.info(
+        f"Earnings sources merged: Finnhub={len(fh)} FMP={len(fmp)} -> {len(merged)} events"
+    )
+    return merged
 
 
 def _run_safeguard(label: str, fn):
@@ -600,8 +632,8 @@ def run(
         except Exception as exc:
             logger.warning(f"Calendar preflight failed; drift detection disabled: {exc}")
 
-    # --- Fetch earnings ---
-    earnings = fetch_earnings(fh_client, all_tickers, from_date, to_date)
+    # --- Fetch earnings (Finnhub + FMP merged) ---
+    earnings = _fetch_earnings_source(fh_client, all_tickers, from_date, to_date)
 
     new_count = 0
     updated_count = 0
@@ -1464,13 +1496,14 @@ def run_check_results(
             logger.warning(f"Calendar service unavailable, skipping calendar updates: {exc}")
 
     # fetch_earnings iterates `while start < end`, so a single-day range returns nothing.
-    # Query one day beyond the target and filter client-side.
+    # Query one day beyond the target and filter client-side. Merged source
+    # (Finnhub + FMP) so FMP's timelier actuals are caught here too.
     to_iso = (target + timedelta(days=1)).isoformat()
     earnings = [
-        e for e in fetch_earnings(fh_client, all_tickers, target_iso, to_iso)
+        e for e in _fetch_earnings_source(fh_client, all_tickers, target_iso, to_iso)
         if e.get("date") == target_iso
     ]
-    logger.info(f"Finnhub returned {len(earnings)} earnings entries for {target_iso}")
+    logger.info(f"Earnings entries for {target_iso}: {len(earnings)}")
 
     new_results: list[ResultRow] = []
     skipped_no_actuals = 0

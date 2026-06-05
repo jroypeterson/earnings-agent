@@ -63,15 +63,35 @@ Getting the earnings date right is the primary goal. The stack of safeguards, fr
 - **Conference-call timestamp tracking (v12 schema).** Reads `earningsCallTimestampStart`/`End` from yfinance and stores in `call_datetime_utc` (with `call_source='yfinance'`). Calendar event description renders `Press release: <timing>` + `Conference call: <weekday Mon DD H:MM ET>` (split-day) or `Conference call: H:MM ET (same day)`. Calendar event itself anchors to the press-release date; the call line is descriptive context. Cross-check classifies "release/call split-day pattern" (yfinance call date matches Finnhub date but release date doesn't) as informational, not a true conflict. Calendar title for reported events: `<TICKER> Rpt'd Earnings` (compact form vs old `[REPORTED] X Earnings Release`).
 - **Slack-reply resolution (`--check-replies`, v9).** When `SLACK_BOT_TOKEN`+`SLACK_CHANNEL_ID` are set, cross-check / unseen / urgent alerts post a summary header + one threaded parent message per row instead of one batched webhook message. Each thread parent advertises a small command grammar (`lock fh|yf|YYYY-MM-DD`, `confirm fh`, `wait`, `snooze Nd|Nw`, `ignore`, `reported`, `ir <url>`, `note <text>`, `help`, `status`); replying in a thread drives DB state via the `--check-replies` poller. State is tracked on the `events` row (`slack_thread_ts`, `slack_question_kind`, `slack_last_reply_ts`, `question_state`, `question_snooze_until`, `question_first_seen`). Webhook batched-message path stays as fallback when bot token is unset, but reply commands then have no effect. Parser: `slack_replies.py`. Web client: `slack_api.py`.
 
+## Earnings calendar source: Finnhub + FMP merged (2026-06-04)
+
+The earnings calendar is a **merge** of Finnhub + FMP (`fmp_client.py`,
+orchestrated by `main._fetch_earnings_source`, used in `run()` and
+`run_check_results`; `run_reconcile_calendar` stays Finnhub-only on purpose so
+date arbitration is unchanged). Decided by a universe-wide bake-off
+(`scripts/compare_providers.py`): FMP (already paid via Coverage Manager's
+Starter plan) covers far more names per window (~+14 T1 / +70 T2 reporters,
+nearly all WITH actuals) and is never behind on actuals (had actuals for 30
+names Finnhub lacked incl. FIVE; reverse = 0). Date accuracy is a wash and FMP
+carries MORE phantoms, so the policy is a merge, not a replacement. Per
+(ticker, reporting-quarter): Finnhub-has-actuals → keep Finnhub, fill gaps from
+FMP; Finnhub-no-actuals but FMP-has-actuals → use FMP's row (fixes the FIVE
+lag); both-upcoming → keep Finnhub's date (date authority; cross-check
+arbitrates conflicts); only-one-source → take it (breadth, mostly FMP). The
+same-quarter phantom guard still collapses FMP's extra phantoms. `FMP_API_KEY`
+unset or an FMP fetch failure → degrade to Finnhub-only, logged loudly (never
+silent). Provider counts logged every run: `Earnings sources merged: Finnhub=X
+FMP=Y -> Z`. Output normalized to Finnhub's event shape (+`source` tag).
+
 ## Source priority hierarchy (date verification)
 
 When sources disagree on the press-release date, the agent's tiebreaker order:
 
-1. **EDGAR 8-K Item 2.02 (post-hoc)** — authoritative SEC filing. Auto-corrects + locks when found.
+1. **EDGAR 8-K Item 2.02 (post-hoc)** — authoritative SEC filing. Auto-corrects, and **locks only when corroborated by yfinance ±1d** (else surfaces for manual `--lock`); blind to foreign filers (6-K, e.g. ICLR).
 2. **IR email alert (forward-looking, `--check-ir-emails`)** — company's own pre-announcement email. Auto-confirms + records Gmail URL.
 3. **IR RSS feed (forward-looking, `--check-announcements`)** — company's own RSS. Auto-confirms + records URL.
-4. **Finnhub date** — primary source for upcoming events.
-5. **yfinance** — release-date validation + hour/call inference (fallback).
+4. **Finnhub + FMP merged calendar** — co-primary for upcoming events; Finnhub holds the date on shared names, FMP adds breadth + actuals.
+5. **yfinance** — release-date validation + hour/call inference (fallback) + the EDGAR auto-lock corroborator.
 6. **Manual `--lock`** — user override of last resort.
 
 ## Gotchas
@@ -129,6 +149,8 @@ All workflows sparse-checkout `jroypeterson/Coverage-Manager/exports/` (the repo
 ## Required secrets (GitHub Actions)
 
 `FINNHUB_API_KEY`, `GOOGLE_CALENDAR_ID`, `GOOGLE_CREDENTIALS_JSON`, `TICKTICK_ACCESS_TOKEN`, `SLACK_WEBHOOK_EARNINGS`.
+
+Strongly recommended: `FMP_API_KEY` (set 2026-06-04) — enables the FMP co-primary earnings merge (breadth + actuals timeliness). Same key as Coverage Manager's Starter plan. When unset the agent degrades to Finnhub-only (logged loudly). Wired into the daily-sync, post-earnings populate/check, and weekly-digest populate steps.
 
 Optional for Slack-reply flow: `SLACK_BOT_TOKEN` (xoxb-...) + `SLACK_CHANNEL_ID` (Cxxx) for the earnings channel. Bot needs `chat:write` and `channels:history` (or `groups:history` for private channels) scopes. When unset, the agent falls back to webhook-only batched messages with no reply support.
 
