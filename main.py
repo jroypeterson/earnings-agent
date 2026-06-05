@@ -3037,55 +3037,62 @@ def _apply_edgar_auto_correction(
     #     event ends up at the new date (the lock would otherwise freeze a
     #     mismatch reconcile can't fix). ---
     old_gcal_id = existing.get("gcal_id")
+    tier = existing.get("tier", 3)
     new_gcal_id = None
-    if old_gcal_id:
+    if tier <= 2:
+        # Tier 1/2 MUST have a calendar event, and the lock will stop
+        # reconcile/daily-sync from creating or moving one afterward — so a
+        # locked Tier 1/2 row with a missing/stale calendar event is
+        # unrecoverable. Require calendar availability NOW and defer (retry) if
+        # it's down, even when there's no old event id to move.
         if not cal_service:
             logger.error(
                 f"EDGAR auto-correction for {ticker}: calendar unavailable — "
                 f"deferring DB move+lock (old row intact, will retry)"
             )
             return False
-        new_gcal_id, created = _move_calendar_event(
-            cal_service, ticker, old_gcal_id, new_event_date,
-            existing.get("event_hour"),
-            quarter=existing.get("quarter"),
-            eps_est=existing.get("eps_estimate"),
-            eps_act=existing.get("eps_actual"),
-            rev_est=existing.get("rev_estimate"),
-            rev_act=existing.get("rev_actual"),
-            tier=existing.get("tier", 3),
-            source_fingerprint=f"{ticker}:{new_event_date}",
-            hour_yf=new_hour_yf, call_dt_iso=new_call_iso,
-        )
-        if not created:
-            logger.error(
-                f"EDGAR auto-correction for {ticker}: calendar create failed — "
-                f"deferring DB move+lock (old row intact, will retry)"
-            )
-            return False
-    elif cal_service:
-        # No existing calendar event to move — create one at the new date.
-        try:
-            new_gcal_id = create_calendar_event(
-                cal_service, GOOGLE_CALENDAR_ID, ticker, new_event_date,
+        if old_gcal_id:
+            new_gcal_id, created = _move_calendar_event(
+                cal_service, ticker, old_gcal_id, new_event_date,
                 existing.get("event_hour"),
                 quarter=existing.get("quarter"),
-                eps_estimate=existing.get("eps_estimate"),
-                eps_actual=existing.get("eps_actual"),
-                revenue_estimate=existing.get("rev_estimate"),
-                revenue_actual=existing.get("rev_actual"),
-                tier=existing.get("tier", 3),
+                eps_est=existing.get("eps_estimate"),
+                eps_act=existing.get("eps_actual"),
+                rev_est=existing.get("rev_estimate"),
+                rev_act=existing.get("rev_actual"),
+                tier=tier,
                 source_fingerprint=f"{ticker}:{new_event_date}",
-                hour_yf=new_hour_yf, call_datetime_utc=new_call_iso,
+                hour_yf=new_hour_yf, call_dt_iso=new_call_iso,
             )
-        except CalendarError as exc:
-            logger.error(
-                f"EDGAR auto-correction for {ticker}: calendar create failed "
-                f"({exc}) — deferring DB move+lock (old row intact, will retry)"
-            )
-            return False
-    # else: no old calendar event AND no cal_service — nothing can get stuck;
-    # move the DB now and a later run creates the calendar event.
+            if not created:
+                logger.error(
+                    f"EDGAR auto-correction for {ticker}: calendar create failed "
+                    f"— deferring DB move+lock (old row intact, will retry)"
+                )
+                return False
+        else:
+            # No existing calendar event to move — create one at the new date.
+            try:
+                new_gcal_id = create_calendar_event(
+                    cal_service, GOOGLE_CALENDAR_ID, ticker, new_event_date,
+                    existing.get("event_hour"),
+                    quarter=existing.get("quarter"),
+                    eps_estimate=existing.get("eps_estimate"),
+                    eps_actual=existing.get("eps_actual"),
+                    revenue_estimate=existing.get("rev_estimate"),
+                    revenue_actual=existing.get("rev_actual"),
+                    tier=tier,
+                    source_fingerprint=f"{ticker}:{new_event_date}",
+                    hour_yf=new_hour_yf, call_datetime_utc=new_call_iso,
+                )
+            except CalendarError as exc:
+                logger.error(
+                    f"EDGAR auto-correction for {ticker}: calendar create failed "
+                    f"({exc}) — deferring DB move+lock (old row intact, will retry)"
+                )
+                return False
+    # else: Tier 3 has no calendar responsibility (no calendar events are ever
+    # created for it), so nothing can get stuck — move+lock the DB directly.
 
     # --- Calendar is at the new date (or N/A). Commit the DB move + lock. ---
     upsert_event(
@@ -3159,8 +3166,11 @@ def run_cross_check(dry_run: bool = False, days_ahead: int = 14):
         f"next {days_ahead} day(s) against yfinance"
     )
 
-    # Set up calendar service once for the auto-correction path. Best-
-    # effort — auto-correction still updates DB if calendar is down.
+    # Set up calendar service once for the auto-correction path. NOTE: EDGAR
+    # auto-correction is calendar-first — for Tier 1/2 it will DEFER (leave the
+    # DB unchanged, retry next run) if the calendar is unavailable, rather than
+    # lock a DB row whose calendar event it couldn't move. So a down calendar
+    # means corrections wait, not that the DB moves without the calendar.
     cal_service = None
     if not dry_run and GOOGLE_CALENDAR_ID:
         try:

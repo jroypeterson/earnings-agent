@@ -1102,6 +1102,47 @@ def test_edgar_auto_correction_success_moves_and_locks(monkeypatch):
     assert deleted == ["OLD"]
 
 
+def test_edgar_auto_correction_tier12_no_calendar_service_defers(monkeypatch):
+    """Tier 1/2 with NO calendar service must defer even when there's no old
+    gcal_id — a locked Tier 1/2 row with no calendar event would be stuck
+    (reconcile only scans existing events)."""
+    import main
+    from storage import init_db, find_existing_event, upsert_event
+
+    conn = init_db(":memory:")
+    upsert_event(conn, "FIVE", "2026-06-02", "amc", None, quarter="2026Q1",
+                 eps_estimate=1.0, reported=False, tier=2, company_name="Five Below")
+    monkeypatch.setattr(main, "fetch_yfinance_hour_for_date", lambda *a, **k: None)
+    monkeypatch.setattr(main, "fetch_yfinance_call_for_date", lambda *a, **k: None)
+
+    result = main._apply_edgar_auto_correction(
+        conn, None, "FIVE", "2026-06-02", "2026-05-27")   # cal_service=None
+    assert result is False
+    old = find_existing_event(conn, "FIVE", "2026-06-02")
+    assert old is not None and old["date_locked"] is False   # untouched, retriable
+    assert find_existing_event(conn, "FIVE", "2026-05-27") is None
+
+
+def test_edgar_auto_correction_tier3_no_calendar_moves_and_locks(monkeypatch):
+    """Tier 3 has no calendar responsibility, so it moves+locks the DB even
+    without a calendar service (nothing can get stuck)."""
+    import main
+    from storage import init_db, find_existing_event, upsert_event
+
+    conn = init_db(":memory:")
+    upsert_event(conn, "ZZZ", "2026-06-02", "amc", None, quarter="2026Q1",
+                 eps_estimate=0.1, reported=False, tier=3, company_name="Zzz")
+    monkeypatch.setattr(main, "fetch_yfinance_hour_for_date", lambda *a, **k: None)
+    monkeypatch.setattr(main, "fetch_yfinance_call_for_date", lambda *a, **k: None)
+
+    result = main._apply_edgar_auto_correction(
+        conn, None, "ZZZ", "2026-06-02", "2026-05-27")   # cal_service=None, T3
+    assert result is True
+    new = find_existing_event(conn, "ZZZ", "2026-05-27")
+    assert new is not None and new["date_locked"] is True
+    assert find_existing_event(conn, "ZZZ", "2026-06-02") is None
+
+
 def test_edgar_date_corroborated_logic():
     """Corroboration gate: only an EDGAR date within ±1d of a yfinance date
     counts as corroborated; a third distinct date or no yfinance does not."""
