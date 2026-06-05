@@ -244,6 +244,7 @@ def test_reconcile_preserves_reported_and_does_not_flip_on_actuals(monkeypatch, 
 
     monkeypatch.setattr(main, "init_db", lambda *a, **k: storage.init_db(db_path))
     monkeypatch.setattr(main, "load_coverage", lambda: [_tkr("WXYZ", tier=1)])
+    monkeypatch.setattr(main, "FINNHUB_API_KEY", "x")
     monkeypatch.setattr(main, "GOOGLE_CALENDAR_ID", "cal")
     monkeypatch.setattr(main, "get_calendar_service",
                         lambda: _ReconcileCal("WXYZ", "OLD", "2026-06-20"))
