@@ -320,3 +320,55 @@ def test_reconcile_preserves_reported_and_does_not_flip_on_actuals(monkeypatch, 
     assert moved["reported"] is False        # NOT flipped by Finnhub actuals
     assert _row(db_path, "WXYZ", "2026-06-20") is None   # old row removed
     assert ("WXYZ", "2026-06-23") in created and "OLD" in deleted  # create-first
+
+
+# --- run_check_results FMP date-correction --------------------------------
+
+def test_check_results_fmp_corrected_date_moves_calendar_first(monkeypatch, tmp_path):
+    """run_check_results must apply the same near-date + calendar-first move as
+    run(): if the stored event is FIVE@2026-06-02 but the merged source reports
+    actuals on 2026-05-27 (FMP correction), it should MOVE the calendar event
+    to 5/27, migrate the DB row there, drop the old row, and mark reported —
+    never strand the old calendar event behind a same-quarter reported row."""
+    db_path = str(tmp_path / "cr.db")
+    c = storage.init_db(db_path)
+    storage.upsert_event(c, ticker="FIVE", event_date="2026-06-02",
+                         event_hour="amc", gcal_id="OLD",
+                         quarter=storage.date_to_quarter("2026-06-02"),
+                         eps_estimate=1.0, reported=False, tier=1,
+                         company_name="Five Below")
+    c.close()
+
+    monkeypatch.setattr(main, "init_db", lambda *a, **k: storage.init_db(db_path))
+    monkeypatch.setattr(main, "load_coverage", lambda: [_tkr("FIVE", tier=1)])
+    monkeypatch.setattr(main, "FINNHUB_API_KEY", "x")
+    monkeypatch.setattr(main, "GOOGLE_CALENDAR_ID", "cal")
+    monkeypatch.setattr(main, "get_finnhub_client", lambda: object())
+    monkeypatch.setattr(main, "get_calendar_service", lambda: object())
+    # A real move (not None) so the result isn't deferred (run_check_results
+    # defers on target-day with no move) and the Slack block builder is happy.
+    monkeypatch.setattr(main, "fetch_post_earnings_move",
+                        lambda *a, **k: SimpleNamespace(move_pct=5.0, window_label="1d"))
+    monkeypatch.setattr(main, "SLACK_WEBHOOK_EARNINGS", None)
+    monkeypatch.setattr(main, "SLACK_WEBHOOK_STATUS", None)
+    monkeypatch.setattr(main, "_fetch_earnings_source", lambda *a, **k: [
+        {"symbol": "FIVE", "date": "2026-05-27", "hour": "amc",
+         "epsEstimate": 1.77, "epsActual": 2.22,
+         "revenueEstimate": 1.2e9, "revenueActual": 1.285e9},
+    ])
+    created, deleted = [], []
+    monkeypatch.setattr(main, "create_calendar_event",
+                        lambda svc, cal, tk, d, h, **k: created.append((tk, d)) or "NEW")
+    monkeypatch.setattr(main, "delete_calendar_event",
+                        lambda svc, cal, gid: deleted.append(gid))
+    notified = []
+    monkeypatch.setattr(main, "notify_results",
+                        lambda conn, rows, when: notified.extend(r.ticker for r in rows) or True)
+
+    main.run_check_results(target_date="2026-05-27", skip_heartbeat=True)
+
+    new = _row(db_path, "FIVE", "2026-05-27")
+    assert new is not None and new["reported"] is True and new["gcal_id"] == "NEW"
+    assert _row(db_path, "FIVE", "2026-06-02") is None          # old row migrated
+    assert ("FIVE", "2026-05-27") in created and "OLD" in deleted  # create-first move
+    assert notified == ["FIVE"]

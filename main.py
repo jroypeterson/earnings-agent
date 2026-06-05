@@ -1715,13 +1715,18 @@ def run_check_results(
 
         event_date = e["date"]
         existing = find_existing_event(conn, ticker, event_date)
+        if not existing:
+            # Actuals can land on a DIFFERENT date than the stored event (e.g.
+            # FMP corrects FIVE 2026-06-02 -> 2026-05-27). Match the near-date
+            # row so we MOVE it (calendar-first) instead of stranding the old
+            # calendar event and writing a duplicate same-quarter reported row.
+            existing = find_event_for_ticker_near_date(conn, ticker, event_date)
         if existing and existing.get("reported"):
             skipped_already_reported += 1
             continue
 
         # Same phantom/duplicate guard as the daily sync: if this quarter is
-        # already reported at a different date, this is a duplicate Finnhub
-        # listing — don't re-post.
+        # already reported at a different date, this is a duplicate listing.
         reported_quarter = find_reported_event_for_quarter(
             conn, ticker, date_to_quarter(event_date)
         )
@@ -1742,12 +1747,25 @@ def run_check_results(
         if rev_est is None and existing:
             rev_est = existing.get("rev_estimate")
 
-        move = fetch_post_earnings_move(ticker, event_date, hour)
+        existing_date = existing.get("event_date") if existing else None
+        gcal_id = existing.get("gcal_id") if existing else None
+        locked = bool(existing and existing.get("date_locked"))
+        # A locked date is a human override — respect it: record at the locked
+        # date and don't move the calendar.
+        record_date = existing_date if (locked and existing_date) else event_date
+        date_moved = bool(existing) and existing_date != record_date
+        quarter_for_event = (
+            (existing.get("quarter") if existing else None)
+            or date_to_quarter(record_date)
+        )
+        source_fingerprint = f"{ticker}:{record_date}"
+
+        move = fetch_post_earnings_move(ticker, record_date, hour)
 
         result = ResultRow(
             ticker=ticker,
             company_name=company_name or "",
-            event_date=event_date,
+            event_date=record_date,
             event_hour=hour,
             eps_actual=eps_act,
             eps_estimate=eps_est,
@@ -1761,21 +1779,45 @@ def run_check_results(
         )
         new_results.append(result)
 
-        # Update Calendar description for Tier 1/2 events with an existing calendar event
-        gcal_id = existing.get("gcal_id") if existing else None
-        if tier <= 2 and gcal_id and cal_service:
-            try:
-                quarter_for_event = (
-                    (existing.get("quarter") if existing else None)
-                    or date_to_quarter(event_date)
+        if date_moved:
+            # Calendar-FIRST move to the real date (mirrors run()'s actuals
+            # branch) so calendar + DB agree and the same-quarter reported row
+            # doesn't block cleanup of a stranded old-date event.
+            if tier <= 2 and gcal_id and cal_service:
+                gcal_id, _ = _move_calendar_event(
+                    cal_service, ticker, gcal_id, record_date, hour,
+                    quarter=quarter_for_event,
+                    eps_est=eps_est, eps_act=eps_act,
+                    rev_est=rev_est, rev_act=rev_act, tier=tier,
+                    source_fingerprint=source_fingerprint,
+                    hour_yf=existing.get("event_hour_yf") if existing else None,
+                    call_dt_iso=existing.get("call_datetime_utc") if existing else None,
                 )
-                source_fingerprint = f"{ticker}:{event_date}"
-                cached_call = (existing.get("call_datetime_utc") if existing else None)
+            # Migrate the DB row to the real date (reported flips later, after
+            # Slack succeeds) and drop the stale-date row.
+            upsert_event(
+                conn, ticker, record_date, hour, gcal_id,
+                quarter=quarter_for_event,
+                eps_estimate=eps_est, eps_actual=eps_act,
+                rev_estimate=rev_est, rev_actual=rev_act, reported=False,
+                tier=tier, company_name=company_name,
+                source_fingerprint=source_fingerprint,
+            )
+            if existing_date and existing_date != record_date:
+                conn.execute(
+                    "DELETE FROM events WHERE ticker = ? AND event_date = ?",
+                    (ticker, existing_date),
+                )
+                conn.commit()
+        elif tier <= 2 and gcal_id and cal_service:
+            # Same date — restamp the calendar description with actuals.
+            try:
+                cached_call = existing.get("call_datetime_utc") if existing else None
                 new_summary, new_description, _ = expected_calendar_state(
                     ticker, hour, eps_est, eps_act, rev_est, rev_act,
                     quarter=quarter_for_event, tier=tier,
                     source_fingerprint=source_fingerprint,
-                    earnings_date=event_date,
+                    earnings_date=record_date,
                     call_datetime_utc=cached_call,
                 )
                 update_calendar_event_description(
@@ -3475,7 +3517,8 @@ def _apply_action(
                 )
                 return (
                     f":warning: Calendar unavailable — *lock not applied* for "
-                    f"`{ticker}` → {new_date}. Will retry on the next sync."
+                    f"`{ticker}` → {new_date}. This reply is now consumed; "
+                    f"reply `lock {new_date}` again once Calendar is back."
                 )
             update_question_state(conn, ticker, new_date, "resolved")
             return None
@@ -3625,19 +3668,21 @@ def run_check_replies(dry_run: bool = False, days_lookback: int = 14):
                 continue
             action = parse_reply(reply.text, ctx)
 
+            # `acked` counts acks ACTUALLY posted (incremented next to each
+            # _ack_in_thread, only when not dry-run) so the summary matches
+            # reality rather than the parser's intent.
             if action.action == ACT_HELP:
                 if not dry_run:
                     _ack_in_thread(thread_ts, format_help(kind), channel_id)
+                    acked += 1
             elif action.action == ACT_STATUS:
                 if not dry_run:
                     _ack_in_thread(thread_ts, format_status(q, today), channel_id)
+                    acked += 1
             elif action.action == ACT_UNKNOWN:
                 if not dry_run:
-                    _ack_in_thread(
-                        thread_ts,
-                        f":x: {action.error}",
-                        channel_id,
-                    )
+                    _ack_in_thread(thread_ts, f":x: {action.error}", channel_id)
+                    acked += 1
             else:
                 if not dry_run:
                     override_ack = _apply_action(
@@ -3652,11 +3697,10 @@ def run_check_replies(dry_run: bool = False, days_lookback: int = 14):
                     ack_text = override_ack if override_ack is not None else action.ack
                     if ack_text:
                         _ack_in_thread(thread_ts, ack_text, channel_id)
+                        acked += 1
 
             latest_ts = reply.ts
             processed += 1
-            if action.ack and action.action != ACT_UNKNOWN:
-                acked += 1
 
         if not dry_run and latest_ts and latest_ts != oldest:
             advance_reply_watermark(conn, q["ticker"], q["event_date"], latest_ts)
