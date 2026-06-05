@@ -788,45 +788,83 @@ def run(
                 )
 
                 gcal_id = existing["gcal_id"]
+                # The actuals may have landed on a DIFFERENT date than the
+                # stored event — e.g. FMP wins with actuals on the real date
+                # while the calendar still sits on Finnhub's earlier estimate
+                # (existing may have been matched by near-date lookup). If so,
+                # MOVE the calendar event (delete + recreate at the real date),
+                # not just restamp the stale-dated one — otherwise Calendar and
+                # SQLite/Slack disagree. Respect a date lock (human override).
+                date_moved = existing["event_date"] != earnings_date
 
                 if not dry_run and gcal_id and cal_service:
-                    try:
-                        new_summary, new_description, _ = expected_calendar_state(
-                            ticker, hour, eps_est, eps_act, rev_est, rev_act,
-                            quarter=quarter, tier=tier,
-                            source_fingerprint=source_fingerprint,
-                            earnings_date=earnings_date,
-                            call_datetime_utc=call_dt_iso,
-                        )
-                        update_calendar_event_description(
-                            cal_service, GOOGLE_CALENDAR_ID,
-                            gcal_id, new_summary, new_description,
-                            ticker=ticker, quarter=quarter,
-                            source_fingerprint=source_fingerprint,
-                            tier=tier,
-                        )
-                        logger.info(f"Updated calendar event with actuals for {ticker}")
-                    except CalendarError as exc:
-                        logger.error(f"Failed to update event for {ticker}: {exc}")
+                    if date_moved and not existing.get("date_locked"):
+                        try:
+                            delete_calendar_event(
+                                cal_service, GOOGLE_CALENDAR_ID, gcal_id
+                            )
+                            gcal_id = create_calendar_event(
+                                cal_service, GOOGLE_CALENDAR_ID, ticker,
+                                earnings_date, hour,
+                                quarter=quarter, eps_estimate=eps_est,
+                                eps_actual=eps_act, revenue_estimate=rev_est,
+                                revenue_actual=rev_act, tier=tier,
+                                source_fingerprint=source_fingerprint,
+                                hour_yf=hour_yf, call_datetime_utc=call_dt_iso,
+                            )
+                            logger.info(
+                                f"Moved calendar event with actuals for {ticker}: "
+                                f"{existing['event_date']} -> {earnings_date}"
+                            )
+                        except CalendarError as exc:
+                            logger.error(f"Failed to move event for {ticker}: {exc}")
+                            # Don't persist a pointer to the (possibly deleted)
+                            # old event — drop the id so the next sync/reconcile
+                            # recreates cleanly at the new date.
+                            gcal_id = None
+                    else:
+                        if date_moved:  # locked: keep date, just restamp
+                            logger.warning(
+                                f"Locked: {ticker} {quarter} actuals on "
+                                f"{earnings_date} but date_locked=1 — not moving "
+                                f"calendar from {existing['event_date']}"
+                            )
+                        try:
+                            new_summary, new_description, _ = expected_calendar_state(
+                                ticker, hour, eps_est, eps_act, rev_est, rev_act,
+                                quarter=quarter, tier=tier,
+                                source_fingerprint=source_fingerprint,
+                                earnings_date=earnings_date,
+                                call_datetime_utc=call_dt_iso,
+                            )
+                            update_calendar_event_description(
+                                cal_service, GOOGLE_CALENDAR_ID,
+                                gcal_id, new_summary, new_description,
+                                ticker=ticker, quarter=quarter,
+                                source_fingerprint=source_fingerprint,
+                                tier=tier,
+                            )
+                            logger.info(f"Updated calendar event with actuals for {ticker}")
+                        except CalendarError as exc:
+                            logger.error(f"Failed to update event for {ticker}: {exc}")
 
                 # Fetch the post-earnings move first so we can decide whether
-                # to mark this row reported (and post to Slack) now, or defer
-                # until the next sweep when the comparison close will exist.
-                # Skip the network call entirely in dry-run mode.
+                # to post Slack now or defer until the next sweep (when the
+                # comparison close will exist). Skip the call in dry-run.
                 move = None
                 if not dry_run:
                     move = fetch_post_earnings_move(ticker, earnings_date, hour)
                 defer_post = _should_defer_post(move, earnings_date, today)
-                # In dry-run we never persist `reported` (it's a preview).
-                # Otherwise, mark reported only when we're actually going
-                # to post Slack this run (i.e. not deferring).
-                mark_reported = (not dry_run) and (not defer_post)
 
+                # Persist the actuals + (possibly new) gcal_id, but DO NOT flip
+                # `reported` yet — that happens only after Slack succeeds
+                # (mirrors run_check_results), so a failed post doesn't leave a
+                # row marked-reported-but-unannounced for the next run to skip.
                 upsert_event(
-                    conn, ticker, earnings_date, hour, existing["gcal_id"],
+                    conn, ticker, earnings_date, hour, gcal_id,
                     quarter=quarter, eps_estimate=eps_est, eps_actual=eps_act,
                     rev_estimate=rev_est, rev_actual=rev_act,
-                    reported=mark_reported,
+                    reported=False,
                     tier=tier, company_name=company_name,
                     source_fingerprint=source_fingerprint,
                     event_hour_yf=hour_yf,
@@ -1171,7 +1209,24 @@ def run(
     # --- Notify on any newly-reported actuals detected during this sync ---
     if sync_results and not dry_run:
         logger.info(f"Notifying on {len(sync_results)} actuals detected during sync")
-        notify_results(conn, sync_results, today)
+        posted = notify_results(conn, sync_results, today)
+        if posted:
+            # Flip reported=1 only AFTER Slack succeeds, so a failed post leaves
+            # the rows unmarked for the next run to retry (mirrors
+            # run_check_results — the actuals branch upserts reported=False).
+            for r in sync_results:
+                conn.execute(
+                    "UPDATE events SET reported = 1, unseen_run_count = 0, "
+                    "updated_at = datetime('now') "
+                    "WHERE ticker = ? AND event_date = ?",
+                    (r.ticker, r.event_date),
+                )
+            conn.commit()
+        else:
+            logger.warning(
+                f"Slack post failed for {len(sync_results)} actuals — left "
+                f"reported=0 for retry next run"
+            )
         # Move-give-up alert: rows whose deferral window expired but yfinance
         # still produced no usable move. These are in sync_results because
         # _should_defer_post returned False (event too old to keep waiting).
@@ -1768,12 +1823,14 @@ def run_edgar_results_fallback(dry_run: bool = False, skip_heartbeat: bool = Fal
     Item 2.02 filing) but for which Finnhub still has no actuals, and alert
     loudly to #earnings.
 
-    Finnhub is the only source feeding `run_check_results`, so when it lags or
-    parks an event on the wrong date, a name reports and the agent says
-    nothing (e.g. FIVE: reported 2026-06-03, Finnhub stuck at 2026-06-02 with
-    no actuals). SEC EDGAR is authoritative and free — an Item 2.02 filing IS
-    the earnings release. We use it as a backstop so important names can't be
-    silently missed (see `feedback_no_silent_failures.md`).
+    Even with the Finnhub+FMP merge feeding `run_check_results`, both are
+    commercial aggregators that can lag or park an event on the wrong date, so
+    a name can report and the agent stay silent (e.g. FIVE: reported
+    2026-06-03, Finnhub stuck at 2026-06-02 with no actuals — the merge fixed
+    that specific case, but the failure mode remains for any name both
+    providers miss). SEC EDGAR is authoritative and free — an Item 2.02 filing
+    IS the earnings release. We use it as the independent backstop so important
+    names can't be silently missed (see `feedback_no_silent_failures.md`).
 
     Alert-only by design: EDGAR confirms *that* a company reported and *when*,
     but the beat/miss figures still come from Finnhub on a later sweep (the
