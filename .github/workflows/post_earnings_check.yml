@@ -101,7 +101,7 @@ jobs:
           FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
           GOOGLE_CALENDAR_ID: ${{ secrets.GOOGLE_CALENDAR_ID }}
           COVERAGE_MANAGER_PATH: ${{ github.workspace }}/coverage-manager
-        run: python main.py --dry-run --no-ticktick
+        run: python main.py --populate-db-only --no-ticktick
 
       - name: Check today's results
         env:
@@ -135,10 +135,11 @@ jobs:
       # EDGAR backstop: after the Finnhub sweeps, flag any Tier 1/2 name that
       # filed an 8-K Item 2.02 (i.e. reported) but for which Finnhub still has
       # no actuals — the FIVE-class silent miss. Alert-only, dedup'd per
-      # ticker+quarter. Best-effort: a failure here shouldn't fail the run.
+      # ticker+quarter. This IS the never-miss layer, so a failure must be
+      # loud: `_run_safeguard` posts a degraded-health alert to #status-reports
+      # and re-raises (NOT continue-on-error).
       - name: EDGAR missed-results backstop
         if: inputs.date == ''
-        continue-on-error: true
         env:
           GOOGLE_CALENDAR_ID: ${{ secrets.GOOGLE_CALENDAR_ID }}
           COVERAGE_MANAGER_PATH: ${{ github.workspace }}/coverage-manager

@@ -71,7 +71,12 @@ Optional:
 ```bash
 pip install -r requirements.txt
 
-# Preview what would happen (no side effects)
+# Preview external writes (Calendar / TickTick / Slack) without making them.
+# NOTE: --dry-run is NOT fully side-effect-free — it still upserts events and
+# records estimate snapshots into the local SQLite DB (the daily/weekly CI
+# jobs depend on this to seed estimates). For that DB-seeding use, prefer the
+# self-documenting alias `--populate-db-only` (identical behaviour). What
+# --dry-run skips: Calendar/TickTick/Slack writes and the `reported` flag.
 python main.py --dry-run
 
 # Full sync: calendar events + TickTick tasks + estimate snapshots

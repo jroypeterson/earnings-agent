@@ -206,6 +206,45 @@ def _alert_move_unavailable(rows, as_of: date) -> None:
         logger.error(f"Move-unavailable Slack post failed: {exc}")
 
 
+def _run_safeguard(label: str, fn):
+    """Run a verify-layer safeguard (cross-check, missed-results backstop) so
+    its failures are LOUD, never silent.
+
+    The cross-check (Finnhub-vs-yfinance + EDGAR auto-correction) and the
+    EDGAR missed-results backstop are exactly the "don't miss / verify dates"
+    layer. Their workflow steps used to be `continue-on-error`, which made a
+    broken safeguard look identical to a clean run. Now: on any exception we
+    post a context-rich degraded-health alert to #status-reports, then
+    re-raise so the workflow step also fails and its `if: failure()` Slack
+    alert fires. The steps no longer set continue-on-error. See
+    `feedback_no_silent_failures.md`.
+    """
+    try:
+        return fn()
+    except SystemExit:
+        # Hard config failure (missing key/coverage). Let it propagate — the
+        # workflow fails and the failure-Slack fires; no "degraded" framing.
+        raise
+    except Exception:
+        import traceback
+        last = traceback.format_exc().strip().splitlines()[-1][:300]
+        webhook = SLACK_WEBHOOK_STATUS or SLACK_WEBHOOK_EARNINGS
+        if webhook:
+            try:
+                post_slack(
+                    webhook,
+                    [{"type": "section", "text": {"type": "mrkdwn", "text": (
+                        f":warning: *Safeguard degraded* — `{label}` raised an error "
+                        f"and did not complete. Date-correctness / missed-results "
+                        f"coverage may be incomplete this run.\n```{last}```"
+                    )}}],
+                    f"Safeguard degraded: {label} — {last}",
+                )
+            except Exception as alert_exc:
+                logger.error(f"Failed to post degraded-safeguard alert: {alert_exc}")
+        raise
+
+
 def _should_defer_post(
     move, event_date_iso: str, today: date,
     max_age_days: int = _POST_DEFER_MAX_AGE_DAYS,
@@ -1646,6 +1685,11 @@ def run_check_results(
 # typical Finnhub backfill lag).
 _MISSED_RESULTS_LOOKBACK_DAYS = 10
 
+# Window for the DB-independent Tier-1 blind sweep: probe every Tier-1 name's
+# 8-K Item 2.02 filings over the last N days, regardless of whether Finnhub
+# ever created a DB row. Catches the worst miss — a name Finnhub never lists.
+_TIER1_SWEEP_DAYS = 6
+
 
 def run_edgar_results_fallback(dry_run: bool = False, skip_heartbeat: bool = False):
     """Detect Tier 1/2 earnings that have happened (confirmed by an SEC 8-K
@@ -1694,6 +1738,9 @@ def run_edgar_results_fallback(dry_run: bool = False, skip_heartbeat: bool = Fal
     )
 
     confirmed_missed: list[dict] = []
+    db_probed: set[str] = set()  # tickers EDGAR-probed in pass 1 (skip in pass 2)
+
+    # --- Pass 1: DB candidates (Finnhub listed the event but no actuals). ---
     for ticker, quarter, event_date, tier, company_name in candidates:
         # Only probe names still in coverage (avoid noise from dropped tickers).
         if ticker not in coverage_map:
@@ -1708,6 +1755,7 @@ def run_edgar_results_fallback(dry_run: bool = False, skip_heartbeat: bool = Fal
             continue
         # Search a small window around the expected date: a few days early
         # (companies sometimes pre-announce) through today.
+        db_probed.add(ticker)
         filing = find_earnings_release_filing(
             ticker, ed - timedelta(days=3), today
         )
@@ -1725,7 +1773,53 @@ def run_edgar_results_fallback(dry_run: bool = False, skip_heartbeat: bool = Fal
             "filing_date": filing.filing_date,
             "filing_url": _edgar_filing_url(ticker, filing.accession),
             "dedup_key": dedup_key,
+            "blind_sweep": False,
         })
+
+    # --- Pass 2: DB-independent Tier-1 blind sweep. ---
+    # Pass 1 can only see names Finnhub already wrote to SQLite. A Tier-1 name
+    # that Finnhub never lists (or parks on a future/wrong date) has no
+    # candidate row and would slip through entirely. Probe EVERY Tier-1
+    # ticker's recent 8-K Item 2.02 filings directly; if one exists and no
+    # reported event covers that quarter, the company reported and we have NO
+    # record — the worst silent miss the "never miss" goal must catch.
+    tier1_tickers = sorted(t.ticker for t in coverage if t.tier == 1)
+    sweep_start = today - timedelta(days=_TIER1_SWEEP_DAYS)
+    swept = 0
+    for ticker in tier1_tickers:
+        if ticker in db_probed:
+            continue  # already handled in pass 1
+        swept += 1
+        try:
+            filing = find_earnings_release_filing(ticker, sweep_start, today)
+        except Exception as exc:
+            logger.debug(f"Tier-1 sweep EDGAR probe failed for {ticker}: {exc}")
+            continue
+        if not filing:
+            continue
+        quarter = date_to_quarter(filing.filing_date)
+        # Already recorded as reported for that quarter ⇒ handled elsewhere.
+        if find_reported_event_for_quarter(conn, ticker, quarter):
+            continue
+        dedup_key = f"missed_results_alerted:{ticker}:{quarter}"
+        if kv_get(conn, dedup_key):
+            continue
+        info = coverage_map.get(ticker)
+        confirmed_missed.append({
+            "ticker": ticker,
+            "company_name": info.company_name if info else "",
+            "quarter": quarter,
+            "event_date": filing.filing_date,
+            "tier": 1,
+            "filing_date": filing.filing_date,
+            "filing_url": _edgar_filing_url(ticker, filing.accession),
+            "dedup_key": dedup_key,
+            "blind_sweep": True,
+        })
+    logger.info(
+        f"EDGAR results fallback: Tier-1 blind sweep probed {swept} name(s) "
+        f"not already covered by DB candidates"
+    )
 
     def _emit_heartbeat():
         if skip_heartbeat or dry_run or not (SLACK_WEBHOOK_STATUS or SLACK_WEBHOOK_EARNINGS):
@@ -1734,7 +1828,8 @@ def run_edgar_results_fallback(dry_run: bool = False, skip_heartbeat: bool = Fal
             SLACK_WEBHOOK_STATUS or SLACK_WEBHOOK_EARNINGS,
             "Missed-results check",
             {
-                "probed": len(candidates),
+                "db_probed": len(candidates),
+                "t1_swept": swept,
                 "confirmed_missed": len(confirmed_missed),
             },
             duration_sec=time.monotonic() - start_ts,
@@ -1813,10 +1908,17 @@ def _build_missed_results_blocks(rows: list[dict], as_of: date) -> list[dict]:
     lines = []
     for r in rows:
         tier_tag = "T1" if r["tier"] == 1 else "T2"
+        # Blind-sweep hits are worse than DB-candidate lags: Finnhub never
+        # even tracked the event, so flag them explicitly.
+        gap = (
+            "Finnhub never listed this event"
+            if r.get("blind_sweep")
+            else "Finnhub actuals still missing"
+        )
         lines.append(
             f"{tier_tag} `{r['ticker']}` {_short_company_name(r['company_name'])} "
             f"({r['quarter']}) — SEC 8-K 2.02 filed *{r['filing_date']}*, "
-            f"Finnhub actuals still missing · <{r['filing_url']}|filing>"
+            f"{gap} · <{r['filing_url']}|filing>"
         )
     body = (
         "These names filed an earnings release with the SEC but Finnhub hasn't "
@@ -2588,6 +2690,66 @@ def _yf_dates_signature(yf_dates: list[date]) -> str:
     return ",".join(d.isoformat() for d in sorted(yf_dates))
 
 
+def _edgar_date_corroborated(
+    edgar_date: str, yf_dates: list[date], tolerance_days: int = 1
+) -> bool:
+    """Whether an EDGAR 8-K Item 2.02 filing date is corroborated as the true
+    press-release date by an independent source (yfinance).
+
+    An Item 2.02 is almost always filed the same day as the release, so the
+    filing date is a strong signal — but it is NOT guaranteed (a company can
+    file the 8-K a day or more after the actual release). Before we LOCK the
+    calendar to the EDGAR date (overriding Finnhub for good), require that an
+    independent source — a yfinance earnings date within ±tolerance — agrees.
+    When EDGAR is a third, uncorroborated date, we still surface it for manual
+    review but do not auto-lock a possibly-wrong date.
+    """
+    try:
+        ed = date.fromisoformat(edgar_date)
+    except ValueError:
+        return False
+    return any(abs((ed - d).days) <= tolerance_days for d in (yf_dates or []))
+
+
+def _alert_uncorroborated_edgar(
+    conn, ticker: str, company_name: str | None,
+    stored_date: str, edgar_date: str, yf_dates: list[date],
+) -> bool:
+    """Surface (to #status-reports) an EDGAR 2.02 whose date disagrees with the
+    stored date and isn't corroborated by yfinance — i.e. the company reported
+    but the exact press-release date is unverified, so we deliberately did NOT
+    auto-lock it. Deduped per ticker+EDGAR-date via kv_store. Returns True when
+    a fresh alert was emitted, False when suppressed as a duplicate.
+    Best-effort: swallows its own post errors.
+    """
+    dedup_key = f"edgar_uncorroborated_alerted:{ticker}:{edgar_date}"
+    if kv_get(conn, dedup_key):
+        return False
+    yf_str = ", ".join(d.isoformat() for d in yf_dates) or "none"
+    name = _short_company_name(company_name or "")
+    text = (
+        f":mag: *EDGAR date needs review* — `{ticker}` {name}\n"
+        f"SEC 8-K Item 2.02 filed *{edgar_date}*, but the stored date is "
+        f"{stored_date} and yfinance ({yf_str}) doesn't corroborate it. The "
+        f"company has reported; the press-release date is unverified, so it was "
+        f"*not auto-locked*. If {edgar_date} is right, pin it with "
+        f"`python main.py --lock {ticker}:{edgar_date}`."
+    )
+    webhook = SLACK_WEBHOOK_STATUS or SLACK_WEBHOOK_EARNINGS
+    if webhook:
+        try:
+            post_slack(
+                webhook,
+                [{"type": "section", "text": {"type": "mrkdwn", "text": text}}],
+                f"EDGAR date needs review: {ticker} 2.02 {edgar_date} vs stored {stored_date}",
+            )
+        except NotificationError as exc:
+            logger.error(f"Uncorroborated-EDGAR alert failed for {ticker}: {exc}")
+            return False
+    kv_set(conn, dedup_key, f"alerted:{date.today().isoformat()}")
+    return True
+
+
 def _apply_edgar_auto_correction(
     conn,
     cal_service,
@@ -2745,6 +2907,7 @@ def run_cross_check(dry_run: bool = False, days_ahead: int = 14):
     suppressed_count = 0
     yf_missing = 0
     edgar_corrections = 0
+    edgar_uncorroborated = 0
     for ticker, event_date, tier, company_name, last_sig, date_confirmed in upcoming:
         yf_dates = fetch_yfinance_earnings_date(ticker)
         if yf_dates is None:
@@ -2781,20 +2944,37 @@ def run_cross_check(dry_run: bool = False, days_ahead: int = 14):
         except Exception as exc:
             logger.debug(f"EDGAR tiebreaker failed for {ticker}: {exc}")
 
-        # When EDGAR contradicts what's stored, atomically move the
-        # event to the EDGAR date and lock it. Skip the rest of cross-
-        # check for this ticker — the new locked row won't show in
-        # subsequent `upcoming` queries.
+        # When EDGAR contradicts what's stored, decide whether to act on it.
+        # EDGAR 8-K Item 2.02 is authoritative that the company REPORTED, but
+        # the filing date is not a guaranteed proxy for the press-release date
+        # (an 8-K can be filed late). So we only auto-move+LOCK the calendar
+        # when the EDGAR date is corroborated by an independent source
+        # (yfinance ±1d). An uncorroborated third date is surfaced for manual
+        # review instead of silently locking a possibly-wrong date.
         if edgar_release and edgar_release != event_date and not dry_run:
-            try:
-                applied = _apply_edgar_auto_correction(
-                    conn, cal_service, ticker, event_date, edgar_release
+            if _edgar_date_corroborated(edgar_release, yf_dates):
+                try:
+                    applied = _apply_edgar_auto_correction(
+                        conn, cal_service, ticker, event_date, edgar_release
+                    )
+                    if applied:
+                        edgar_corrections += 1
+                        continue
+                except Exception as exc:
+                    logger.error(f"EDGAR auto-correction failed for {ticker}: {exc}")
+            else:
+                # EDGAR shows a 2.02 on a date neither corroborated by
+                # yfinance — report happened, but don't auto-lock. Alert once.
+                logger.warning(
+                    f"EDGAR 2.02 for {ticker} filed {edgar_release} differs from "
+                    f"stored {event_date} and is NOT corroborated by yfinance "
+                    f"{[d.isoformat() for d in yf_dates]} — surfacing, not locking"
                 )
-                if applied:
-                    edgar_corrections += 1
-                    continue
-            except Exception as exc:
-                logger.error(f"EDGAR auto-correction failed for {ticker}: {exc}")
+                if _alert_uncorroborated_edgar(
+                    conn, ticker, company_name, event_date, edgar_release, yf_dates
+                ):
+                    edgar_uncorroborated += 1
+                # fall through: still run the normal disagreement path below
 
         if _yfinance_agrees(event_date, yf_dates):
             # Agreement restored — clear any stale alert state
@@ -2863,6 +3043,7 @@ def run_cross_check(dry_run: bool = False, days_ahead: int = 14):
     logger.info(
         f"Cross-check: {len(new_disagreements)} new disagreement(s), "
         f"{edgar_corrections} EDGAR auto-correction(s), "
+        f"{edgar_uncorroborated} uncorroborated-EDGAR alert(s), "
         f"{suppressed_count} suppressed (already alerted), "
         f"{yf_missing} tickers with no yfinance data"
     )
@@ -3236,7 +3417,15 @@ def main():
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="Preview earnings without creating calendar events",
+        help="Preview external writes (Calendar/TickTick/Slack) and skip the "
+             "reported flag. NOT fully side-effect-free: still upserts events + "
+             "estimate snapshots into SQLite.",
+    )
+    parser.add_argument(
+        "--populate-db-only",
+        action="store_true",
+        help="Alias for --dry-run, named for the CI use of seeding the SQLite "
+             "DB with events/estimates without any external writes.",
     )
     parser.add_argument(
         "--backfill",
@@ -3332,6 +3521,12 @@ def main():
     )
     args = parser.parse_args()
 
+    # --populate-db-only is a self-documenting alias for --dry-run (DB writes
+    # only, no external side effects). Fold it in so all downstream checks of
+    # args.dry_run see it.
+    if getattr(args, "populate_db_only", False):
+        args.dry_run = True
+
     if args.list_locks:
         run_list_locks()
     elif args.lock:
@@ -3353,14 +3548,20 @@ def main():
             skip_heartbeat=args.no_heartbeat,
         )
     elif args.check_missed_results:
-        run_edgar_results_fallback(
-            dry_run=args.dry_run,
-            skip_heartbeat=args.no_heartbeat,
+        _run_safeguard(
+            "EDGAR missed-results backstop",
+            lambda: run_edgar_results_fallback(
+                dry_run=args.dry_run,
+                skip_heartbeat=args.no_heartbeat,
+            ),
         )
     elif args.reconcile_calendar:
         run_reconcile_calendar(dry_run=args.dry_run)
     elif args.cross_check:
-        run_cross_check(dry_run=args.dry_run)
+        _run_safeguard(
+            "cross-check (Finnhub vs yfinance + EDGAR)",
+            lambda: run_cross_check(dry_run=args.dry_run),
+        )
     elif args.refresh_descriptions:
         run_refresh_descriptions(dry_run=args.dry_run)
     elif args.check_announcements:

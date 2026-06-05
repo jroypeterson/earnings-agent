@@ -130,10 +130,12 @@ jobs:
 
       # yfinance cross-check. Alert-only: Finnhub has already been applied
       # above; this surfaces two-source disagreements to prompt IR
-      # verification. yfinance is scrapy, so do not fail the workflow if
-      # it misbehaves.
+      # verification. Per-ticker yfinance flakiness is swallowed inside the
+      # script (yf_missing counter), so only a SYSTEMIC failure crashes here —
+      # and that must be loud, not silent (it's the date-correctness layer).
+      # `_run_safeguard` posts a degraded-health alert to #status-reports and
+      # re-raises, so this step is intentionally NOT continue-on-error.
       - name: Cross-check Finnhub vs yfinance (Tier 1/2)
-        continue-on-error: true
         env:
           FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
           COVERAGE_MANAGER_PATH: ${{ github.workspace }}/coverage-manager

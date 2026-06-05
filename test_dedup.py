@@ -861,6 +861,107 @@ def test_reported_row_survives_same_quarter_phantom_upsert():
     assert rq is not None and rq["event_date"] == "2026-05-27"
 
 
+def test_edgar_date_corroborated_logic():
+    """Corroboration gate: only an EDGAR date within ±1d of a yfinance date
+    counts as corroborated; a third distinct date or no yfinance does not."""
+    from main import _edgar_date_corroborated
+    from datetime import date as _date
+    assert _edgar_date_corroborated("2026-06-03", [_date(2026, 6, 3)]) is True
+    assert _edgar_date_corroborated("2026-06-03", [_date(2026, 6, 2)]) is True  # 1d
+    assert _edgar_date_corroborated("2026-06-10", [_date(2026, 6, 2)]) is False  # 3rd date
+    assert _edgar_date_corroborated("2026-06-03", []) is False                   # no yf
+    assert _edgar_date_corroborated("not-a-date", [_date(2026, 6, 3)]) is False
+
+
+def test_run_safeguard_alerts_and_reraises(monkeypatch):
+    """A failing safeguard must post a degraded-health alert AND re-raise so
+    the workflow step fails loud (never silently continue-on-error)."""
+    import main
+    posted = []
+    monkeypatch.setattr(main, "SLACK_WEBHOOK_STATUS", "https://example.invalid/wh")
+    monkeypatch.setattr(main, "SLACK_WEBHOOK_EARNINGS", None)
+    monkeypatch.setattr(main, "post_slack",
+                        lambda wh, blocks, fallback: posted.append((wh, fallback)))
+
+    def boom():
+        raise RuntimeError("yfinance exploded")
+
+    import pytest as _pytest
+    with _pytest.raises(RuntimeError):
+        main._run_safeguard("cross-check", boom)
+    assert len(posted) == 1
+    assert "Safeguard degraded" in posted[0][1]
+    assert "cross-check" in posted[0][1]
+
+
+def test_run_safeguard_passes_through_success(monkeypatch):
+    """No alert, returns the wrapped value when the safeguard succeeds."""
+    import main
+    posted = []
+    monkeypatch.setattr(main, "post_slack",
+                        lambda *a, **k: posted.append(a))
+    assert main._run_safeguard("ok", lambda: 42) == 42
+    assert posted == []
+
+
+def test_populate_db_only_folds_to_dry_run(monkeypatch):
+    """--populate-db-only is an alias that sets dry_run, so no external writes."""
+    import main, sys
+    captured = {}
+    monkeypatch.setattr(main, "run", lambda **kw: captured.update(kw))
+    # Avoid touching coverage/DB — run() is fully stubbed above.
+    monkeypatch.setattr(sys, "argv", ["main.py", "--populate-db-only", "--no-ticktick"])
+    main.main()
+    assert captured.get("dry_run") is True
+
+
+def test_edgar_fallback_blind_sweep_flags_unlisted_tier1(monkeypatch):
+    """The DB-independent Tier-1 sweep must flag a Tier-1 name that filed an
+    8-K 2.02 but has NO DB row (Finnhub never listed it), and must NOT flag a
+    name whose quarter is already recorded as reported."""
+    import main
+    from storage import init_db, upsert_event, date_to_quarter
+    from edgar_client import Filing8K
+    from types import SimpleNamespace
+
+    conn = init_db(":memory:")
+    # BBB already reported this quarter (filing date 2026-06-03 -> 2026Q1).
+    upsert_event(conn, "BBB", "2026-06-03", "amc", None,
+                 quarter=date_to_quarter("2026-06-03"), eps_actual=1.0,
+                 reported=True, tier=1, company_name="Bravo Inc")
+
+    coverage = [
+        SimpleNamespace(ticker="AAA", tier=1, company_name="Alpha Inc"),
+        SimpleNamespace(ticker="BBB", tier=1, company_name="Bravo Inc"),
+        SimpleNamespace(ticker="CCC", tier=1, company_name="Charlie Inc"),
+        SimpleNamespace(ticker="DDD", tier=2, company_name="Delta Inc"),  # T2: not swept
+    ]
+    monkeypatch.setattr(main, "load_coverage", lambda: coverage)
+    monkeypatch.setattr(main, "init_db", lambda *a, **k: conn)
+    monkeypatch.setattr(main, "get_cik", lambda t: "1234567")
+
+    def fake_filing(ticker, start, end):
+        if ticker in ("AAA", "BBB"):
+            return Filing8K(form="8-K", filing_date="2026-06-03",
+                            accession="0001234567-26-000001",
+                            primary_doc_title="Q1", items=("2.02",))
+        return None
+    monkeypatch.setattr(main, "find_earnings_release_filing", fake_filing)
+
+    posted = {}
+    monkeypatch.setattr(main, "SLACK_WEBHOOK_EARNINGS", "https://example.invalid/wh")
+    monkeypatch.setattr(main, "SLACK_WEBHOOK_STATUS", None)
+    monkeypatch.setattr(main, "post_slack",
+                        lambda wh, blocks, fallback: posted.update(fallback=fallback))
+
+    main.run_edgar_results_fallback(dry_run=False, skip_heartbeat=True)
+
+    fb = posted.get("fallback", "")
+    assert "AAA" in fb, "unlisted Tier-1 filer should be flagged"
+    assert "BBB" not in fb, "already-reported quarter should be skipped"
+    assert "CCC" not in fb and "DDD" not in fb
+
+
 def test_coverage_alert_deduplicates_per_day(tmp_path, monkeypatch):
     """Verify kv_store dedup so we don't spam Slack across multiple runs."""
     import main, coverage

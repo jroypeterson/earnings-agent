@@ -41,14 +41,14 @@ jobs:
         run: pip install -r requirements.txt
 
       # Populate a fresh SQLite DB from Finnhub before the digest runs.
-      # --dry-run skips calendar writes, --no-ticktick skips task creation —
-      # we only need the events table populated for the digest query.
+      # --populate-db-only seeds the events table (no Calendar/Slack writes),
+      # --no-ticktick skips task creation — we only need events for the query.
       - name: Populate events from Finnhub
         env:
           FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
           GOOGLE_CALENDAR_ID: ${{ secrets.GOOGLE_CALENDAR_ID }}
           COVERAGE_MANAGER_PATH: ${{ github.workspace }}/coverage-manager
-        run: python main.py --dry-run --no-ticktick
+        run: python main.py --populate-db-only --no-ticktick
 
       - name: Run weekly digest
         env:
