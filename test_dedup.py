@@ -1143,6 +1143,60 @@ def test_edgar_auto_correction_tier3_no_calendar_moves_and_locks(monkeypatch):
     assert find_existing_event(conn, "ZZZ", "2026-06-02") is None
 
 
+def test_slack_lock_to_new_date_moves_calendar_first(monkeypatch):
+    """A Slack `lock <date>` reply that changes the date must move the Calendar
+    event (create-first) before locking the DB — never lock a DB row at a date
+    the Calendar didn't move to."""
+    import main
+    from storage import init_db, find_existing_event, upsert_event
+    from slack_replies import ParsedAction, ACT_LOCK
+    from datetime import date as _date
+
+    conn = init_db(":memory:")
+    upsert_event(conn, "FIVE", "2026-06-02", "amc", "OLD", quarter="2026Q1",
+                 eps_estimate=1.0, reported=False, tier=1, company_name="Five Below")
+    monkeypatch.setattr(main, "fetch_yfinance_hour_for_date", lambda *a, **k: None)
+    monkeypatch.setattr(main, "fetch_yfinance_call_for_date", lambda *a, **k: None)
+    monkeypatch.setattr(main, "create_calendar_event", lambda *a, **k: "NEW")
+    deleted = []
+    monkeypatch.setattr(main, "delete_calendar_event",
+                        lambda svc, cal, gid: deleted.append(gid))
+    monkeypatch.setattr(main, "update_question_state", lambda *a, **k: None)
+
+    q = {"ticker": "FIVE", "event_date": "2026-06-02"}
+    action = ParsedAction(action=ACT_LOCK, payload={"date": "2026-05-27"}, ack="ok")
+    main._apply_action(conn, q, action, _date(2026, 6, 5), cal_service=object())
+
+    new = find_existing_event(conn, "FIVE", "2026-05-27")
+    assert new is not None and new["date_locked"] is True and new["gcal_id"] == "NEW"
+    assert find_existing_event(conn, "FIVE", "2026-06-02") is None
+    assert deleted == ["OLD"]
+
+
+def test_slack_lock_new_date_defers_without_calendar(monkeypatch):
+    """A date-changing Slack lock with no calendar service (Tier 1/2) must NOT
+    lock — defer so it can't create a locked DB/calendar mismatch."""
+    import main
+    from storage import init_db, find_existing_event, upsert_event
+    from slack_replies import ParsedAction, ACT_LOCK
+    from datetime import date as _date
+
+    conn = init_db(":memory:")
+    upsert_event(conn, "FIVE", "2026-06-02", "amc", "OLD", quarter="2026Q1",
+                 eps_estimate=1.0, reported=False, tier=1, company_name="Five Below")
+    monkeypatch.setattr(main, "fetch_yfinance_hour_for_date", lambda *a, **k: None)
+    monkeypatch.setattr(main, "fetch_yfinance_call_for_date", lambda *a, **k: None)
+    monkeypatch.setattr(main, "update_question_state", lambda *a, **k: None)
+
+    q = {"ticker": "FIVE", "event_date": "2026-06-02"}
+    action = ParsedAction(action=ACT_LOCK, payload={"date": "2026-05-27"}, ack="ok")
+    main._apply_action(conn, q, action, _date(2026, 6, 5), cal_service=None)
+
+    old = find_existing_event(conn, "FIVE", "2026-06-02")
+    assert old is not None and old["date_locked"] is False   # not locked, retriable
+    assert find_existing_event(conn, "FIVE", "2026-05-27") is None
+
+
 def test_edgar_date_corroborated_logic():
     """Corroboration gate: only an EDGAR date within ±1d of a yfinance date
     counts as corroborated; a third distinct date or no yfinance does not."""

@@ -2994,8 +2994,13 @@ def _apply_edgar_auto_correction(
     ticker: str,
     old_event_date: str,
     new_event_date: str,
+    reason: str = "EDGAR auto-correction",
 ) -> bool:
     """Move an event from old_event_date to new_event_date and lock it.
+
+    Shared by EDGAR cross-check auto-correction and the Slack `lock <date>`
+    reply (which also needs to move the calendar before locking the DB, or it
+    would create the same stuck locked-mismatch). `reason` only labels logs.
 
     Used when SEC EDGAR Item 2.02 confirms a press-release date that differs
     from what's stored. Because the corrected row is `date_locked=1`,
@@ -3047,7 +3052,7 @@ def _apply_edgar_auto_correction(
         # it's down, even when there's no old event id to move.
         if not cal_service:
             logger.error(
-                f"EDGAR auto-correction for {ticker}: calendar unavailable — "
+                f"{reason} for {ticker}: calendar unavailable — "
                 f"deferring DB move+lock (old row intact, will retry)"
             )
             return False
@@ -3066,7 +3071,7 @@ def _apply_edgar_auto_correction(
             )
             if not created:
                 logger.error(
-                    f"EDGAR auto-correction for {ticker}: calendar create failed "
+                    f"{reason} for {ticker}: calendar create failed "
                     f"— deferring DB move+lock (old row intact, will retry)"
                 )
                 return False
@@ -3087,7 +3092,7 @@ def _apply_edgar_auto_correction(
                 )
             except CalendarError as exc:
                 logger.error(
-                    f"EDGAR auto-correction for {ticker}: calendar create failed "
+                    f"{reason} for {ticker}: calendar create failed "
                     f"({exc}) — deferring DB move+lock (old row intact, will retry)"
                 )
                 return False
@@ -3119,7 +3124,7 @@ def _apply_edgar_auto_correction(
     conn.commit()
 
     logger.info(
-        f"EDGAR auto-correction: {ticker} moved {old_event_date} -> {new_event_date} "
+        f"{reason}: {ticker} moved {old_event_date} -> {new_event_date} "
         f"(date_locked=1)"
     )
     return True
@@ -3434,6 +3439,7 @@ def _apply_action(
     q: dict,
     action: ParsedAction,
     today: date,
+    cal_service=None,
 ) -> None:
     """Apply a ParsedAction to DB state. No-ops on UNKNOWN/HELP."""
     from storage import kv_set  # local import to keep the top of file tidy
@@ -3443,14 +3449,27 @@ def _apply_action(
     if action.action == ACT_LOCK:
         new_date = action.payload["date"]
         if new_date != event_date:
-            # Lock applies to the new date; ensure the row's event_date matches
-            # before flipping the lock. Move the row's event_date if needed.
-            conn.execute(
-                "UPDATE events SET event_date = ?, updated_at = datetime('now') "
-                "WHERE ticker = ? AND event_date = ?",
-                (new_date, ticker, event_date),
+            # Locking a DIFFERENT date is a date move + lock. Route through the
+            # shared calendar-FIRST helper so the Calendar event actually moves
+            # before the DB row is locked — a bare DB update here would lock the
+            # row at the new date while Calendar stayed on the old one, and the
+            # lock then blocks reconcile/daily-sync from ever fixing it (the
+            # same stuck state EDGAR auto-correction guards against).
+            moved = _apply_edgar_auto_correction(
+                conn, cal_service, ticker, event_date, new_date,
+                reason="Slack lock reply",
             )
-            conn.commit()
+            if not moved:
+                # Calendar unavailable/failed (Tier 1/2) — lock NOT applied;
+                # leave the question open so the user retries.
+                logger.warning(
+                    f"Slack lock for {ticker} {event_date}->{new_date} deferred "
+                    f"(calendar move failed); not locking — will retry"
+                )
+                return
+            update_question_state(conn, ticker, new_date, "resolved")
+            return
+        # Locking the CURRENT date: no calendar move needed.
         set_date_lock(conn, ticker, new_date, True)
         update_question_state(conn, ticker, new_date, "resolved")
         return
@@ -3538,6 +3557,16 @@ def run_check_replies(dry_run: bool = False, days_lookback: int = 14):
         conn.close()
         return
 
+    # Calendar service for `lock <date>` replies that MOVE an event (the move
+    # must go through the calendar before the DB row is locked). Best-effort:
+    # if it's down, a date-changing lock defers and the user retries.
+    cal_service = None
+    if not dry_run and GOOGLE_CALENDAR_ID:
+        try:
+            cal_service = get_calendar_service()
+        except Exception as exc:
+            logger.warning(f"Calendar service unavailable for --check-replies: {exc}")
+
     processed = 0
     acked = 0
     snoozed_reopened = 0
@@ -3600,7 +3629,7 @@ def run_check_replies(dry_run: bool = False, days_lookback: int = 14):
                     )
             else:
                 if not dry_run:
-                    _apply_action(conn, q, action, today)
+                    _apply_action(conn, q, action, today, cal_service=cal_service)
                     if action.ack:
                         _ack_in_thread(thread_ts, action.ack, channel_id)
 
