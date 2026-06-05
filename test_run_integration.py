@@ -48,7 +48,7 @@ class _FakeCal:
 
 def _run_env(monkeypatch, tmp_path, *, coverage, events,
              seed=None, cal_events=None, notify_ok=True, move=5.0,
-             find_event=None, create_fails=False):
+             find_event=None, create_fails=False, expect_error=False):
     """Wire all I/O stubs, seed the DB, run main.run(), and return
     (db_path, recorded) where recorded captures calendar + notify activity."""
     db_path = str(tmp_path / "ea.db")
@@ -100,7 +100,14 @@ def _run_env(monkeypatch, tmp_path, *, coverage, events,
     if find_event is not None:
         monkeypatch.setattr(main, "find_calendar_event", find_event)
 
-    main.run(skip_ticktick=True, skip_heartbeat=True)
+    # Capture an expected fail-loud raise so the test can assert on it; never
+    # silently swallow an unexpected one.
+    try:
+        main.run(skip_ticktick=True, skip_heartbeat=True)
+    except Exception as exc:
+        if not expect_error:
+            raise
+        recorded["error"] = exc
     return db_path, recorded
 
 
@@ -162,15 +169,18 @@ def test_run_new_fmp_only_actuals_posts_not_silently_reported(monkeypatch, tmp_p
     assert ("AAPL", "2026-05-01") in rec["created"]
 
 
-def test_run_slack_failure_leaves_reported_zero(monkeypatch, tmp_path):
-    """If the Slack post fails, the actuals row must stay reported=0 for the
-    next run to retry — never marked-reported-but-unannounced."""
+def test_run_slack_failure_raises_and_leaves_reported_zero(monkeypatch, tmp_path):
+    """If the daily-sync Slack post fails, the actuals row must stay reported=0
+    for retry AND run() must raise so the workflow goes red (24h-awareness)."""
     db, rec = _run_env(
         monkeypatch, tmp_path,
         coverage=[_tkr("AAPL", tier=1)],
         events=[_ev("AAPL", "2026-05-01", eps_act=1.6, rev_act=9e10)],
         notify_ok=False,
+        expect_error=True,
     )
+    assert isinstance(rec.get("error"), RuntimeError)
+    assert "results slack post failed" in str(rec["error"]).lower()
     row = _row(db, "AAPL", "2026-05-01")
     assert row is not None and row["reported"] is False
     assert rec["notify"] == ["AAPL"]   # we did attempt the post

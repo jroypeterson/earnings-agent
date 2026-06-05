@@ -78,8 +78,15 @@ jobs:
           #   recent_failure_window_hours: if a failure is newer than the last
           #     success and within this window, the workflow is broken (not
           #     skipped) — don't auto-dispatch; let its own failure alert triage.
+          # The daily workflow fires twice: 11:13 UTC (every day) and 19:23 UTC
+          # (weekday afternoon redundancy). Model BOTH so a skipped PM run is
+          # caught even when the morning run succeeded. The PM entry is checked
+          # at the 21:37 watchdog tick (after the 19:23 trigger, before the next
+          # morning's success would mask it); grace=2 keeps it loop-safe
+          # (a dispatched recovery's success clears it via since-trigger).
           WORKFLOWS=(
-            "Daily Earnings Check|daily_earnings_check.yml|daily|11|6|24"
+            "Daily Earnings Check (AM)|daily_earnings_check.yml|daily|11|6|24"
+            "Daily Earnings Check (PM)|daily_earnings_check.yml|weekday|19|2|24"
             "Reconcile Calendar|reconcile_calendar.yml|weekday|20|6|24"
             "Post-Earnings Results Check|post_earnings_check.yml|weekday|22|5|24"
             "Weekly Earnings Digest|weekly_digest.yml|sun|16|24|168"

@@ -1315,23 +1315,27 @@ def run(
     if sync_results and not dry_run:
         logger.info(f"Notifying on {len(sync_results)} actuals detected during sync")
         posted = notify_results(conn, sync_results, today)
-        if posted:
-            # Flip reported=1 only AFTER Slack succeeds, so a failed post leaves
-            # the rows unmarked for the next run to retry (mirrors
-            # run_check_results — the actuals branch upserts reported=False).
-            for r in sync_results:
-                conn.execute(
-                    "UPDATE events SET reported = 1, unseen_run_count = 0, "
-                    "updated_at = datetime('now') "
-                    "WHERE ticker = ? AND event_date = ?",
-                    (r.ticker, r.event_date),
-                )
-            conn.commit()
-        else:
-            logger.warning(
-                f"Slack post failed for {len(sync_results)} actuals — left "
-                f"reported=0 for retry next run"
+        if not posted:
+            # The beat/miss post is primary user-facing output. Leave the rows
+            # reported=0 (retry next run) AND raise so the workflow goes red and
+            # the if:failure() Slack fires — a silent warning wouldn't satisfy
+            # the 24h-awareness goal (mirrors run_check_results).
+            conn.close()
+            raise RuntimeError(
+                f"Daily-sync results Slack post failed for {len(sync_results)} "
+                f"actual(s) on {today.isoformat()} — left reported=0 for retry"
             )
+        # Flip reported=1 only AFTER Slack succeeds, so a failed post leaves
+        # the rows unmarked for the next run to retry (mirrors
+        # run_check_results — the actuals branch upserts reported=False).
+        for r in sync_results:
+            conn.execute(
+                "UPDATE events SET reported = 1, unseen_run_count = 0, "
+                "updated_at = datetime('now') "
+                "WHERE ticker = ? AND event_date = ?",
+                (r.ticker, r.event_date),
+            )
+        conn.commit()
         # Move-give-up alert: rows whose deferral window expired but yfinance
         # still produced no usable move. These are in sync_results because
         # _should_defer_post returned False (event too old to keep waiting).
