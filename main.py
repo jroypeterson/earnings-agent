@@ -3483,10 +3483,6 @@ def _apply_action(
         set_date_lock(conn, ticker, new_date, True)
         update_question_state(conn, ticker, new_date, "resolved")
         return None
-        # Locking the CURRENT date: no calendar move needed.
-        set_date_lock(conn, ticker, new_date, True)
-        update_question_state(conn, ticker, new_date, "resolved")
-        return
 
     if action.action == ACT_CONFIRM_FH:
         conn.execute(
@@ -3583,6 +3579,7 @@ def run_check_replies(dry_run: bool = False, days_lookback: int = 14):
 
     processed = 0
     acked = 0
+    deferred = 0
     snoozed_reopened = 0
     for q in questions:
         # Snooze expiry → reopen so next detection fires fresh
@@ -3648,7 +3645,10 @@ def run_check_replies(dry_run: bool = False, days_lookback: int = 14):
                     )
                     # An override (e.g. a deferred lock) replaces the parser's
                     # default success ack so we never tell the user a date is
-                    # pinned when it isn't.
+                    # pinned when it isn't — and it means the action did NOT
+                    # mutate state, so track it separately for the summary.
+                    if override_ack is not None:
+                        deferred += 1
                     ack_text = override_ack if override_ack is not None else action.ack
                     if ack_text:
                         _ack_in_thread(thread_ts, ack_text, channel_id)
@@ -3663,7 +3663,8 @@ def run_check_replies(dry_run: bool = False, days_lookback: int = 14):
 
     logger.info(
         f"--check-replies: {processed} reply(ies) processed, "
-        f"{acked} action(s) applied, {snoozed_reopened} snoozed reopened"
+        f"{acked} ack(s) posted ({deferred} deferred), "
+        f"{snoozed_reopened} snoozed reopened"
     )
     conn.close()
 
