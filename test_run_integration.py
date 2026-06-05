@@ -192,6 +192,28 @@ def test_run_same_quarter_phantom_skipped_no_churn(monkeypatch, tmp_path):
     assert _row(db, "ICLR", "2026-06-02") is None
 
 
+def test_run_date_change_moves_calendar_create_first(monkeypatch, tmp_path):
+    """An upcoming event whose date moved (no actuals) goes through the
+    date-change branch, which must now use the create-first helper: new event
+    created at the new date, old one deleted, DB row moved."""
+    q = storage.date_to_quarter("2026-06-20")  # same reporting quarter as 6/23
+    db, rec = _run_env(
+        monkeypatch, tmp_path,
+        coverage=[_tkr("MOVE", tier=1)],
+        seed=[dict(ticker="MOVE", event_date="2026-06-20", event_hour="amc",
+                   gcal_id="OLD", quarter=q, eps_estimate=1.0,
+                   reported=False, tier=1, company_name="Mover")],
+        events=[_ev("MOVE", "2026-06-23", eps_act=None, rev_act=None)],
+        move=None,
+    )
+    assert ("MOVE", "2026-06-23") in rec["created"]
+    assert "OLD" in rec["deleted"]
+    moved = _row(db, "MOVE", "2026-06-23")
+    assert moved is not None and moved["reported"] is False
+    assert _row(db, "MOVE", "2026-06-20") is None
+    assert rec["notify"] == []   # no actuals -> no results post
+
+
 def test_run_calendar_backfill_actuals_not_silently_reported(monkeypatch, tmp_path):
     """No DB row but a calendar event already exists for this date+ticker
     (the backfill path). With actuals present it must post and mark reported

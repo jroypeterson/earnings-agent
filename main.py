@@ -998,17 +998,20 @@ def run(
                     f"({existing.get('event_hour') or 'TBD'} -> {hour or 'TBD'})"
                 )
 
-            # Only manage calendar events for Tier 1 and Tier 2
-            if tier <= 2:
-                if not dry_run and old_gcal_id and cal_service:
-                    try:
-                        delete_calendar_event(cal_service, GOOGLE_CALENDAR_ID, old_gcal_id)
-                        logger.info(f"Deleted old calendar event for {ticker} on {old_date}")
-                    except CalendarError as exc:
-                        logger.warning(f"Could not delete old event for {ticker}: {exc}")
-
-                gcal_id = None
-                if not dry_run and cal_service:
+            # Only manage calendar events for Tier 1 and Tier 2. Use the shared
+            # create-first/delete-second helper so a failed create can't orphan
+            # the event (date move or same-date shape recreate both go through
+            # it). When there's no old event to move, just create.
+            if tier <= 2 and not dry_run and cal_service:
+                if old_gcal_id:
+                    gcal_id = _move_calendar_event(
+                        cal_service, ticker, old_gcal_id, earnings_date, hour,
+                        quarter=quarter, eps_est=eps_est, eps_act=eps_act,
+                        rev_est=rev_est, rev_act=rev_act, tier=tier,
+                        source_fingerprint=source_fingerprint,
+                        hour_yf=hour_yf, call_dt_iso=call_dt_iso,
+                    )
+                else:
                     try:
                         gcal_id = create_calendar_event(
                             cal_service, GOOGLE_CALENDAR_ID, ticker,
@@ -1017,12 +1020,13 @@ def run(
                             eps_actual=eps_act, revenue_estimate=rev_est,
                             revenue_actual=rev_act, tier=tier,
                             source_fingerprint=source_fingerprint,
-                            hour_yf=hour_yf,
-                            call_datetime_utc=call_dt_iso,
+                            hour_yf=hour_yf, call_datetime_utc=call_dt_iso,
                         )
                     except CalendarError as exc:
                         logger.error(f"Failed to create updated event for {ticker}: {exc}")
-                        continue
+                        gcal_id = None
+            elif tier <= 2:
+                gcal_id = old_gcal_id  # dry-run / no cal_service: keep current id
             else:
                 gcal_id = existing.get("gcal_id")
 
@@ -1072,30 +1076,15 @@ def run(
                                 f"Stale calendar event for {ticker}: "
                                 f"calendar={cal_start_date}, Finnhub={earnings_date}. Recreating."
                             )
-                            try:
-                                delete_calendar_event(
-                                    cal_service, GOOGLE_CALENDAR_ID, gcal_id
-                                )
-                            except CalendarError as exc:
-                                logger.warning(
-                                    f"Could not delete stale event for {ticker}: {exc}"
-                                )
-                            gcal_id = None
-                            try:
-                                gcal_id = create_calendar_event(
-                                    cal_service, GOOGLE_CALENDAR_ID, ticker,
-                                    earnings_date, hour,
-                                    quarter=quarter, eps_estimate=eps_est,
-                                    eps_actual=eps_act, revenue_estimate=rev_est,
-                                    revenue_actual=rev_act, tier=tier,
-                                    source_fingerprint=source_fingerprint,
-                                    hour_yf=hour_yf,
-                                    call_datetime_utc=call_dt_iso,
-                                )
-                            except CalendarError as exc:
-                                logger.error(
-                                    f"Failed to recreate event for {ticker}: {exc}"
-                                )
+                            # Create-first/delete-second so a failed create
+                            # can't orphan the event.
+                            gcal_id = _move_calendar_event(
+                                cal_service, ticker, gcal_id, earnings_date, hour,
+                                quarter=quarter, eps_est=eps_est, eps_act=eps_act,
+                                rev_est=rev_est, rev_act=rev_act, tier=tier,
+                                source_fingerprint=source_fingerprint,
+                                hour_yf=hour_yf, call_dt_iso=call_dt_iso,
+                            )
                             # No DB row but a calendar event existed (backfill).
                             # If actuals are present this is a just-reported
                             # result — route through the shared path so it gets
@@ -1152,29 +1141,20 @@ def run(
                         )
                         if drift == "shape":
                             if not dry_run:
-                                try:
-                                    delete_calendar_event(
-                                        cal_service, GOOGLE_CALENDAR_ID, gcal_id
-                                    )
-                                    gcal_id = create_calendar_event(
-                                        cal_service, GOOGLE_CALENDAR_ID, ticker,
-                                        earnings_date, hour,
-                                        quarter=quarter, eps_estimate=eps_est,
-                                        eps_actual=eps_act, revenue_estimate=rev_est,
-                                        revenue_actual=rev_act, tier=tier,
-                                        source_fingerprint=source_fingerprint,
-                                        hour_yf=hour_yf,
-                                        call_datetime_utc=call_dt_iso,
-                                    )
-                                    logger.info(
-                                        f"Recreated calendar event for {ticker} "
-                                        f"{quarter} (shape drift): "
-                                        f"{cal_event.get('summary')!r} -> {exp_summary!r}"
-                                    )
-                                except CalendarError as exc:
-                                    logger.warning(
-                                        f"Could not recreate stale event for {ticker}: {exc}"
-                                    )
+                                # Same-date shape recreate via the create-first
+                                # helper (no orphan on create failure).
+                                gcal_id = _move_calendar_event(
+                                    cal_service, ticker, gcal_id, earnings_date,
+                                    hour, quarter=quarter, eps_est=eps_est,
+                                    eps_act=eps_act, rev_est=rev_est,
+                                    rev_act=rev_act, tier=tier,
+                                    source_fingerprint=source_fingerprint,
+                                    hour_yf=hour_yf, call_dt_iso=call_dt_iso,
+                                )
+                                logger.info(
+                                    f"Recreated calendar event for {ticker} "
+                                    f"{quarter} (shape drift)"
+                                )
                             else:
                                 logger.info(
                                     f"  [dry-run] Would recreate {ticker} {quarter} "
@@ -2522,18 +2502,14 @@ def run_refresh_descriptions(dry_run: bool = False, days_ahead: int = 90, days_b
             if drift == "shape":
                 # update_calendar_event_description doesn't touch start/end,
                 # so a TBD->amc/bmo or all-day<->timed transition needs a
-                # full recreate to get the right time block.
-                delete_calendar_event(cal_service, GOOGLE_CALENDAR_ID, ev["id"])
-                new_gcal_id = create_calendar_event(
-                    cal_service, GOOGLE_CALENDAR_ID, ticker,
-                    event_date, hour,
-                    quarter=quarter_for_event,
-                    eps_estimate=eps_est, eps_actual=eps_act,
-                    revenue_estimate=rev_est, revenue_actual=rev_act,
-                    tier=tier_for_event,
+                # full recreate to get the right time block. Create-first/
+                # delete-second (shared helper) so a failed create can't orphan.
+                new_gcal_id = _move_calendar_event(
+                    cal_service, ticker, ev["id"], event_date, hour,
+                    quarter=quarter_for_event, eps_est=eps_est, eps_act=eps_act,
+                    rev_est=rev_est, rev_act=rev_act, tier=tier_for_event,
                     source_fingerprint=source_fingerprint,
-                    hour_yf=hour_yf,
-                    call_datetime_utc=call_dt_iso,
+                    hour_yf=hour_yf, call_dt_iso=call_dt_iso,
                 )
                 # Persist the recreated event's id so the DB stops pointing at
                 # the just-deleted event. Without this, the DB keeps the stale
