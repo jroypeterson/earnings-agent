@@ -216,10 +216,13 @@ jobs:
               "$WEBHOOK"
           fi
 
-      # Out-of-band email backup. The watchdog has no repo checkout, so send
-      # inline via the runner's python3 (stdlib smtplib). Covers both a
-      # watchdog crash AND a stale-detected-but-Slack-down case (the stale
-      # alert's curl runs under `set -e`, so a Slack outage fails the step).
+      # Out-of-band email backup for a watchdog CRASH (the watch step itself
+      # erroring). Sent inline via the runner's python3 (stdlib smtplib) since
+      # the watchdog has no repo checkout. NOTE: a stale-detected-but-Slack-down
+      # case is handled inside the watch step (it catches the curl failure and
+      # emails the stale lines there); this step is the crash backstop, plus
+      # the case where the watch step exits non-zero because a stale alert
+      # reached no channel at all.
       - name: Email backup on watchdog failure
         if: failure()
         env:
