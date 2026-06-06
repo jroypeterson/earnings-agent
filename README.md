@@ -107,7 +107,9 @@ Four workflows ship in `.github/workflows/`:
 | `weekly_digest.yml` | `0 16 * * 0` | Sunday ~12 PM | Weekly digest to Slack |
 | `post_earnings_check.yml` | `0 22 * * 1-5` | Weekday ~6 PM | Results sweep + AMC overnight catch-up |
 
-All workflows clone the public [Coverage-Manager](https://github.com/jroypeterson/Coverage-Manager) repo (sparse checkout of `exports/`). DB-writing workflows share `concurrency: earnings-db-writer` so they serialize on the shared `earnings-db` artifact. Every workflow has an `if: failure()` step that posts to Slack on non-zero exit.
+All workflows clone the public [Coverage-Manager](https://github.com/jroypeterson/Coverage-Manager) repo (sparse checkout of `exports/`). DB-writing workflows share `concurrency: earnings-db-writer` so they serialize on the shared `earnings-db` artifact. A `Workflow Watchdog` (`watchdog.yml`) runs 3×/day and is schedule-aware — it alerts (and auto-dispatches recovery) when a workflow's most-recent *expected* run hasn't succeeded, so a skipped weekday run is caught within ~24h without weekend false alarms.
+
+**On failure, every workflow notifies two channels:** an `if: failure()` step posts to Slack, then an **inline email backup** (Gmail SMTP, stdlib `python3` — independent of the repo checkout) emails `ALERT_EMAIL_TO`. This is the out-of-band path for when Slack itself is down. Because every critical alert-delivery failure now *raises* (results, missed-results, cross-check, reconcile, urgent, unseen), an undelivered alert turns the run red → both channels fire. Email is opt-in: set the `GMAIL_*` secrets below, or it no-ops.
 
 In your repo → Settings → Secrets and variables → Actions, add:
 
@@ -119,6 +121,11 @@ In your repo → Settings → Secrets and variables → Actions, add:
 | `GOOGLE_CREDENTIALS_JSON` | all | Entire contents of `credentials.json` |
 | `TICKTICK_ACCESS_TOKEN` | daily | TickTick OAuth token (optional) |
 | `SLACK_WEBHOOK_EARNINGS` | all | Slack incoming webhook for `#earnings` |
+| `FMP_API_KEY` | all | FMP key (co-primary earnings merge; degrades to Finnhub-only if unset) |
+| `GMAIL_ADDRESS` | all (`if:failure()`) | Gmail address for the out-of-band failure-email backup (optional) |
+| `GMAIL_APP_PASSWORD` | all (`if:failure()`) | Gmail app password for the failure-email backup (optional) |
+
+The failure-email recipient defaults to `jroypeterson+alerts@gmail.com` (set per-workflow as `ALERT_EMAIL_TO`).
 
 Then go to repo → Actions tab → enable workflows.
 

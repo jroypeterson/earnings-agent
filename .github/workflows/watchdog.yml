@@ -151,41 +151,50 @@ jobs:
             exit 0
           fi
 
-          if [ -z "$WEBHOOK" ]; then
-            echo "No Slack webhook configured; skipping alert."
-            exit 0
+          # Build the alert body once (shared by Slack + the email backup).
+          body_text=$(printf '%s\n' "${stale_lines[@]}")
+
+          # Try Slack first (if configured). Track whether it actually delivered.
+          slack_ok=false
+          if [ -n "$WEBHOOK" ]; then
+            payload=$(jq -nc \
+              --arg header ":alarm_clock: *Workflow watchdog* — stale workflows detected" \
+              --arg body "$body_text" \
+              --arg footer "Watchdog run: $RUN_URL" \
+              '{text: ($header + "\n" + $body + "\n" + $footer)}')
+            if curl -sS -X POST -H 'Content-Type: application/json' \
+                 --data "$payload" "$WEBHOOK" >/dev/null; then
+              slack_ok=true
+            else
+              echo "Slack post of stale alert failed"
+            fi
+          else
+            echo "No Slack webhook configured"
           fi
 
-          # Build a single Slack message via jq for safe escaping.
-          body_text=$(printf '%s\n' "${stale_lines[@]}")
-          payload=$(jq -nc \
-            --arg header ":alarm_clock: *Workflow watchdog* — stale workflows detected" \
-            --arg body "$body_text" \
-            --arg footer "Watchdog run: $RUN_URL" \
-            '{text: ($header + "\n" + $body + "\n" + $footer)}')
-
-          # Post to Slack; if that delivery FAILS (e.g. Slack is down), email
-          # the stale detail out-of-band so a stale workflow isn't missed just
-          # because Slack is also down. The stale lines are passed as a single
-          # env var (STALE_BODY) and the message is built in Python — avoids a
-          # multi-line YAML literal (which would break the block scalar).
-          if ! curl -sS -X POST -H 'Content-Type: application/json' \
-                --data "$payload" "$WEBHOOK" >/dev/null; then
-            echo "Slack post of stale alert failed — emailing stale detail"
+          # If Slack didn't deliver (UNSET or FAILED), email out-of-band so a
+          # detected stale workflow is never silently dropped. The stale lines
+          # are passed as one env var (STALE_BODY); the body is built in Python
+          # (avoids a multi-line YAML literal). If email ALSO can't send (no
+          # Gmail creds), exit non-zero so the run goes red — a stale workflow
+          # must reach SOME channel.
+          if ! $slack_ok; then
+            echo "Emailing stale detail out-of-band (Slack unavailable/failed)"
             STALE_BODY="$body_text" python3 - <<'PY'
-          import os, smtplib
+          import os, smtplib, sys
           from email.mime.text import MIMEText
           addr = os.environ.get("GMAIL_ADDRESS", "").strip()
           pw = os.environ.get("GMAIL_APP_PASSWORD", "").strip()
           to = os.environ.get("ALERT_EMAIL_TO", "jroypeterson+alerts@gmail.com").strip()
           if not addr or not pw:
-              print("watchdog stale email: GMAIL creds unset - skipping"); raise SystemExit(0)
-          body = ("Slack delivery of the watchdog staleness alert FAILED "
-                  "(Slack may be down).\n\nStale workflows:\n"
+              print("watchdog stale alert reached NO channel: Slack unavailable "
+                    "and GMAIL creds unset"); sys.exit(1)
+          body = ("The watchdog detected STALE workflow(s) and Slack was "
+                  "unavailable or delivery failed.\n\nStale workflows:\n"
                   + os.environ.get("STALE_BODY", "")
                   + "\n\nWatchdog run: " + os.environ.get("RUN_URL", ""))
           msg = MIMEText(body, "plain")
-          msg["Subject"] = "earnings_agent: stale workflow(s) + Slack delivery failed"
+          msg["Subject"] = "earnings_agent: stale workflow(s) detected"
           msg["From"] = addr; msg["To"] = to
           with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=30) as s:
               s.login(addr, pw); s.send_message(msg)
