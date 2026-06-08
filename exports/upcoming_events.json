@@ -1,42 +1,15 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-06-07T12:51:09Z",
+  "generated_at": "2026-06-08T14:54:02Z",
   "window": {
-    "start": "2026-06-05",
-    "end": "2026-06-21"
+    "start": "2026-06-06",
+    "end": "2026-06-22"
   },
   "counts": {
-    "events": 14
+    "events": 12
   },
   "events": [
-    {
-      "ticker": "CFLT",
-      "event_date": "2026-06-05",
-      "event_hour": "amc",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Confluent, Inc."
-    },
-    {
-      "ticker": "DAWN",
-      "event_date": "2026-06-05",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Day One Biopharmaceuticals Inc"
-    },
-    {
-      "ticker": "ONTF",
-      "event_date": "2026-06-05",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "ON24 Inc"
-    },
     {
       "ticker": "CELU",
       "event_date": "2026-06-08",
@@ -135,6 +108,15 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Rafael Holdings Inc"
+    },
+    {
+      "ticker": "GELS",
+      "event_date": "2026-06-22",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Gelteq Ltd"
     }
   ]
 }
