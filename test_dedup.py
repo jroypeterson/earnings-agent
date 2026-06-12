@@ -782,7 +782,8 @@ def test_coverage_freshness_manifest_stale(tmp_path, monkeypatch):
     import coverage
     exports = tmp_path / "exports"
     exports.mkdir()
-    old = (datetime.now(timezone.utc) - timedelta(days=10))
+    # A genuinely missed week pushes age well past the 10d threshold.
+    old = (datetime.now(timezone.utc) - timedelta(days=14))
     (exports / "manifest.json").write_text(
         '{"schema_version": 2, "generated_at": "%s"}' %
         old.strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -791,7 +792,32 @@ def test_coverage_freshness_manifest_stale(tmp_path, monkeypatch):
     h = coverage.compute_coverage_freshness()
     assert h.stale
     assert h.source == "manifest"
-    assert h.age_days > 7
+    assert h.age_days > coverage.COVERAGE_STALENESS_DAYS
+
+
+def test_coverage_freshness_weekly_drift_not_stale(tmp_path, monkeypatch):
+    """Regression for the 2026-06-12 false alert.
+
+    CM publishes weekly (Fridays), so a healthy manifest age oscillates 0–7
+    days. The staleness check runs on the morning daily sync / watchdog,
+    BEFORE Friday's (often evening) publish — so on Friday morning, exports
+    are ~7+ days old yet perfectly healthy. An 8-day-old manifest (a normal
+    slightly-late weekly publish) must NOT be flagged stale; only a missed
+    week (>10d) should alarm.
+    """
+    import coverage
+    exports = tmp_path / "exports"
+    exports.mkdir()
+    drifted = (datetime.now(timezone.utc) - timedelta(days=8))
+    (exports / "manifest.json").write_text(
+        '{"schema_version": 3, "generated_at": "%s"}' %
+        drifted.strftime("%Y-%m-%dT%H:%M:%SZ")
+    )
+    monkeypatch.setattr(coverage, "COVERAGE_MANAGER_PATH", str(tmp_path))
+    h = coverage.compute_coverage_freshness()
+    assert not h.stale
+    assert h.source == "manifest"
+    assert 7 < h.age_days < coverage.COVERAGE_STALENESS_DAYS
 
 
 def test_coverage_freshness_falls_back_to_mtime(tmp_path, monkeypatch):

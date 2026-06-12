@@ -34,11 +34,19 @@ from config import COVERAGE_MANAGER_PATH, TIER_2_SECTORS, TICKERS_FILE
 logger = logging.getLogger("earnings_agent")
 
 
-# Coverage Manager publishes weekly (Friday Windows Task Scheduler). One
-# missed publish = 7d behind; alert at >7d so two consecutive misses are
-# loud. CM's manifest.json carries `generated_at` (ISO Z); fall back to
-# universe.csv mtime if the manifest is missing.
-COVERAGE_STALENESS_DAYS = 7
+# Coverage Manager publishes weekly (Friday Windows Task Scheduler), so a
+# healthy manifest age oscillates 0–7 days. The threshold must give that
+# cadence slack: Friday's publish time drifts (06-05 landed ~11:00 UTC,
+# 06-12 ~20:40 UTC) and the staleness check runs on the morning daily sync
+# (11:13 UTC) + watchdog (13:37 UTC) — i.e. BEFORE Friday's evening publish.
+# A flat 7d threshold therefore false-alarmed every Friday morning for the
+# hours between crossing 7.0d and that day's publish (the 2026-06-12 alert).
+# 10d cleanly separates a normal/slightly-late weekly publish (≤~7.5d) from a
+# genuinely missed week (reaches 10d ~3 days after the skipped Friday — still
+# a within-72h alert), which is the "a real miss is loud" intent. CM's
+# manifest.json carries `generated_at` (ISO Z); fall back to universe.csv
+# mtime if the manifest is missing.
+COVERAGE_STALENESS_DAYS = 10
 
 
 @dataclass

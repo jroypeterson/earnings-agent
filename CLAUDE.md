@@ -175,7 +175,7 @@ Same keys as above (minus the JSON-blob form of Google creds — local uses the 
 - `finnhub_client.py` — Finnhub earnings calendar with adaptive chunk splitting + fail-fast.
 - `storage.py` — SQLite schema (v12) + non-destructive migrations + upsert/lock helpers.
 - `calendar_sync.py` — Google Calendar CRUD, deduplication, description rendering (Press release / Conference call lines), drift detection (`calendar_event_drift_kind` returns 'fresh'/'text'/'shape').
-- `coverage.py` — loads ticker universe from Coverage Manager exports + freshness check (`compute_coverage_freshness`, alerts on staleness >7d).
+- `coverage.py` — loads ticker universe from Coverage Manager exports + freshness check (`compute_coverage_freshness`, alerts on staleness >`COVERAGE_STALENESS_DAYS`=10d). Threshold is 10, not 7: CM publishes weekly so healthy age oscillates 0–7d, and the check runs (morning daily sync / watchdog) before Friday's often-evening publish — a flat 7d false-alarmed every Friday morning (2026-06-12). 10d still catches a genuinely missed week within ~72h.
 - `digest.py`, `notifications.py` — weekly digest + Slack Block Kit builders (cross-check, reconcile, unseen, urgent, heartbeat). Cross-check verdict logic includes EDGAR auto-correction recognition + split-day pattern downgrade.
 - `ticktick.py` — TickTick task CRUD.
 - `market_data.py` — yfinance wrappers. `Ticker.info`-based earnings timestamps (release + call) preserve time-of-day; `Ticker.calendar` strips it. Includes `fetch_yfinance_earnings_timestamps`, `fetch_yfinance_hour_for_date`, `fetch_yfinance_call_for_date`, `infer_hour_from_datetime` (NYSE session boundaries).
