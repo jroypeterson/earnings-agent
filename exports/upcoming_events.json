@@ -1,24 +1,15 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-06-11T21:33:44Z",
+  "generated_at": "2026-06-12T14:16:39Z",
   "window": {
-    "start": "2026-06-09",
-    "end": "2026-06-25"
+    "start": "2026-06-10",
+    "end": "2026-06-26"
   },
   "counts": {
     "events": 12
   },
   "events": [
-    {
-      "ticker": "ADBE",
-      "event_date": "2026-06-11",
-      "event_hour": "amc",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Adobe Inc"
-    },
     {
       "ticker": "HCM",
       "event_date": "2026-06-11",
@@ -30,7 +21,7 @@
     },
     {
       "ticker": "REPL",
-      "event_date": "2026-06-11",
+      "event_date": "2026-06-12",
       "event_hour": "",
       "tier": 3,
       "date_confirmed": false,
@@ -108,6 +99,15 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "FedEx Freight Corporation"
+    },
+    {
+      "ticker": "NNOX",
+      "event_date": "2026-06-25",
+      "event_hour": "",
+      "tier": 2,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Nano-X Imaging Ltd."
     },
     {
       "ticker": "TTRX",
