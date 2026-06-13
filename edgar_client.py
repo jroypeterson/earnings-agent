@@ -15,6 +15,7 @@ is derived from config.py.
 from __future__ import annotations
 
 import json
+import re
 import time
 import logging
 from dataclasses import dataclass
@@ -224,6 +225,118 @@ def find_earnings_release_filing(
     days_back = max(7, (today - window_start).days + 7)
     filings = fetch_8k_filings(ticker, days_back=days_back, earnings_only=True)
     for f in filings:
+        try:
+            fd = date.fromisoformat(f.filing_date)
+        except ValueError:
+            continue
+        if window_start <= fd <= window_end:
+            return f
+    return None
+
+
+# ---------------------------------------------------------------------------
+# 6-K fetch (foreign private issuers — no 8-K, no Item 2.02 taxonomy)
+# ---------------------------------------------------------------------------
+
+# Foreign private issuers (ICLR, etc.) furnish results on a 6-K, which carries
+# NO `items` codes and a generic "6-K" primaryDocDescription — so the 8-K
+# Item 2.02 path is blind to them, leaving phantom/flapping Finnhub dates
+# uncorrected. The one usable metadata signal is the primaryDocument FILENAME,
+# which issuers tend to name after the content (e.g. ICON: `iconplc6kq425.htm`,
+# `iconearningscall…htm`). These heuristics classify a 6-K's filename as
+# likely-earnings; a hit is treated as a *signal*, never proof — it flows
+# through the SAME yfinance ±1d corroboration gate as the 8-K path before any
+# auto-lock, and is surfaced (not locked) when uncorroborated.
+_RESULTS_6K_POSITIVE = re.compile(
+    r"(earnings|results|quarterly|interim[-_ ]?report|"
+    r"6kq[1-4]|q[1-4][-_ ]?\d{2}|[1-4]q[-_ ]?\d{2}|\bh[12][-_ ]?\d{2}\b|fy\d{2})",
+    re.IGNORECASE,
+)
+_RESULTS_6K_EXCLUDE = re.compile(
+    r"(non[-_ ]?reliance|restat|prospectus|annual[-_ ]?general|\bagm\b|dividend|"
+    r"conference|fireside|particip|loan|offering|registration|notes[-_ ]?due|"
+    r"buyback|repurchase|appoint|director|schedule|provides[-_ ]?upd|announceme?n?t?s?$)",
+    re.IGNORECASE,
+)
+
+
+def is_likely_earnings_6k_doc(primary_document: str, primary_doc_description: str = "") -> bool:
+    """Heuristic: does this 6-K's filename/description look like an earnings release?
+
+    Requires a positive earnings token AND no disqualifying token (a conference,
+    dividend, non-reliance notice, etc.). Pure + side-effect-free so it is unit
+    tested against real issuer filenames. Deliberately conservative: a miss just
+    means no auto-correct for that filing; a false hit is caught by the
+    downstream corroboration gate before anything is locked."""
+    blob = f"{primary_document or ''} {primary_doc_description or ''}"
+    if _RESULTS_6K_EXCLUDE.search(blob):
+        return False
+    return bool(_RESULTS_6K_POSITIVE.search(blob))
+
+
+def fetch_6k_filings(ticker: str, days_back: int = 400) -> list[Filing8K]:
+    """Return recent 6-K filings whose filename looks like an earnings release.
+
+    Mirrors `fetch_8k_filings` but for foreign private issuers: 6-Ks have no
+    `items`, so the earnings filter is the `is_likely_earnings_6k_doc` filename
+    heuristic instead of an Item 2.02 match. Returns Filing8K records (form
+    "6-K"), most-recent-first."""
+    cik = get_cik(ticker)
+    if not cik:
+        return []
+
+    data = _get_json(f"https://data.sec.gov/submissions/CIK{cik}.json")
+    if not data:
+        return []
+
+    recent = data.get("filings", {}).get("recent", {})
+    forms = recent.get("form", [])
+    dates = recent.get("filingDate", [])
+    accs = recent.get("accessionNumber", [])
+    descs = recent.get("primaryDocDescription", [])
+    docs = recent.get("primaryDocument", [])
+
+    cutoff = date.today() - timedelta(days=days_back)
+    out: list[Filing8K] = []
+    for i, form in enumerate(forms):
+        if form != "6-K":
+            continue
+        try:
+            fd = date.fromisoformat(dates[i])
+        except (ValueError, IndexError):
+            continue
+        if fd < cutoff:
+            continue
+        doc = docs[i] if i < len(docs) else ""
+        desc = descs[i] if i < len(descs) else ""
+        if not is_likely_earnings_6k_doc(doc, desc):
+            continue
+        out.append(Filing8K(
+            form=form,
+            filing_date=dates[i],
+            accession=accs[i] if i < len(accs) else "",
+            primary_doc_title=doc or desc,
+            items=(),
+        ))
+
+    out.sort(key=lambda f: f.filing_date, reverse=True)
+    return out
+
+
+def find_results_6k(
+    ticker: str, window_start: date, window_end: date
+) -> Filing8K | None:
+    """Foreign-filer analog of `find_earnings_release_filing`: the most recent
+    earnings-looking 6-K filed in [window_start, window_end], or None.
+
+    The 6-K date is a weaker signal than an 8-K Item 2.02 (no SEC item code
+    proves it's the results), so callers MUST keep it behind the yfinance
+    corroboration gate — never auto-lock on a 6-K alone."""
+    if window_end < window_start:
+        return None
+    today = date.today()
+    days_back = max(7, (today - window_start).days + 7)
+    for f in fetch_6k_filings(ticker, days_back=days_back):
         try:
             fd = date.fromisoformat(f.filing_date)
         except ValueError:

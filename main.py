@@ -147,7 +147,7 @@ from market_data import (
     fetch_yfinance_call_for_date,
 )
 from edgar_client import (
-    infer_cadence_signal, find_earnings_release_filing, get_cik,
+    infer_cadence_signal, find_earnings_release_filing, find_results_6k, get_cik,
     reset_request_stats as edgar_reset_request_stats,
     get_request_stats as edgar_get_request_stats,
 )
@@ -2075,6 +2075,10 @@ def run_edgar_results_fallback(dry_run: bool = False, skip_heartbeat: bool = Fal
             ticker, ed - timedelta(days=3), today
         )
         if not filing:
+            # Foreign filer? Try the 6-K results heuristic before concluding
+            # the name hasn't reported (ICLR-class).
+            filing = find_results_6k(ticker, ed - timedelta(days=3), today)
+        if not filing:
             continue  # Genuinely hasn't reported yet — estimated date slipped.
 
         confirmed_missed.append({
@@ -2107,6 +2111,8 @@ def run_edgar_results_fallback(dry_run: bool = False, skip_heartbeat: bool = Fal
         swept += 1
         try:
             filing = find_earnings_release_filing(ticker, sweep_start, today)
+            if not filing:
+                filing = find_results_6k(ticker, sweep_start, today)  # foreign filers
         except Exception as exc:
             logger.debug(f"Tier-1 sweep EDGAR probe failed for {ticker}: {exc}")
             continue
@@ -3337,11 +3343,20 @@ def run_cross_check(dry_run: bool = False, days_ahead: int = 14):
                 filing = find_earnings_release_filing(
                     ticker, window_start, edgar_window_end
                 )
+                if filing is None:
+                    # Foreign private issuers furnish results on a 6-K (no 8-K,
+                    # no Item 2.02 taxonomy), so the primary path is blind to
+                    # them — the ICLR-class phantom/flapping date never gets
+                    # corrected. Fall back to the 6-K filename heuristic. The
+                    # date still passes through the SAME corroboration gate
+                    # below (auto-locks only when yfinance agrees ±1d; else
+                    # surfaced), so this adds coverage, not a new lock risk.
+                    filing = find_results_6k(ticker, window_start, edgar_window_end)
                 if filing is not None:
                     edgar_release = filing.filing_date
                     logger.info(
-                        f"EDGAR Item 2.02 for {ticker} filed {filing.filing_date} "
-                        f"(accession {filing.accession})"
+                        f"EDGAR {filing.form} earnings filing for {ticker} filed "
+                        f"{filing.filing_date} (accession {filing.accession})"
                     )
         except Exception as exc:
             logger.debug(f"EDGAR tiebreaker failed for {ticker}: {exc}")
