@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-06-14T13:04:13Z",
+  "generated_at": "2026-06-15T16:24:16Z",
   "window": {
-    "start": "2026-06-12",
-    "end": "2026-06-28"
+    "start": "2026-06-13",
+    "end": "2026-06-29"
   },
   "counts": {
-    "events": 12
+    "events": 13
   },
   "events": [
     {
@@ -29,15 +29,6 @@
       "company_name": "Domo Inc"
     },
     {
-      "ticker": "REPL",
-      "event_date": "2026-06-15",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Replimune Group Inc"
-    },
-    {
       "ticker": "SNOA",
       "event_date": "2026-06-15",
       "event_hour": "amc",
@@ -54,6 +45,15 @@
       "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "Vistagen Therapeutics Inc"
+    },
+    {
+      "ticker": "REPL",
+      "event_date": "2026-06-18",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Replimune Group Inc"
     },
     {
       "ticker": "FRVO",
@@ -117,6 +117,15 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Turn Therapeutics Inc"
+    },
+    {
+      "ticker": "NBP",
+      "event_date": "2026-06-29",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "NovaBridge Biosciences"
     }
   ]
 }
