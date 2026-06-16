@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-06-15T22:00:23Z",
+  "generated_at": "2026-06-16T16:04:04Z",
   "window": {
-    "start": "2026-06-13",
-    "end": "2026-06-29"
+    "start": "2026-06-14",
+    "end": "2026-06-30"
   },
   "counts": {
-    "events": 13
+    "events": 12
   },
   "events": [
     {
@@ -20,15 +20,6 @@
       "company_name": "Addex Therapeutics Ltd - ADR"
     },
     {
-      "ticker": "DOMO",
-      "event_date": "2026-06-15",
-      "event_hour": "amc",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Domo Inc"
-    },
-    {
       "ticker": "SNOA",
       "event_date": "2026-06-15",
       "event_hour": "amc",
@@ -36,15 +27,6 @@
       "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "Sonoma Pharmaceuticals Inc"
-    },
-    {
-      "ticker": "VTGN",
-      "event_date": "2026-06-15",
-      "event_hour": "amc",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Vistagen Therapeutics Inc"
     },
     {
       "ticker": "REPL",
@@ -58,9 +40,9 @@
     {
       "ticker": "FRVO",
       "event_date": "2026-06-22",
-      "event_hour": "",
+      "event_hour": "bmo",
       "tier": 3,
-      "date_confirmed": false,
+      "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "Fervo Energy Co."
     },
@@ -126,6 +108,15 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "NovaBridge Biosciences"
+    },
+    {
+      "ticker": "CASI",
+      "event_date": "2026-06-30",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "CASI Pharmaceuticals Inc"
     }
   ]
 }
