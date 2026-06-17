@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-06-17T14:30:31Z",
+  "generated_at": "2026-06-17T21:27:54Z",
   "window": {
     "start": "2026-06-15",
     "end": "2026-07-01"
   },
   "counts": {
-    "events": 12
+    "events": 13
   },
   "events": [
     {
@@ -20,22 +20,31 @@
       "company_name": "Addex Therapeutics Ltd - ADR"
     },
     {
-      "ticker": "SNOA",
-      "event_date": "2026-06-15",
-      "event_hour": "amc",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Sonoma Pharmaceuticals Inc"
-    },
-    {
-      "ticker": "REPL",
+      "ticker": "CELU",
       "event_date": "2026-06-17",
       "event_hour": "",
       "tier": 3,
       "date_confirmed": false,
       "call_datetime_utc": null,
-      "company_name": "Replimune Group Inc"
+      "company_name": "Celularity Inc"
+    },
+    {
+      "ticker": "GLMD",
+      "event_date": "2026-06-17",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Galmed Pharmaceuticals Ltd"
+    },
+    {
+      "ticker": "LYRA",
+      "event_date": "2026-06-17",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Lyra Therapeutics Inc"
     },
     {
       "ticker": "FRVO",
@@ -65,15 +74,6 @@
       "company_name": "FedEx Corp"
     },
     {
-      "ticker": "GRCE",
-      "event_date": "2026-06-23",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Grace Therapeutics, Inc"
-    },
-    {
       "ticker": "FDXF",
       "event_date": "2026-06-25",
       "event_hour": "",
@@ -99,6 +99,15 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Turn Therapeutics Inc"
+    },
+    {
+      "ticker": "GRCE",
+      "event_date": "2026-06-26",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Grace Therapeutics, Inc"
     },
     {
       "ticker": "NBP",
