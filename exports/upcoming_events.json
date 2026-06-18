@@ -1,24 +1,15 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-06-17T21:27:54Z",
+  "generated_at": "2026-06-18T14:22:57Z",
   "window": {
-    "start": "2026-06-15",
-    "end": "2026-07-01"
+    "start": "2026-06-16",
+    "end": "2026-07-02"
   },
   "counts": {
     "events": 13
   },
   "events": [
-    {
-      "ticker": "ADXN",
-      "event_date": "2026-06-15",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Addex Therapeutics Ltd - ADR"
-    },
     {
       "ticker": "CELU",
       "event_date": "2026-06-17",
@@ -45,6 +36,15 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Lyra Therapeutics Inc"
+    },
+    {
+      "ticker": "HCM",
+      "event_date": "2026-06-18",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "HUTCHMED (China) Ltd"
     },
     {
       "ticker": "FRVO",
@@ -74,6 +74,15 @@
       "company_name": "FedEx Corp"
     },
     {
+      "ticker": "GRCE",
+      "event_date": "2026-06-23",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Grace Therapeutics, Inc"
+    },
+    {
       "ticker": "FDXF",
       "event_date": "2026-06-25",
       "event_hour": "",
@@ -99,15 +108,6 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Turn Therapeutics Inc"
-    },
-    {
-      "ticker": "GRCE",
-      "event_date": "2026-06-26",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Grace Therapeutics, Inc"
     },
     {
       "ticker": "NBP",
