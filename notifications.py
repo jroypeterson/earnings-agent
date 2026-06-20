@@ -12,7 +12,12 @@ import html
 import json
 import logging
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
+
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:  # pragma: no cover - py<3.9 fallback
+    ZoneInfo = None
 
 import requests
 
@@ -35,6 +40,9 @@ class ResultRow:
     sector: str = ""
     subsector: str = ""
     position: str = ""
+    # ISO-8601 datetime (with offset) of the conference call, or None. Drives
+    # the "call same day / next morning" context in the results line.
+    call_datetime_utc: str | None = None
 
 logger = logging.getLogger("earnings_agent")
 
@@ -634,6 +642,60 @@ def _move_marker(move: PostEarningsMove | None) -> str:
     return "\U0001F7E9" if move.move_pct >= 0 else "\U0001F7E5"
 
 
+def _fmt_call_compact(earnings_date: str | None, call_dt_iso: str | None) -> str | None:
+    """Compact conference-call segment for the results line.
+
+    Distinguishes the two cases JP cares about — call on the same calendar
+    day as the press release (typical AMC: release after close, call shortly
+    after) vs. the following morning (the BMO-call-after-AMC-release split).
+
+    Returns:
+      * None when call_dt_iso is missing (caller omits the segment)
+      * "call same day H:MM AM/PM ET" when the call is the release day
+      * "call <Wkd> H:MM AM/PM ET" when the call is a different calendar day
+    """
+    if not call_dt_iso:
+        return None
+    try:
+        normalized = (
+            call_dt_iso.replace("Z", "+00:00")
+            if call_dt_iso.endswith("Z") else call_dt_iso
+        )
+        call_dt = datetime.fromisoformat(normalized)
+    except (ValueError, TypeError, AttributeError):
+        return None
+    if ZoneInfo is None:
+        return None
+    try:
+        local = call_dt.astimezone(ZoneInfo("America/New_York"))
+    except Exception:
+        return None
+
+    # Manual 12-hour formatting — strftime("%-I") is non-portable on Windows.
+    hour12 = local.hour % 12 or 12
+    ampm = "AM" if local.hour < 12 else "PM"
+    time_str = f"{hour12}:{local.strftime('%M')} {ampm} ET"
+
+    if earnings_date and local.date().isoformat() == earnings_date:
+        return f"call same day {time_str}"
+    weekday = local.strftime("%a")  # e.g. "Thu"
+    return f"call {weekday} {time_str}"
+
+
+def _fmt_results_timing(r: ResultRow) -> str:
+    """Report-timing context segment: '<Wkd Mon DD> <BMO/AMC>[ · call ...]'.
+
+    Surfaces when the company reported (date), whether it was before/after
+    market (BMO/AMC/DMH/TBD), and — when known — when the call was held
+    (same day vs. the following morning). PROJECT_IDEAS #531.
+    """
+    parts = [f"{_fmt_date_safe(r.event_date)} {_timing_short(r.event_hour)}"]
+    call = _fmt_call_compact(r.event_date, r.call_datetime_utc)
+    if call:
+        parts.append(call)
+    return " · ".join(parts)
+
+
 def _format_results_line(r: ResultRow) -> str:
     short = _short_company_name(r.company_name)
     name_part = f" {short}" if short else ""
@@ -644,6 +706,7 @@ def _format_results_line(r: ResultRow) -> str:
     )
     return (
         f"{markers}  `{r.ticker}`{name_part} · "
+        f"{_fmt_results_timing(r)} · "
         f"{_fmt_eps_compact(r.eps_actual, r.eps_estimate)} · "
         f"{_fmt_rev_compact(r.rev_actual, r.rev_estimate)} · "
         f"{_fmt_move_compact(r.move)}"

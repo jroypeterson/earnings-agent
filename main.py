@@ -367,6 +367,7 @@ def _record_actuals(
             sector=info.sector if info else "",
             subsector=info.subsector if info else "",
             position=info.position if info else "",
+            call_datetime_utc=call_dt_iso,
         ))
         return True
     return False
@@ -1810,6 +1811,7 @@ def run_check_results(
             sector=info.sector if info else "",
             subsector=info.subsector if info else "",
             position=info.position if info else "",
+            call_datetime_utc=existing.get("call_datetime_utc") if existing else None,
         )
         new_results.append(result)
 
