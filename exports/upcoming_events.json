@@ -1,42 +1,15 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-06-19T20:51:18Z",
+  "generated_at": "2026-06-20T12:59:58Z",
   "window": {
-    "start": "2026-06-17",
-    "end": "2026-07-03"
+    "start": "2026-06-18",
+    "end": "2026-07-04"
   },
   "counts": {
-    "events": 12
+    "events": 9
   },
   "events": [
-    {
-      "ticker": "CELU",
-      "event_date": "2026-06-17",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Celularity Inc"
-    },
-    {
-      "ticker": "GLMD",
-      "event_date": "2026-06-17",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Galmed Pharmaceuticals Ltd"
-    },
-    {
-      "ticker": "LYRA",
-      "event_date": "2026-06-17",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Lyra Therapeutics Inc"
-    },
     {
       "ticker": "HCM",
       "event_date": "2026-06-18",
