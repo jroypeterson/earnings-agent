@@ -1,24 +1,15 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-06-20T12:59:58Z",
+  "generated_at": "2026-06-21T13:18:59Z",
   "window": {
-    "start": "2026-06-18",
-    "end": "2026-07-04"
+    "start": "2026-06-19",
+    "end": "2026-07-05"
   },
   "counts": {
-    "events": 9
+    "events": 8
   },
   "events": [
-    {
-      "ticker": "HCM",
-      "event_date": "2026-06-18",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "HUTCHMED (China) Ltd"
-    },
     {
       "ticker": "FRVO",
       "event_date": "2026-06-22",
