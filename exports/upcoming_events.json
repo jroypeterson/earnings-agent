@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-06-22T21:38:14Z",
+  "generated_at": "2026-06-23T13:48:20Z",
   "window": {
-    "start": "2026-06-20",
-    "end": "2026-07-06"
+    "start": "2026-06-21",
+    "end": "2026-07-07"
   },
   "counts": {
-    "events": 7
+    "events": 8
   },
   "events": [
     {
@@ -72,6 +72,15 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "CASI Pharmaceuticals Inc"
+    },
+    {
+      "ticker": "NRIX",
+      "event_date": "2026-07-07",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Nurix Therapeutics Inc"
     }
   ]
 }
