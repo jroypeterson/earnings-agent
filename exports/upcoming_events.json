@@ -1,24 +1,15 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-06-24T21:03:26Z",
+  "generated_at": "2026-06-25T13:26:17Z",
   "window": {
-    "start": "2026-06-22",
-    "end": "2026-07-08"
+    "start": "2026-06-23",
+    "end": "2026-07-09"
   },
   "counts": {
-    "events": 7
+    "events": 8
   },
   "events": [
-    {
-      "ticker": "GELS",
-      "event_date": "2026-06-22",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Gelteq Ltd"
-    },
     {
       "ticker": "FDXF",
       "event_date": "2026-06-25",
@@ -29,6 +20,15 @@
       "company_name": "FedEx Freight Corporation"
     },
     {
+      "ticker": "HCM",
+      "event_date": "2026-06-25",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "HUTCHMED (China) Ltd"
+    },
+    {
       "ticker": "NNOX",
       "event_date": "2026-06-25",
       "event_hour": "bmo",
@@ -36,6 +36,15 @@
       "date_confirmed": true,
       "call_datetime_utc": "2026-06-25T20:00:00+00:00",
       "company_name": "Nano-X Imaging Ltd."
+    },
+    {
+      "ticker": "PRFX",
+      "event_date": "2026-06-25",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "PRF Technologies Ltd"
     },
     {
       "ticker": "TTRX",
