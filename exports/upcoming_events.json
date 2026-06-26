@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-06-25T21:09:27Z",
+  "generated_at": "2026-06-26T13:20:39Z",
   "window": {
-    "start": "2026-06-23",
-    "end": "2026-07-09"
+    "start": "2026-06-24",
+    "end": "2026-07-10"
   },
   "counts": {
-    "events": 6
+    "events": 7
   },
   "events": [
     {
@@ -36,6 +36,15 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Turn Therapeutics Inc"
+    },
+    {
+      "ticker": "APM",
+      "event_date": "2026-06-26",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Aptorum Group Ltd"
     },
     {
       "ticker": "NBP",
