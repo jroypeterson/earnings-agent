@@ -1,42 +1,15 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-06-28T12:22:09Z",
+  "generated_at": "2026-06-29T14:54:51Z",
   "window": {
-    "start": "2026-06-26",
-    "end": "2026-07-12"
+    "start": "2026-06-27",
+    "end": "2026-07-13"
   },
   "counts": {
-    "events": 5
+    "events": 3
   },
   "events": [
-    {
-      "ticker": "APM",
-      "event_date": "2026-06-26",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Aptorum Group Ltd"
-    },
-    {
-      "ticker": "NBP",
-      "event_date": "2026-06-29",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "NovaBridge Biosciences"
-    },
-    {
-      "ticker": "REPL",
-      "event_date": "2026-06-29",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Replimune Group Inc"
-    },
     {
       "ticker": "CASI",
       "event_date": "2026-06-30",
@@ -54,6 +27,15 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Nurix Therapeutics Inc"
+    },
+    {
+      "ticker": "KRC",
+      "event_date": "2026-07-13",
+      "event_hour": "",
+      "tier": 2,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Kilroy Realty Corporation"
     }
   ]
 }
