@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-06-29T21:01:29Z",
+  "generated_at": "2026-06-30T13:16:26Z",
   "window": {
-    "start": "2026-06-27",
-    "end": "2026-07-13"
+    "start": "2026-06-28",
+    "end": "2026-07-14"
   },
   "counts": {
-    "events": 3
+    "events": 5
   },
   "events": [
     {
@@ -18,6 +18,15 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "CASI Pharmaceuticals Inc"
+    },
+    {
+      "ticker": "GDTC",
+      "event_date": "2026-06-30",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "CytoMed Therapeutics Ltd"
     },
     {
       "ticker": "NRIX",
@@ -36,6 +45,15 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Kilroy Realty Corporation"
+    },
+    {
+      "ticker": "JPM",
+      "event_date": "2026-07-14",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "JPMorgan Chase & Co"
     }
   ]
 }
