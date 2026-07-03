@@ -1,33 +1,15 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-07-02T20:40:08Z",
+  "generated_at": "2026-07-03T13:08:59Z",
   "window": {
-    "start": "2026-06-30",
-    "end": "2026-07-16"
+    "start": "2026-07-01",
+    "end": "2026-07-17"
   },
   "counts": {
-    "events": 13
+    "events": 11
   },
   "events": [
-    {
-      "ticker": "CASI",
-      "event_date": "2026-06-30",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "CASI Pharmaceuticals Inc"
-    },
-    {
-      "ticker": "GDTC",
-      "event_date": "2026-06-30",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "CytoMed Therapeutics Ltd"
-    },
     {
       "ticker": "PRFX",
       "event_date": "2026-07-02",
@@ -38,6 +20,15 @@
       "company_name": "PRF Technologies Ltd"
     },
     {
+      "ticker": "APM",
+      "event_date": "2026-07-03",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Aptorum Group Ltd"
+    },
+    {
       "ticker": "NRIX",
       "event_date": "2026-07-07",
       "event_hour": "",
@@ -45,15 +36,6 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Nurix Therapeutics Inc"
-    },
-    {
-      "ticker": "KRC",
-      "event_date": "2026-07-13",
-      "event_hour": "",
-      "tier": 2,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Kilroy Realty Corporation"
     },
     {
       "ticker": "JPM",
