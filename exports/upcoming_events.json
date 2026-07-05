@@ -1,24 +1,15 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-07-04T12:18:00Z",
+  "generated_at": "2026-07-05T12:42:13Z",
   "window": {
-    "start": "2026-07-02",
-    "end": "2026-07-18"
+    "start": "2026-07-03",
+    "end": "2026-07-19"
   },
   "counts": {
-    "events": 11
+    "events": 10
   },
   "events": [
-    {
-      "ticker": "PRFX",
-      "event_date": "2026-07-02",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "PRF Technologies Ltd"
-    },
     {
       "ticker": "APM",
       "event_date": "2026-07-03",
