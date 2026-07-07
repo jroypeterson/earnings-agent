@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-07-06T21:07:16Z",
+  "generated_at": "2026-07-07T13:27:09Z",
   "window": {
-    "start": "2026-07-04",
-    "end": "2026-07-20"
+    "start": "2026-07-05",
+    "end": "2026-07-21"
   },
   "counts": {
-    "events": 9
+    "events": 14
   },
   "events": [
     {
@@ -90,6 +90,51 @@
       "date_confirmed": true,
       "call_datetime_utc": "2026-07-16T20:00:00+00:00",
       "company_name": "UnitedHealth Group Inc"
+    },
+    {
+      "ticker": "DHR",
+      "event_date": "2026-07-21",
+      "event_hour": "bmo",
+      "tier": 2,
+      "date_confirmed": true,
+      "call_datetime_utc": "2026-07-21T12:00:00+00:00",
+      "company_name": "Danaher Corp"
+    },
+    {
+      "ticker": "ICLR",
+      "event_date": "2026-07-21",
+      "event_hour": "amc",
+      "tier": 2,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "ICON PLC"
+    },
+    {
+      "ticker": "NVS",
+      "event_date": "2026-07-21",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Novartis AG"
+    },
+    {
+      "ticker": "OSSFF",
+      "event_date": "2026-07-21",
+      "event_hour": "",
+      "tier": 2,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Embla Medical hf."
+    },
+    {
+      "ticker": "UCB",
+      "event_date": "2026-07-21",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "UCB SA"
     }
   ]
 }
