@@ -89,7 +89,7 @@ jobs:
           GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           ALERT_EMAIL_TO: jroypeterson+alerts@gmail.com
-          ALERT_SUBJECT: "earnings_agent: Weekly Earnings Digest failed"
+          ALERT_SUBJECT: "[ClaudeFin] earnings_agent — Weekly Earnings Digest failed"
           ALERT_BODY: "The Weekly Earnings Digest workflow failed. Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
         run: |
           python3 - <<'PY'
@@ -101,7 +101,7 @@ jobs:
           if not addr or not pw:
               print("email backup: GMAIL creds unset - skipping"); raise SystemExit(0)
           msg = MIMEText(os.environ.get("ALERT_BODY", "") or os.environ.get("ALERT_SUBJECT", ""), "plain")
-          msg["Subject"] = os.environ.get("ALERT_SUBJECT", "earnings_agent alert")
+          msg["Subject"] = os.environ.get("ALERT_SUBJECT", "[ClaudeFin] earnings_agent — alert")
           msg["From"] = addr; msg["To"] = to
           with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=30) as s:
               s.login(addr, pw); s.send_message(msg)

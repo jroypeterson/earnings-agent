@@ -28,6 +28,12 @@ import sys
 import smtplib
 from email.mime.text import MIMEText
 
+# Fleet-wide subject grammar (root CONVENTIONS.md §5):
+#   [ClaudeFin] earnings_agent — <what>
+# so one inbox filter catches every Claude-project alert email.
+SUBJECT_PREFIX = "[ClaudeFin] earnings_agent — "
+DEFAULT_SUBJECT = SUBJECT_PREFIX + "alert"
+
 
 def send(subject: str, body: str) -> bool:
     """Send the alert email. Returns True if sent, False if skipped (creds
@@ -53,7 +59,7 @@ def send(subject: str, body: str) -> bool:
 
 def main() -> None:
     subject = sys.argv[1] if len(sys.argv) > 1 else os.environ.get(
-        "ALERT_SUBJECT", "earnings_agent alert")
+        "ALERT_SUBJECT", DEFAULT_SUBJECT)
     body = sys.argv[2] if len(sys.argv) > 2 else os.environ.get("ALERT_BODY", "")
     send(subject, body)
 
