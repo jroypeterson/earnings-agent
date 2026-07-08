@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-07-07T21:01:21Z",
+  "generated_at": "2026-07-08T12:51:57Z",
   "window": {
-    "start": "2026-07-05",
-    "end": "2026-07-21"
+    "start": "2026-07-06",
+    "end": "2026-07-22"
   },
   "counts": {
-    "events": 14
+    "events": 24
   },
   "events": [
     {
@@ -45,6 +45,15 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "ASML Holding NV"
+    },
+    {
+      "ticker": "ELV",
+      "event_date": "2026-07-15",
+      "event_hour": "bmo",
+      "tier": 2,
+      "date_confirmed": true,
+      "call_datetime_utc": "2026-07-15T20:00:00+00:00",
+      "company_name": "Elevance Health Inc"
     },
     {
       "ticker": "JNJ",
@@ -135,6 +144,87 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "UCB SA"
+    },
+    {
+      "ticker": "GOOG",
+      "event_date": "2026-07-22",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Alphabet Inc Class C"
+    },
+    {
+      "ticker": "HCSG",
+      "event_date": "2026-07-22",
+      "event_hour": "bmo",
+      "tier": 2,
+      "date_confirmed": true,
+      "call_datetime_utc": "2026-07-22T12:30:00+00:00",
+      "company_name": "Healthcare Services Group Inc"
+    },
+    {
+      "ticker": "IMA",
+      "event_date": "2026-07-22",
+      "event_hour": "amc",
+      "tier": 3,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "ImageneBio Inc"
+    },
+    {
+      "ticker": "MEDP",
+      "event_date": "2026-07-22",
+      "event_hour": "amc",
+      "tier": 2,
+      "date_confirmed": true,
+      "call_datetime_utc": "2026-07-23T13:00:00+00:00",
+      "company_name": "Medpace Holdings, Inc."
+    },
+    {
+      "ticker": "MOH",
+      "event_date": "2026-07-22",
+      "event_hour": "amc",
+      "tier": 2,
+      "date_confirmed": true,
+      "call_datetime_utc": "2026-07-23T20:00:00+00:00",
+      "company_name": "Molina Healthcare Inc"
+    },
+    {
+      "ticker": "NOW",
+      "event_date": "2026-07-22",
+      "event_hour": "amc",
+      "tier": 3,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "ServiceNow, Inc."
+    },
+    {
+      "ticker": "RDY",
+      "event_date": "2026-07-22",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Dr Reddy's Laboratories Ltd"
+    },
+    {
+      "ticker": "TSLA",
+      "event_date": "2026-07-22",
+      "event_hour": "amc",
+      "tier": 1,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Tesla, Inc."
+    },
+    {
+      "ticker": "WST",
+      "event_date": "2026-07-22",
+      "event_hour": "bmo",
+      "tier": 1,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "West Pharmaceutical Services Inc"
     }
   ]
 }
