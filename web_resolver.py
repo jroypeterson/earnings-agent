@@ -173,6 +173,25 @@ def _url_was_cited(source_url: str, cited: set[str]) -> bool:
         cb = c.rstrip("/")
         if cb.startswith(base) or base.startswith(cb):
             return True
+    # Same-host fallback: the model often reconstructs a canonical URL rather
+    # than echoing the retrieved one verbatim (live 2026-07-09: Mastercard's
+    # real Business Wire release was downgraded on an exact-URL miss). If the
+    # search actually retrieved content from the SAME host, the claim "this
+    # domain says X" is verified at domain granularity — still blocks the
+    # injected-aggregator case, which fails the trusted-domain check anyway.
+    from urllib.parse import urlparse
+    try:
+        host = (urlparse(source_url).netloc or "").lower()
+    except ValueError:
+        return False
+    if not host:
+        return False
+    for c in cited:
+        try:
+            if (urlparse(c).netloc or "").lower() == host:
+                return True
+        except ValueError:
+            continue
     return False
 
 

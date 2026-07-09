@@ -99,3 +99,13 @@ def test_high_confidence_downgraded_without_verified_citation(monkeypatch):
         "ICLR", "ICON PLC", "2026-07-21", [_date(2026, 7, 23)], _date(2026, 7, 8))
     assert v.confidence == "medium"          # downgraded -> caller won't lock
     assert "downgraded" in v.note
+
+
+def test_url_was_cited_same_host_fallback():
+    """Live 2026-07-09 (MA): the model reconstructs canonical URLs instead of
+    echoing retrieved ones — same-host citations must count."""
+    from web_resolver import _url_was_cited
+    cited = {"https://www.businesswire.com/news/home/20260708/en/some-slug"}
+    assert _url_was_cited(
+        "https://www.businesswire.com/news/home/2026/mastercard-q2-date", cited)
+    assert not _url_was_cited("https://www.zacks.com/x", cited)
