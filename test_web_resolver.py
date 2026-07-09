@@ -49,3 +49,53 @@ def test_resolver_returns_none_without_key(monkeypatch):
     assert web_resolver.resolve_disagreement(
         "ICLR", "ICON PLC", "2026-07-21", [date(2026, 7, 23)], date(2026, 7, 8)
     ) is None
+
+
+def test_trusted_source_domains():
+    from web_resolver import _is_trusted_source
+    assert _is_trusted_source("https://investor.iconplc.com/news/x")
+    assert _is_trusted_source("https://ir.example.com/press")
+    assert _is_trusted_source("https://www.businesswire.com/news/home/2026/x")
+    assert _is_trusted_source("https://example.com/investor-relations/news")
+    assert not _is_trusted_source("https://www.zacks.com/stock/ICLR")
+    assert not _is_trusted_source("https://evil-businesswire.com.attacker.io/x")
+    assert not _is_trusted_source("")
+
+
+def test_url_was_cited_tolerates_param_drift():
+    from web_resolver import _url_was_cited
+    cited = {"https://investor.iconplc.com/news/release-1?utm_source=search"}
+    assert _url_was_cited("https://investor.iconplc.com/news/release-1", cited)
+    assert not _url_was_cited("https://investor.other.com/x", cited)
+    assert not _url_was_cited("", cited)
+
+
+def test_high_confidence_downgraded_without_verified_citation(monkeypatch):
+    """codex 2026-07-08: model-claimed 'high' must not authorize a lock unless
+    the source was actually retrieved AND is a company-IR/wire domain."""
+    import web_resolver
+    from datetime import date as _date
+
+    class _Text:
+        type = "text"
+        text = ('{"announced_date": "2026-07-21", "confidence": "high", '
+                '"source_url": "https://www.zacks.com/x", "note": "aggregator"}')
+
+    class _Resp:
+        content = [_Text()]
+
+    class _Msgs:
+        def create(self, **kw):
+            return _Resp()
+
+    class _Client:
+        def __init__(self, **kw):
+            self.messages = _Msgs()
+
+    monkeypatch.setattr(web_resolver, "ANTHROPIC_API_KEY", "k")
+    import anthropic
+    monkeypatch.setattr(anthropic, "Anthropic", _Client)
+    v = web_resolver.resolve_disagreement(
+        "ICLR", "ICON PLC", "2026-07-21", [_date(2026, 7, 23)], _date(2026, 7, 8))
+    assert v.confidence == "medium"          # downgraded -> caller won't lock
+    assert "downgraded" in v.note

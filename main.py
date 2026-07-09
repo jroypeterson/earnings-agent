@@ -3496,6 +3496,12 @@ def run_cross_check(dry_run: bool = False, days_ahead: int = 14):
     # raises (the resolver returns None on any failure -> ask-the-operator).
     web_resolved: list[tuple[DisagreementRow, str, str, "WebVerdict"]] = []
     still_open: list[tuple[DisagreementRow, str]] = []
+    # Rows whose auto-resolution matched but whose calendar move FAILED: their
+    # dedup signature must NOT be persisted, or the unchanged yfinance dates
+    # would suppress the row next run and "will retry" would be a lie
+    # (codex 2026-07-08). Cost: the question re-posts daily until the calendar
+    # is back — loud beats silently stuck.
+    web_retry_keys: set[tuple[str, str]] = set()
     web_attempts = 0
     for r, sig in new_disagreements:
         verdict = None
@@ -3544,6 +3550,7 @@ def run_cross_check(dry_run: bool = False, days_ahead: int = 14):
                     f"company announced {ann} (matches yfinance) but the "
                     f"calendar move failed — will retry next run"
                 )
+                web_retry_keys.add((r.ticker, r.finnhub_date))
             else:
                 # A third date neither source has: never auto-lock (mirrors
                 # the uncorroborated-EDGAR rule) — surface for the operator.
@@ -3640,6 +3647,11 @@ def run_cross_check(dry_run: bool = False, days_ahead: int = 14):
     # run retries.
     if not dry_run and posted:
         for r, sig in new_disagreements:
+            if (r.ticker, r.finnhub_date) in web_retry_keys:
+                # Auto-resolution matched but the calendar move failed — leave
+                # the signature unset so the next run reaches the resolver
+                # again instead of being dedup-suppressed (codex 2026-07-08).
+                continue
             conn.execute(
                 "UPDATE events SET last_xcheck_yf_dates = ? "
                 "WHERE ticker = ? AND event_date = ?",

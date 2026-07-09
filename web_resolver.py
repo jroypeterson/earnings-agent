@@ -96,10 +96,84 @@ def resolve_disagreement(
         text = "".join(
             block.text for block in resp.content if getattr(block, "type", "") == "text"
         )
-        return _parse_verdict(text)
+        verdict = _parse_verdict(text)
+        # Trust gate (codex 2026-07-08): the model's self-reported confidence is
+        # steerable by page content (prompt injection), and "high" is what
+        # authorizes an auto-lock. Downgrade to medium — hint, never lock —
+        # unless the claimed source (a) was actually retrieved by the search
+        # (appears in the tool citations) and (b) is a company-IR or trusted
+        # newswire domain. Worst case after the gate: a hint line the operator
+        # sees, not a silently locked wrong date.
+        if verdict and verdict.confidence == "high":
+            cited = _cited_urls(resp.content)
+            if not _url_was_cited(verdict.source_url, cited):
+                verdict.confidence = "medium"
+                verdict.note = ("[downgraded: claimed source not among search "
+                                "citations] " + verdict.note)[:300]
+            elif not _is_trusted_source(verdict.source_url):
+                verdict.confidence = "medium"
+                verdict.note = ("[downgraded: source not a company-IR/wire "
+                                "domain] " + verdict.note)[:300]
+        return verdict
     except Exception as exc:  # noqa: BLE001 — never break the cross-check
         logger.warning(f"web_resolver: {ticker} resolution failed: {exc}")
         return None
+
+
+_TRUSTED_WIRE_DOMAINS = (
+    "businesswire.com", "globenewswire.com", "prnewswire.com",
+    "prnewswire.co.uk", "newswire.ca", "accesswire.com",
+)
+
+
+def _is_trusted_source(url: str) -> bool:
+    """True for newswire domains and company investor-relations hosts/paths."""
+    from urllib.parse import urlparse
+    try:
+        parsed = urlparse(url)
+    except ValueError:
+        return False
+    host = (parsed.netloc or "").lower()
+    if not host:
+        return False
+    if any(host == d or host.endswith("." + d) for d in _TRUSTED_WIRE_DOMAINS):
+        return True
+    path = (parsed.path or "").lower()
+    return (
+        host.startswith(("ir.", "investor.", "investors."))
+        or "/investor" in path
+        or "/ir/" in path
+        or path.endswith("/ir")
+    )
+
+
+def _cited_urls(content_blocks) -> set[str]:
+    """URLs the web_search tool actually retrieved this call."""
+    urls: set[str] = set()
+    for block in content_blocks:
+        if getattr(block, "type", "") != "web_search_tool_result":
+            continue
+        results = getattr(block, "content", None) or []
+        for r in results:
+            u = getattr(r, "url", None)
+            if isinstance(u, str) and u:
+                urls.add(u)
+    return urls
+
+
+def _url_was_cited(source_url: str, cited: set[str]) -> bool:
+    if not source_url:
+        return False
+    if source_url in cited:
+        return True
+    # Tolerate tracking-param / trailing-slash drift between the model's echo
+    # and the raw citation, but require a real prefix relationship.
+    base = source_url.rstrip("/")
+    for c in cited:
+        cb = c.rstrip("/")
+        if cb.startswith(base) or base.startswith(cb):
+            return True
+    return False
 
 
 def _parse_verdict(text: str) -> WebVerdict | None:
