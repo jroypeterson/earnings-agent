@@ -150,6 +150,10 @@ jobs:
           # calendar event in addition to updating DB.
           GOOGLE_CALENDAR_ID: ${{ secrets.GOOGLE_CALENDAR_ID }}
           GOOGLE_CREDENTIALS_PATH: credentials.json
+          # Web-search resolver (web_resolver.py): finds the company's own
+          # announced date and auto-locks high-confidence matches before
+          # asking the operator. Unset -> resolver skipped, old behavior.
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: python main.py --cross-check
 
       # Scan Gmail for IR-alert pre-announcements and auto-confirm

@@ -963,6 +963,10 @@ class DisagreementRow:
     # filing date is ground truth. Auto-locked by the cross-check job
     # when present.
     edgar_release_date: str | None = None
+    # Web-search resolver verdict (web_resolver.py) when it could NOT
+    # auto-resolve — rendered as a hint line on the question thread.
+    # High-confidence matches auto-lock instead and never reach here.
+    web_note: str | None = None
 
 
 def _fmt_yf_dates(yf_dates: list) -> str:
@@ -1245,9 +1249,10 @@ def build_crosscheck_thread_blocks(
         except ValueError:
             pass
 
+    web_line = f"\n:mag: _Web search: {row.web_note}_" if row.web_note else ""
     body = (
         f"*{title}*\n"
-        f"{detail}\n\n"
+        f"{detail}{web_line}\n\n"
         f"_{status_line}_\n"
         f"*Read:* {_xcheck_verdict(row)}"
     )
@@ -1258,6 +1263,41 @@ def build_crosscheck_thread_blocks(
             "text": _REPLY_HINT_XCHECK,
         }]},
     ]
+
+
+def build_web_resolution_blocks(
+    row: DisagreementRow,
+    resolved_date: str,
+    matched_source: str,
+    source_url: str,
+    note: str,
+) -> list[dict]:
+    """FYI message for a disagreement AUTO-RESOLVED by the web-search resolver
+    (no open question — the date is already locked)."""
+    co = f" — {row.company_name}" if row.company_name else ""
+    link = f"<{source_url}|source>" if source_url.startswith("http") else "source n/a"
+    body = (
+        f":white_check_mark: *T{row.tier} `{row.ticker}`{co} — auto-resolved via web search*\n"
+        f"Finnhub: {_fmt_date_safe(row.finnhub_date)}  ·  "
+        f"yfinance: {_fmt_yf_dates(row.yf_dates)}\n"
+        f"Company-announced date: *{_fmt_date_safe(resolved_date)}* "
+        f"(matches {matched_source}) — locked. ({link})"
+    )
+    blocks: list[dict] = [{"type": "section", "text": {"type": "mrkdwn", "text": body}}]
+    if note:
+        blocks.append({"type": "context", "elements": [{
+            "type": "mrkdwn", "text": f":mag: {note}",
+        }]})
+    return blocks
+
+
+def build_web_resolution_fallback(
+    row: DisagreementRow, resolved_date: str, matched_source: str
+) -> str:
+    return (
+        f"T{row.tier} {row.ticker}: auto-resolved via web search — "
+        f"{resolved_date} (matches {matched_source}), locked"
+    )
 
 
 def build_crosscheck_thread_fallback(row: DisagreementRow) -> str:

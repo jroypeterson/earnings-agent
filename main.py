@@ -56,6 +56,12 @@ from storage import (
 from finnhub_client import get_client as get_finnhub_client, fetch_earnings, FinnhubError
 from fmp_client import fetch_fmp_earnings, merge_earnings
 from config import FMP_API_KEY
+from config import ANTHROPIC_API_KEY
+from web_resolver import WebVerdict, resolve_disagreement
+
+# Max web-search resolutions per cross-check run (cost bound; overflow rows
+# fall back to the ask-the-operator Slack thread unchanged).
+_WEB_RESOLVE_MAX = 6
 from calendar_sync import (
     get_calendar_service,
     find_calendar_event,
@@ -100,6 +106,8 @@ from notifications import (
     build_crosscheck_summary_fallback,
     build_crosscheck_thread_blocks,
     build_crosscheck_thread_fallback,
+    build_web_resolution_blocks,
+    build_web_resolution_fallback,
     build_urgent_move_blocks,
     build_urgent_move_fallback,
     build_urgent_move_summary_blocks,
@@ -3478,7 +3486,85 @@ def run_cross_check(dry_run: bool = False, days_ahead: int = 14):
             f"yfinance={[d.isoformat() for d in r.yf_dates]}"
         )
 
-    disagreement_rows = [r for r, _ in new_disagreements]
+    # --- Web-search resolution stage (JP 2026-07-08) -----------------------
+    # Before asking the operator, search the web for the COMPANY'S OWN
+    # announced date (web_resolver.py). A high-confidence announcement that
+    # matches one candidate auto-locks it through the same machinery as a
+    # Slack `lock` reply; anything weaker becomes a hint line on the question
+    # thread. Sits between EDGAR (authoritative, post-hoc) and the operator
+    # in the source-priority hierarchy. Capped per run to bound cost; never
+    # raises (the resolver returns None on any failure -> ask-the-operator).
+    web_resolved: list[tuple[DisagreementRow, str, str, "WebVerdict"]] = []
+    still_open: list[tuple[DisagreementRow, str]] = []
+    web_attempts = 0
+    for r, sig in new_disagreements:
+        verdict = None
+        if not dry_run and ANTHROPIC_API_KEY and web_attempts < _WEB_RESOLVE_MAX:
+            web_attempts += 1
+            verdict = resolve_disagreement(
+                r.ticker, r.company_name, r.finnhub_date, r.yf_dates, today
+            )
+        if verdict and verdict.confidence == "high" and verdict.announced_date:
+            ann = verdict.announced_date
+            if ann == r.finnhub_date:
+                # Company confirms Finnhub's date: lock in place, no move.
+                set_date_lock(conn, r.ticker, ann, True)
+                conn.execute(
+                    "UPDATE events SET date_confirmed = 1, "
+                    "updated_at = datetime('now') "
+                    "WHERE ticker = ? AND event_date = ?",
+                    (r.ticker, ann),
+                )
+                conn.commit()
+                logger.info(
+                    f"Web resolver: {r.ticker} locked at Finnhub date {ann} "
+                    f"({verdict.source_url})"
+                )
+                web_resolved.append((r, ann, "Finnhub", verdict))
+                continue
+            if any(ann == d.isoformat() for d in r.yf_dates):
+                # Company confirms yfinance's date: calendar-first move + lock
+                # (same path as a Slack `lock <date>` reply).
+                try:
+                    moved = _apply_edgar_auto_correction(
+                        conn, cal_service, r.ticker, r.finnhub_date, ann,
+                        reason="web-search auto-resolution",
+                    )
+                except Exception as exc:
+                    logger.error(f"Web resolver lock failed for {r.ticker}: {exc}")
+                    moved = False
+                if moved:
+                    logger.info(
+                        f"Web resolver: {r.ticker} moved+locked at yfinance "
+                        f"date {ann} ({verdict.source_url})"
+                    )
+                    web_resolved.append((r, ann, "yfinance", verdict))
+                    continue
+                r.web_note = (
+                    f"company announced {ann} (matches yfinance) but the "
+                    f"calendar move failed — will retry next run"
+                )
+            else:
+                # A third date neither source has: never auto-lock (mirrors
+                # the uncorroborated-EDGAR rule) — surface for the operator.
+                r.web_note = (
+                    f"company announced *{ann}* — matches NEITHER source; "
+                    f"{verdict.note}"
+                )
+        elif verdict and (verdict.note or verdict.announced_date):
+            r.web_note = (
+                f"{verdict.confidence} confidence — "
+                f"{verdict.note or verdict.announced_date}"
+            )
+        still_open.append((r, sig))
+
+    if web_resolved:
+        logger.info(
+            f"Cross-check web resolver: {len(web_resolved)} auto-resolved, "
+            f"{len(still_open)} still open ({web_attempts} searched)"
+        )
+
+    disagreement_rows = [r for r, _ in still_open]
     posted = True
     # Cross-check disagreements route to the status-reports channel so
     # the earnings channel stays focused on actual earnings updates.
@@ -3486,7 +3572,27 @@ def run_cross_check(dry_run: bool = False, days_ahead: int = 14):
     target_channel = SLACK_STATUS_CHANNEL_ID or SLACK_CHANNEL_ID
     target_webhook = SLACK_WEBHOOK_STATUS or SLACK_WEBHOOK_EARNINGS
     bot_path = bool(SLACK_BOT_TOKEN and target_channel)
-    if not dry_run and bot_path:
+
+    # Auto-resolved FYIs (no open question — the date is already locked).
+    # Best-effort: the lock is committed either way; a failed FYI is logged,
+    # never retried, and never fails the run (unlike question delivery).
+    if not dry_run and web_resolved:
+        for r, ann, src, verdict in web_resolved:
+            try:
+                blocks = build_web_resolution_blocks(
+                    r, ann, src, verdict.source_url, verdict.note
+                )
+                fb = build_web_resolution_fallback(r, ann, src)
+                if bot_path:
+                    slack_post_message(
+                        SLACK_BOT_TOKEN, target_channel, blocks=blocks, text=fb
+                    )
+                elif target_webhook:
+                    post_slack(target_webhook, blocks, fb)
+            except (SlackAPIError, NotificationError) as exc:
+                logger.error(f"Web-resolution FYI post failed for {r.ticker}: {exc}")
+
+    if not dry_run and disagreement_rows and bot_path:
         # v9 per-thread path: summary header + one thread parent per row.
         # Persist each thread_ts back to the event row so --check-replies
         # can later poll for resolution.
@@ -3516,7 +3622,7 @@ def run_cross_check(dry_run: bool = False, days_ahead: int = 14):
         except SlackAPIError as exc:
             logger.error(f"Cross-check Slack post failed (bot path): {exc}")
             posted = False
-    elif not dry_run and target_webhook:
+    elif not dry_run and disagreement_rows and target_webhook:
         # Legacy webhook fallback: single batched message, no replies.
         try:
             post_slack(

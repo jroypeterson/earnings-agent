@@ -26,6 +26,10 @@ FINNHUB_API_KEY = os.getenv("FINNHUB_API_KEY")
 # Manager's Starter plan.
 FMP_API_KEY = os.getenv("FMP_API_KEY")
 
+# Anthropic key for the cross-check web-search resolver (web_resolver.py).
+# Optional: unset -> disagreements fall back to ask-the-operator Slack threads.
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
+
 # Google Calendar
 GOOGLE_CALENDAR_ID = os.getenv("GOOGLE_CALENDAR_ID")
 GOOGLE_CREDENTIALS_PATH = os.getenv(
