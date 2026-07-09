@@ -1,24 +1,15 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-07-08T20:41:18Z",
+  "generated_at": "2026-07-09T00:55:38Z",
   "window": {
-    "start": "2026-07-06",
-    "end": "2026-07-22"
+    "start": "2026-07-07",
+    "end": "2026-07-23"
   },
   "counts": {
-    "events": 24
+    "events": 40
   },
   "events": [
-    {
-      "ticker": "TTRX",
-      "event_date": "2026-07-06",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Turn Therapeutics Inc"
-    },
     {
       "ticker": "NRIX",
       "event_date": "2026-07-07",
@@ -31,9 +22,9 @@
     {
       "ticker": "JPM",
       "event_date": "2026-07-14",
-      "event_hour": "",
+      "event_hour": "bmo",
       "tier": 3,
-      "date_confirmed": false,
+      "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "JPMorgan Chase & Co"
     },
@@ -58,9 +49,9 @@
     {
       "ticker": "JNJ",
       "event_date": "2026-07-15",
-      "event_hour": "",
+      "event_hour": "bmo",
       "tier": 2,
-      "date_confirmed": false,
+      "date_confirmed": true,
       "call_datetime_utc": "2026-07-15T20:00:00+00:00",
       "company_name": "Johnson & Johnson"
     },
@@ -225,6 +216,159 @@
       "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "West Pharmaceutical Services Inc"
+    },
+    {
+      "ticker": "ARGX",
+      "event_date": "2026-07-23",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "argenx SE - ADR"
+    },
+    {
+      "ticker": "ATRC",
+      "event_date": "2026-07-23",
+      "event_hour": "amc",
+      "tier": 2,
+      "date_confirmed": true,
+      "call_datetime_utc": "2026-07-23T20:30:00+00:00",
+      "company_name": "AtriCure Inc"
+    },
+    {
+      "ticker": "BAX",
+      "event_date": "2026-07-23",
+      "event_hour": "",
+      "tier": 2,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Baxter International Inc."
+    },
+    {
+      "ticker": "DGX",
+      "event_date": "2026-07-23",
+      "event_hour": "bmo",
+      "tier": 2,
+      "date_confirmed": true,
+      "call_datetime_utc": "2026-07-23T20:00:00+00:00",
+      "company_name": "Quest Diagnostics Inc"
+    },
+    {
+      "ticker": "DXCM",
+      "event_date": "2026-07-23",
+      "event_hour": "",
+      "tier": 2,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "DexCom, Inc."
+    },
+    {
+      "ticker": "ENSG",
+      "event_date": "2026-07-23",
+      "event_hour": "",
+      "tier": 1,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Ensign Group Inc"
+    },
+    {
+      "ticker": "EW",
+      "event_date": "2026-07-23",
+      "event_hour": "amc",
+      "tier": 2,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Edwards Lifesciences Corp"
+    },
+    {
+      "ticker": "HCA",
+      "event_date": "2026-07-23",
+      "event_hour": "bmo",
+      "tier": 2,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "HCA Healthcare Inc"
+    },
+    {
+      "ticker": "INMD",
+      "event_date": "2026-07-23",
+      "event_hour": "bmo",
+      "tier": 2,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "InMode Ltd."
+    },
+    {
+      "ticker": "LTC",
+      "event_date": "2026-07-23",
+      "event_hour": "",
+      "tier": 2,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "LTC Properties Inc"
+    },
+    {
+      "ticker": "MA",
+      "event_date": "2026-07-23",
+      "event_hour": "bmo",
+      "tier": 1,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Mastercard Inc"
+    },
+    {
+      "ticker": "NVCR",
+      "event_date": "2026-07-23",
+      "event_hour": "",
+      "tier": 2,
+      "date_confirmed": false,
+      "call_datetime_utc": "2026-07-23T20:00:00+00:00",
+      "company_name": "Novocure Limited"
+    },
+    {
+      "ticker": "QGEN",
+      "event_date": "2026-07-23",
+      "event_hour": "amc",
+      "tier": 2,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Qiagen N.V."
+    },
+    {
+      "ticker": "SAP",
+      "event_date": "2026-07-23",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "SAP SE"
+    },
+    {
+      "ticker": "SPSC",
+      "event_date": "2026-07-23",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "SPS Commerce Inc"
+    },
+    {
+      "ticker": "TMO",
+      "event_date": "2026-07-23",
+      "event_hour": "bmo",
+      "tier": 2,
+      "date_confirmed": true,
+      "call_datetime_utc": "2026-07-23T12:30:00+00:00",
+      "company_name": "Thermo Fisher Scientific Inc"
+    },
+    {
+      "ticker": "VLTO",
+      "event_date": "2026-07-23",
+      "event_hour": "amc",
+      "tier": 1,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Veralto Corp"
     }
   ]
 }
