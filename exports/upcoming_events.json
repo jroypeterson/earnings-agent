@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-07-10T20:47:07Z",
+  "generated_at": "2026-07-11T12:04:46Z",
   "window": {
-    "start": "2026-07-08",
-    "end": "2026-07-24"
+    "start": "2026-07-09",
+    "end": "2026-07-25"
   },
   "counts": {
-    "events": 42
+    "events": 41
   },
   "events": [
     {
@@ -236,15 +236,6 @@
       "company_name": "AtriCure Inc"
     },
     {
-      "ticker": "BAX",
-      "event_date": "2026-07-23",
-      "event_hour": "",
-      "tier": 2,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Baxter International Inc."
-    },
-    {
       "ticker": "DGX",
       "event_date": "2026-07-23",
       "event_hour": "bmo",
@@ -252,15 +243,6 @@
       "date_confirmed": true,
       "call_datetime_utc": "2026-07-23T20:00:00+00:00",
       "company_name": "Quest Diagnostics Inc"
-    },
-    {
-      "ticker": "DXCM",
-      "event_date": "2026-07-23",
-      "event_hour": "",
-      "tier": 2,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "DexCom, Inc."
     },
     {
       "ticker": "ENSG",
@@ -333,6 +315,15 @@
       "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "Qiagen N.V."
+    },
+    {
+      "ticker": "RNG",
+      "event_date": "2026-07-23",
+      "event_hour": "amc",
+      "tier": 3,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "RingCentral Inc"
     },
     {
       "ticker": "SAP",
