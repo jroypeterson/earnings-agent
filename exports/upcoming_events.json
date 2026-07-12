@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-07-11T12:04:46Z",
+  "generated_at": "2026-07-12T12:08:24Z",
   "window": {
-    "start": "2026-07-09",
-    "end": "2026-07-25"
+    "start": "2026-07-10",
+    "end": "2026-07-26"
   },
   "counts": {
-    "events": 41
+    "events": 42
   },
   "events": [
     {
@@ -72,6 +72,15 @@
       "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "Netflix Inc"
+    },
+    {
+      "ticker": "TSM",
+      "event_date": "2026-07-16",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Taiwan Semiconductor Manufacturing Company Limited"
     },
     {
       "ticker": "UNH",
