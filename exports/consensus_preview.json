@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-07-13T13:33:58Z",
+  "generated_at": "2026-07-13T20:37:59Z",
   "window": {
     "start": "2026-07-13",
     "end": "2026-07-16"
@@ -17,8 +17,8 @@
       "event_date": "2026-07-16",
       "event_hour": "amc",
       "call_datetime_utc": null,
-      "last_price": 74.9000015258789,
-      "day_change_pct": 2.085319234049164,
+      "last_price": 73.83000183105469,
+      "day_change_pct": 0.6269579763564688,
       "consensus": {
         "eps": {
           "mean": 0.8041,
@@ -35,8 +35,8 @@
       },
       "qtd": {
         "since": "2026-06-30",
-        "ticker_pct": 4.901960679554644,
-        "spx_pct": 0.8784495074817655,
+        "ticker_pct": 3.403361699222133,
+        "spx_pct": 0.3213791818279897,
         "sector_etf": null,
         "sector_etf_pct": null
       },
@@ -44,9 +44,7 @@
         "pct": 8.1,
         "expiry": "2026-07-17",
         "method": "ATM straddle",
-        "notes": [
-          "stale quote"
-        ]
+        "notes": []
       },
       "post_earnings_moves": [],
       "beat_rates": {
