@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-07-13T03:30:28Z",
+  "generated_at": "2026-07-13T13:33:58Z",
   "window": {
-    "start": "2026-07-12",
-    "end": "2026-07-15"
+    "start": "2026-07-13",
+    "end": "2026-07-16"
   },
   "counts": {
     "previews": 1
@@ -14,11 +14,11 @@
       "ticker": "NFLX",
       "company_name": "Netflix Inc",
       "tier": 1,
-      "event_date": "2026-07-15",
+      "event_date": "2026-07-16",
       "event_hour": "amc",
       "call_datetime_utc": null,
-      "last_price": 73.37000274658203,
-      "day_change_pct": -2.7825605408166028,
+      "last_price": 74.9000015258789,
+      "day_change_pct": 2.085319234049164,
       "consensus": {
         "eps": {
           "mean": 0.8041,
@@ -35,43 +35,24 @@
       },
       "qtd": {
         "since": "2026-06-30",
-        "ticker_pct": 2.7591052921603914,
-        "spx_pct": 1.0953831115121437,
+        "ticker_pct": 4.901960679554644,
+        "spx_pct": 0.8784495074817655,
         "sector_etf": null,
         "sector_etf_pct": null
       },
       "implied_move": {
-        "pct": 7.9,
+        "pct": 8.1,
         "expiry": "2026-07-17",
         "method": "ATM straddle",
-        "notes": []
+        "notes": [
+          "stale quote"
+        ]
       },
-      "post_earnings_moves": [
-        {
-          "event_date": "2026-04-16",
-          "move_pct": -9.722611808071644,
-          "window_label": "next-day close vs earnings-day close"
-        },
-        {
-          "event_date": "2026-01-20",
-          "move_pct": -2.1774025663128227,
-          "window_label": "next-day close vs earnings-day close"
-        },
-        {
-          "event_date": "2025-10-21",
-          "move_pct": -10.068071763447534,
-          "window_label": "next-day close vs earnings-day close"
-        },
-        {
-          "event_date": "2025-07-17",
-          "move_pct": -5.095863366074478,
-          "window_label": "next-day close vs earnings-day close"
-        }
-      ],
+      "post_earnings_moves": [],
       "beat_rates": {
         "eps": {
-          "beats": 15,
-          "total": 20,
+          "beats": null,
+          "total": null,
           "source": "yfinance"
         },
         "revenue": {
@@ -84,6 +65,14 @@
         {
           "field": "qtd.sector_etf",
           "reason": "no mapped ETF for sector 'Tech'"
+        },
+        {
+          "field": "post_earnings_moves",
+          "reason": "no computable prior reactions"
+        },
+        {
+          "field": "beat_rates.eps",
+          "reason": "no yfinance surprise history"
         },
         {
           "field": "consensus.eps.range",
