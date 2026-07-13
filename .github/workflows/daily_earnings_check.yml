@@ -195,6 +195,22 @@ jobs:
           GOOGLE_CREDENTIALS_PATH: credentials.json
         run: python main.py --check-replies
 
+      # Pre-earnings Consensus Metrics Preview (StreetAccount §9A) for upcoming
+      # Tier-1 reporters -> #street-account + exports/consensus_preview.json
+      # (hand-off for sa-monitor). A FEATURE, not a safeguard: continue-on-error
+      # so a preview failure can NEVER fail the critical daily sync. Until the
+      # SLACK_WEBHOOK_STREET_ACCOUNT secret is added it raises (swallowed here)
+      # and posts nothing, but still writes the JSON export. Runs before the DB
+      # save so its kv_store dedup marks persist.
+      - name: Consensus metrics preview (StreetAccount §9A)
+        if: github.ref == 'refs/heads/main'
+        continue-on-error: true
+        env:
+          FMP_API_KEY: ${{ secrets.FMP_API_KEY }}
+          COVERAGE_MANAGER_PATH: ${{ github.workspace }}/coverage-manager
+          SLACK_WEBHOOK_STREET_ACCOUNT: ${{ secrets.SLACK_WEBHOOK_STREET_ACCOUNT }}
+        run: python main.py --consensus-preview
+
       # Publish exports/upcoming_events.json for downstream consumers
       # (sa-monitor Phase 2 'Note:' context enrichment fetches this via
       # raw.githubusercontent.com). Commit-back so the file is reachable
@@ -210,12 +226,13 @@ jobs:
           git config user.name "earnings-agent-ci"
           git config user.email "earnings-agent-ci@users.noreply.github.com"
           git add exports/upcoming_events.json
+          [ -f exports/consensus_preview.json ] && git add exports/consensus_preview.json || true
           if git diff --cached --quiet; then
-            echo "no changes to upcoming_events.json"
+            echo "no changes to exported JSON"
             exit 0
           fi
           git pull --rebase --quiet || git rebase --abort || true
-          git commit -m "ci: refresh exports/upcoming_events.json"
+          git commit -m "ci: refresh exports/*.json (upcoming_events + consensus_preview)"
           git push "https://${GITHUB_ACTOR}:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
             "HEAD:${GITHUB_REF_NAME:-main}" || echo "push failed (non-fatal)"
         env:

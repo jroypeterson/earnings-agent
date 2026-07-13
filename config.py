@@ -55,6 +55,10 @@ SLACK_WEBHOOK_EARNINGS = os.getenv("SLACK_WEBHOOK_EARNINGS")
 # channel when unset.
 SLACK_WEBHOOK_STATUS = os.getenv("SLACK_WEBHOOK_STATUS")
 SLACK_STATUS_CHANNEL_ID = os.getenv("SLACK_STATUS_CHANNEL_ID")
+# StreetAccount channel: consensus-metrics pre-earnings previews (§9A).
+# Secret name matches sa-monitor's. Unset -> --consensus-preview posts raise
+# (fail-loud) rather than silently dropping the brief.
+SLACK_WEBHOOK_STREET_ACCOUNT = os.getenv("SLACK_WEBHOOK_STREET_ACCOUNT")
 # Bot-token Slack client (powers per-question threads + reply polling).
 # Webhook remains the path for heartbeat / digest posts that don't need
 # replies. When SLACK_BOT_TOKEN + SLACK_CHANNEL_ID are unset, threaded

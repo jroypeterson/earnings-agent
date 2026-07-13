@@ -21,6 +21,7 @@ from config import (
     FINNHUB_API_KEY,
     SLACK_WEBHOOK_EARNINGS,
     SLACK_WEBHOOK_STATUS,
+    SLACK_WEBHOOK_STREET_ACCOUNT,
     SLACK_BOT_TOKEN,
     SLACK_CHANNEL_ID,
     SLACK_STATUS_CHANNEL_ID,
@@ -83,6 +84,13 @@ from ticktick import (
     TickTickTokenExpired,
 )
 from digest import build_weekly_digest
+from consensus_preview import (
+    select_upcoming_reporters,
+    assemble_preview_rows,
+    build_preview_blocks,
+    build_preview_fallback,
+    write_preview_export,
+)
 from notifications import (
     build_slack_blocks,
     build_slack_fallback_text,
@@ -1596,6 +1604,134 @@ def run_weekly_digest(dry_run: bool = False):
 
     logger.info("Weekly digest complete. Run Gmail MCP draft creation "
                 f"using content from {DIGEST_HTML_PATH}")
+
+
+# ---------------------------------------------------------------------------
+# Consensus Metrics Preview (StreetAccount §9A) — additive, run() untouched
+# ---------------------------------------------------------------------------
+
+
+def run_consensus_preview(
+    dry_run: bool = False,
+    days_ahead: int = 3,
+    ticker: str | None = None,
+):
+    """Build + post the pre-earnings consensus-metrics preview.
+
+    Core fields are free/cached (yfinance + SQLite + Coverage Manager). The
+    revenue beat rate additionally uses FMP's /stable/earnings when FMP_API_KEY
+    is set (verified Starter-available 2026-07-12); the estimate count/range
+    stays n/a (quarterly analyst-estimates is Starter-gated).
+
+    Dedup: kv_store `consensus_preview_posted:TICKER:EVENT_DATE`. Post-then-mark
+    (mark only after a successful Slack post) so a failed post retries; only
+    rows actually included in the posted payload are marked.
+    --dry-run writes the JSON export but posts nothing and marks nothing.
+    """
+    import json
+    from pathlib import Path
+
+    coverage = load_coverage()
+    if not coverage:
+        logger.error("No tickers loaded. Cannot build consensus preview.")
+        sys.exit(1)
+    coverage_map = {t.ticker: t for t in coverage}
+
+    conn = init_db()
+
+    reporters = select_upcoming_reporters(
+        conn, coverage, days_ahead=days_ahead, max_tier=1, ticker=ticker
+    )
+
+    # Dedup (live runs only — dry-run must never consult/mutate the ledger,
+    # so a preview is re-previewable on demand).
+    if not dry_run and reporters:
+        pending = []
+        for r in reporters:
+            key = f"consensus_preview_posted:{r.ticker}:{r.event_date}"
+            if kv_get(conn, key):
+                logger.info(
+                    f"Preview already posted for {r.ticker} {r.event_date}; skipping"
+                )
+                continue
+            pending.append(r)
+        reporters = pending
+
+    # Revenue beat rate comes from FMP /stable/earnings (verified available on
+    # the Starter plan 2026-07-12); estimate count/range stays n/a (Starter-
+    # gated). Gate purely on the key — the endpoint is confirmed, not probed.
+    fmp_ok = bool(FMP_API_KEY)
+    logger.info(
+        "FMP revenue-beat %s", "ON" if fmp_ok else "OFF (no FMP_API_KEY)"
+    )
+
+    as_of = date.today()
+    rows = assemble_preview_rows(
+        conn, reporters, coverage_map,
+        fmp_key=(FMP_API_KEY if fmp_ok else None),
+        fmp_ok=fmp_ok,
+    )
+
+    # Window for the export mirrors the selection window (or the single event).
+    if ticker and rows:
+        window = {"start": as_of.isoformat(), "end": rows[0].event_date}
+    else:
+        window = {
+            "start": as_of.isoformat(),
+            "end": (as_of + timedelta(days=days_ahead)).isoformat(),
+        }
+    out_path = Path(__file__).parent / "exports" / "consensus_preview.json"
+    n = write_preview_export(rows, out_path, window)
+    logger.info(f"Wrote {n} consensus preview(s) to {out_path}")
+
+    blocks, n_included = build_preview_blocks(rows, as_of)
+    fallback = build_preview_fallback(rows, as_of)
+
+    if dry_run:
+        logger.info("=" * 50)
+        logger.info("DRY RUN — consensus preview fallback text:")
+        logger.info("\n" + fallback)
+        logger.info("-" * 50)
+        logger.info("DRY RUN — Block Kit JSON:")
+        logger.info(json.dumps(blocks, indent=2))
+        logger.info("=" * 50)
+        logger.info("(Dry run — no Slack post, no kv_store marks)")
+        conn.close()
+        return
+
+    if not rows:
+        logger.info("No upcoming reporters to preview — nothing to post.")
+        conn.close()
+        return
+
+    if not SLACK_WEBHOOK_STREET_ACCOUNT:
+        conn.close()
+        raise NotificationError(
+            "SLACK_WEBHOOK_STREET_ACCOUNT not set — cannot post consensus preview"
+        )
+
+    post_slack(SLACK_WEBHOOK_STREET_ACCOUNT, blocks, fallback)
+    # Post-then-mark, and mark ONLY rows actually in the posted payload
+    # (build_preview_blocks stops at the Slack block cap and returns how many
+    # it included, in order). Overflow rows stay unmarked so the next run
+    # re-posts them — they are never silently dropped-yet-marked.
+    posted_rows = rows[:n_included]
+    if n_included < len(rows):
+        overflow = rows[n_included:]
+        logger.warning(
+            "Consensus preview overflow: posted %d of %d rows (Slack block cap); "
+            "%d left unmarked for the next run: %s",
+            n_included, len(rows), len(overflow),
+            ", ".join(r.ticker for r in overflow),
+        )
+    for r in posted_rows:
+        kv_set(
+            conn,
+            f"consensus_preview_posted:{r.ticker}:{r.event_date}",
+            f"posted:{as_of.isoformat()}",
+        )
+    logger.info(f"Posted consensus preview for {len(posted_rows)} name(s)")
+    conn.close()
 
 
 # ---------------------------------------------------------------------------
@@ -4113,6 +4249,25 @@ def main():
         action="store_true",
         help="Poll Slack threads for replies on open questions; apply commands (lock/wait/snooze/ignore/etc) to DB state",
     )
+    parser.add_argument(
+        "--consensus-preview",
+        action="store_true",
+        help="Build the pre-earnings consensus-metrics preview (StreetAccount §9A) "
+             "for upcoming Tier-1 reporters and post to #street-account",
+    )
+    parser.add_argument(
+        "--preview-ticker",
+        type=str,
+        default=None,
+        metavar="TICKER",
+        help="Restrict --consensus-preview to a single ticker's next upcoming event (any tier)",
+    )
+    parser.add_argument(
+        "--preview-days",
+        type=int,
+        default=3,
+        help="Look-ahead window (days) for --consensus-preview reporter selection (default: 3)",
+    )
     args = parser.parse_args()
 
     # --populate-db-only is a self-documenting alias for --dry-run (DB writes
@@ -4166,6 +4321,12 @@ def main():
         _run_safeguard(
             "Slack reply processing",
             lambda: run_check_replies(dry_run=args.dry_run),
+        )
+    elif args.consensus_preview:
+        run_consensus_preview(
+            dry_run=args.dry_run,
+            days_ahead=args.preview_days,
+            ticker=args.preview_ticker,
         )
     elif args.cleanup:
         conn = init_db()
