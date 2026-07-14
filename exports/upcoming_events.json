@@ -1,24 +1,15 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-07-14T12:40:55Z",
+  "generated_at": "2026-07-14T20:34:57Z",
   "window": {
     "start": "2026-07-12",
     "end": "2026-07-28"
   },
   "counts": {
-    "events": 73
+    "events": 72
   },
   "events": [
-    {
-      "ticker": "JPM",
-      "event_date": "2026-07-14",
-      "event_hour": "bmo",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "JPMorgan Chase & Co"
-    },
     {
       "ticker": "ASML",
       "event_date": "2026-07-15",
@@ -101,6 +92,15 @@
       "company_name": "Danaher Corp"
     },
     {
+      "ticker": "GOOG",
+      "event_date": "2026-07-21",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Alphabet Inc Class C"
+    },
+    {
       "ticker": "ICLR",
       "event_date": "2026-07-21",
       "event_hour": "amc",
@@ -144,15 +144,6 @@
       "date_confirmed": true,
       "call_datetime_utc": "2026-07-23T15:00:00+00:00",
       "company_name": "Community Health Systems Inc"
-    },
-    {
-      "ticker": "GOOG",
-      "event_date": "2026-07-22",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Alphabet Inc Class C"
     },
     {
       "ticker": "HCSG",
