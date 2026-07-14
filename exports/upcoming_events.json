@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-07-13T20:38:00Z",
+  "generated_at": "2026-07-14T12:40:55Z",
   "window": {
-    "start": "2026-07-11",
-    "end": "2026-07-27"
+    "start": "2026-07-12",
+    "end": "2026-07-28"
   },
   "counts": {
-    "events": 51
+    "events": 73
   },
   "events": [
     {
@@ -146,6 +146,15 @@
       "company_name": "Community Health Systems Inc"
     },
     {
+      "ticker": "GOOG",
+      "event_date": "2026-07-22",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Alphabet Inc Class C"
+    },
+    {
       "ticker": "HCSG",
       "event_date": "2026-07-22",
       "event_hour": "bmo",
@@ -272,15 +281,6 @@
       "company_name": "Edwards Lifesciences Corp"
     },
     {
-      "ticker": "GOOG",
-      "event_date": "2026-07-23",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Alphabet Inc Class C"
-    },
-    {
       "ticker": "HCA",
       "event_date": "2026-07-23",
       "event_hour": "bmo",
@@ -360,15 +360,6 @@
       "date_confirmed": true,
       "call_datetime_utc": "2026-07-23T12:30:00+00:00",
       "company_name": "Thermo Fisher Scientific Inc"
-    },
-    {
-      "ticker": "VLTO",
-      "event_date": "2026-07-23",
-      "event_hour": "amc",
-      "tier": 1,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Veralto Corp"
     },
     {
       "ticker": "CNI",
@@ -468,6 +459,213 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Welltower Inc"
+    },
+    {
+      "ticker": "ACHC",
+      "event_date": "2026-07-28",
+      "event_hour": "amc",
+      "tier": 2,
+      "date_confirmed": true,
+      "call_datetime_utc": "2026-07-29T13:00:00+00:00",
+      "company_name": "Acadia Healthcare Company Inc"
+    },
+    {
+      "ticker": "AMRN",
+      "event_date": "2026-07-28",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Amarin Corporation PLC"
+    },
+    {
+      "ticker": "BE",
+      "event_date": "2026-07-28",
+      "event_hour": "amc",
+      "tier": 3,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Bloom Energy Corporation"
+    },
+    {
+      "ticker": "CFLT",
+      "event_date": "2026-07-28",
+      "event_hour": "amc",
+      "tier": 3,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Confluent, Inc."
+    },
+    {
+      "ticker": "CHE",
+      "event_date": "2026-07-28",
+      "event_hour": "",
+      "tier": 2,
+      "date_confirmed": false,
+      "call_datetime_utc": "2026-07-29T14:00:00+00:00",
+      "company_name": "Chemed Corp"
+    },
+    {
+      "ticker": "CNC",
+      "event_date": "2026-07-28",
+      "event_hour": "bmo",
+      "tier": 2,
+      "date_confirmed": true,
+      "call_datetime_utc": "2026-07-28T12:30:00+00:00",
+      "company_name": "Centene Corp"
+    },
+    {
+      "ticker": "FER",
+      "event_date": "2026-07-28",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Ferrovial SE"
+    },
+    {
+      "ticker": "GSK",
+      "event_date": "2026-07-28",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "GSK plc"
+    },
+    {
+      "ticker": "HOLX",
+      "event_date": "2026-07-28",
+      "event_hour": "amc",
+      "tier": 2,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Hologic, Inc."
+    },
+    {
+      "ticker": "INCY",
+      "event_date": "2026-07-28",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Incyte Corp"
+    },
+    {
+      "ticker": "IONS",
+      "event_date": "2026-07-28",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Ionis Pharmaceuticals Inc"
+    },
+    {
+      "ticker": "IQV",
+      "event_date": "2026-07-28",
+      "event_hour": "bmo",
+      "tier": 2,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "IQVIA Holdings Inc."
+    },
+    {
+      "ticker": "LENZ",
+      "event_date": "2026-07-28",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Lenz Therapeutics Inc"
+    },
+    {
+      "ticker": "NAUT",
+      "event_date": "2026-07-28",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Nautilus Biotechnology Inc"
+    },
+    {
+      "ticker": "NEO",
+      "event_date": "2026-07-28",
+      "event_hour": "bmo",
+      "tier": 2,
+      "date_confirmed": true,
+      "call_datetime_utc": "2026-07-28T20:30:00+00:00",
+      "company_name": "NeoGenomics, Inc."
+    },
+    {
+      "ticker": "PHG",
+      "event_date": "2026-07-28",
+      "event_hour": "",
+      "tier": 2,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Koninklijke Philips N.V."
+    },
+    {
+      "ticker": "SPGI",
+      "event_date": "2026-07-28",
+      "event_hour": "bmo",
+      "tier": 1,
+      "date_confirmed": true,
+      "call_datetime_utc": "2026-07-28T12:30:00+00:00",
+      "company_name": "S&P Global Inc"
+    },
+    {
+      "ticker": "TDOC",
+      "event_date": "2026-07-28",
+      "event_hour": "amc",
+      "tier": 2,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Teladoc Health Inc"
+    },
+    {
+      "ticker": "TENB",
+      "event_date": "2026-07-28",
+      "event_hour": "amc",
+      "tier": 3,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Tenable Holdings Inc"
+    },
+    {
+      "ticker": "UPS",
+      "event_date": "2026-07-28",
+      "event_hour": "bmo",
+      "tier": 1,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "United Parcel Service Inc"
+    },
+    {
+      "ticker": "V",
+      "event_date": "2026-07-28",
+      "event_hour": "amc",
+      "tier": 1,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Visa Inc"
+    },
+    {
+      "ticker": "VLTO",
+      "event_date": "2026-07-28",
+      "event_hour": "amc",
+      "tier": 1,
+      "date_confirmed": true,
+      "call_datetime_utc": "2026-07-29T11:30:00+00:00",
+      "company_name": "Veralto Corp"
+    },
+    {
+      "ticker": "WVE",
+      "event_date": "2026-07-28",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Wave Life Sciences Ltd"
     }
   ]
 }

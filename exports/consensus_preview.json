@@ -1,82 +1,13 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-07-13T20:37:59Z",
+  "generated_at": "2026-07-14T12:40:55Z",
   "window": {
-    "start": "2026-07-13",
-    "end": "2026-07-16"
+    "start": "2026-07-14",
+    "end": "2026-07-17"
   },
   "counts": {
-    "previews": 1
+    "previews": 0
   },
-  "previews": [
-    {
-      "ticker": "NFLX",
-      "company_name": "Netflix Inc",
-      "tier": 1,
-      "event_date": "2026-07-16",
-      "event_hour": "amc",
-      "call_datetime_utc": null,
-      "last_price": 73.83000183105469,
-      "day_change_pct": 0.6269579763564688,
-      "consensus": {
-        "eps": {
-          "mean": 0.8041,
-          "count": null,
-          "low": null,
-          "high": null
-        },
-        "revenue": {
-          "mean": 12839621841.0,
-          "count": null,
-          "low": null,
-          "high": null
-        }
-      },
-      "qtd": {
-        "since": "2026-06-30",
-        "ticker_pct": 3.403361699222133,
-        "spx_pct": 0.3213791818279897,
-        "sector_etf": null,
-        "sector_etf_pct": null
-      },
-      "implied_move": {
-        "pct": 8.1,
-        "expiry": "2026-07-17",
-        "method": "ATM straddle",
-        "notes": []
-      },
-      "post_earnings_moves": [],
-      "beat_rates": {
-        "eps": {
-          "beats": null,
-          "total": null,
-          "source": "yfinance"
-        },
-        "revenue": {
-          "beats": 11,
-          "total": 17,
-          "source": "fmp"
-        }
-      },
-      "na_fields": [
-        {
-          "field": "qtd.sector_etf",
-          "reason": "no mapped ETF for sector 'Tech'"
-        },
-        {
-          "field": "post_earnings_moves",
-          "reason": "no computable prior reactions"
-        },
-        {
-          "field": "beat_rates.eps",
-          "reason": "no yfinance surprise history"
-        },
-        {
-          "field": "consensus.eps.range",
-          "reason": "estimate range not available on FMP Starter plan"
-        }
-      ]
-    }
-  ]
+  "previews": []
 }
