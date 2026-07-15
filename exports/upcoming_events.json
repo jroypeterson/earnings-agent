@@ -1,51 +1,15 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-07-15T12:43:52Z",
+  "generated_at": "2026-07-15T20:31:33Z",
   "window": {
     "start": "2026-07-13",
     "end": "2026-07-29"
   },
   "counts": {
-    "events": 120
+    "events": 113
   },
   "events": [
-    {
-      "ticker": "HCA",
-      "event_date": "2026-07-14",
-      "event_hour": "bmo",
-      "tier": 2,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "HCA Healthcare Inc"
-    },
-    {
-      "ticker": "ASML",
-      "event_date": "2026-07-15",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "ASML Holding NV"
-    },
-    {
-      "ticker": "ELV",
-      "event_date": "2026-07-15",
-      "event_hour": "bmo",
-      "tier": 2,
-      "date_confirmed": true,
-      "call_datetime_utc": "2026-07-15T20:00:00+00:00",
-      "company_name": "Elevance Health Inc"
-    },
-    {
-      "ticker": "JNJ",
-      "event_date": "2026-07-15",
-      "event_hour": "bmo",
-      "tier": 2,
-      "date_confirmed": true,
-      "call_datetime_utc": "2026-07-15T20:00:00+00:00",
-      "company_name": "Johnson & Johnson"
-    },
     {
       "ticker": "ABT",
       "event_date": "2026-07-16",
@@ -1001,15 +965,6 @@
       "company_name": "PTC Inc"
     },
     {
-      "ticker": "QTWO",
-      "event_date": "2026-07-29",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Q2 Holdings Inc"
-    },
-    {
       "ticker": "SEM",
       "event_date": "2026-07-29",
       "event_hour": "amc",
@@ -1055,15 +1010,6 @@
       "company_name": "Upland Software Inc"
     },
     {
-      "ticker": "UTHR",
-      "event_date": "2026-07-29",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "United Therapeutics Corp"
-    },
-    {
       "ticker": "VKTX",
       "event_date": "2026-07-29",
       "event_hour": "amc",
@@ -1080,15 +1026,6 @@
       "date_confirmed": false,
       "call_datetime_utc": "2026-07-30T14:00:00+00:00",
       "company_name": "Ventas Inc"
-    },
-    {
-      "ticker": "WAY",
-      "event_date": "2026-07-29",
-      "event_hour": "",
-      "tier": 1,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Waystar Holding Corp"
     }
   ]
 }
