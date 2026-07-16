@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-07-15T20:31:33Z",
+  "generated_at": "2026-07-16T12:51:19Z",
   "window": {
-    "start": "2026-07-13",
-    "end": "2026-07-29"
+    "start": "2026-07-14",
+    "end": "2026-07-30"
   },
   "counts": {
-    "events": 113
+    "events": 200
   },
   "events": [
     {
@@ -18,6 +18,15 @@
       "date_confirmed": true,
       "call_datetime_utc": "2026-07-16T20:00:00+00:00",
       "company_name": "Abbott Laboratories"
+    },
+    {
+      "ticker": "DBVT",
+      "event_date": "2026-07-16",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "DBV Technologies SA - ADR"
     },
     {
       "ticker": "ISRG",
@@ -254,15 +263,6 @@
       "company_name": "InMode Ltd."
     },
     {
-      "ticker": "LTC",
-      "event_date": "2026-07-23",
-      "event_hour": "",
-      "tier": 2,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "LTC Properties Inc"
-    },
-    {
       "ticker": "NVCR",
       "event_date": "2026-07-23",
       "event_hour": "",
@@ -270,15 +270,6 @@
       "date_confirmed": false,
       "call_datetime_utc": "2026-07-23T20:00:00+00:00",
       "company_name": "Novocure Limited"
-    },
-    {
-      "ticker": "QGEN",
-      "event_date": "2026-07-23",
-      "event_hour": "amc",
-      "tier": 2,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Qiagen N.V."
     },
     {
       "ticker": "RNG",
@@ -569,6 +560,15 @@
       "company_name": "Koninklijke Philips N.V."
     },
     {
+      "ticker": "RGEN",
+      "event_date": "2026-07-28",
+      "event_hour": "bmo",
+      "tier": 2,
+      "date_confirmed": true,
+      "call_datetime_utc": "2026-07-28T12:00:00+00:00",
+      "company_name": "Repligen Corporation"
+    },
+    {
       "ticker": "ROG",
       "event_date": "2026-07-28",
       "event_hour": "",
@@ -585,24 +585,6 @@
       "date_confirmed": true,
       "call_datetime_utc": "2026-07-28T12:30:00+00:00",
       "company_name": "S&P Global Inc"
-    },
-    {
-      "ticker": "TDOC",
-      "event_date": "2026-07-28",
-      "event_hour": "amc",
-      "tier": 2,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Teladoc Health Inc"
-    },
-    {
-      "ticker": "TENB",
-      "event_date": "2026-07-28",
-      "event_hour": "amc",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Tenable Holdings Inc"
     },
     {
       "ticker": "TLRY",
@@ -794,15 +776,6 @@
       "company_name": "Day One Biopharmaceuticals Inc"
     },
     {
-      "ticker": "DBVT",
-      "event_date": "2026-07-29",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "DBV Technologies SA - ADR"
-    },
-    {
       "ticker": "FDXF",
       "event_date": "2026-07-29",
       "event_hour": "",
@@ -965,6 +938,15 @@
       "company_name": "PTC Inc"
     },
     {
+      "ticker": "QTWO",
+      "event_date": "2026-07-29",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Q2 Holdings Inc"
+    },
+    {
       "ticker": "SEM",
       "event_date": "2026-07-29",
       "event_hour": "amc",
@@ -981,6 +963,24 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Syros Pharmaceuticals Inc"
+    },
+    {
+      "ticker": "TDOC",
+      "event_date": "2026-07-29",
+      "event_hour": "amc",
+      "tier": 2,
+      "date_confirmed": true,
+      "call_datetime_utc": "2026-07-29T21:00:00+00:00",
+      "company_name": "Teladoc Health Inc"
+    },
+    {
+      "ticker": "TENB",
+      "event_date": "2026-07-29",
+      "event_hour": "amc",
+      "tier": 3,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Tenable Holdings Inc"
     },
     {
       "ticker": "TEVA",
@@ -1026,6 +1026,789 @@
       "date_confirmed": false,
       "call_datetime_utc": "2026-07-30T14:00:00+00:00",
       "company_name": "Ventas Inc"
+    },
+    {
+      "ticker": "WAY",
+      "event_date": "2026-07-29",
+      "event_hour": "",
+      "tier": 1,
+      "date_confirmed": false,
+      "call_datetime_utc": "2026-07-29T20:30:00+00:00",
+      "company_name": "Waystar Holding Corp"
+    },
+    {
+      "ticker": "AAPL",
+      "event_date": "2026-07-30",
+      "event_hour": "amc",
+      "tier": 1,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Apple Inc."
+    },
+    {
+      "ticker": "ABUS",
+      "event_date": "2026-07-30",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Arbutus Biopharma Corp"
+    },
+    {
+      "ticker": "ACIU",
+      "event_date": "2026-07-30",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "AC Immune SA"
+    },
+    {
+      "ticker": "AGIO",
+      "event_date": "2026-07-30",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Agios Pharmaceuticals Inc"
+    },
+    {
+      "ticker": "AKBA",
+      "event_date": "2026-07-30",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Akebia Therapeutics Inc"
+    },
+    {
+      "ticker": "ALEC",
+      "event_date": "2026-07-30",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Alector Inc"
+    },
+    {
+      "ticker": "ALHC",
+      "event_date": "2026-07-30",
+      "event_hour": "amc",
+      "tier": 2,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Alignment Healthcare Inc"
+    },
+    {
+      "ticker": "ALNY",
+      "event_date": "2026-07-30",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Alnylam Pharmaceuticals, Inc."
+    },
+    {
+      "ticker": "AMRX",
+      "event_date": "2026-07-30",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Amneal Pharmaceuticals Inc"
+    },
+    {
+      "ticker": "AMZN",
+      "event_date": "2026-07-30",
+      "event_hour": "amc",
+      "tier": 1,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Amazon.com, Inc."
+    },
+    {
+      "ticker": "AORT",
+      "event_date": "2026-07-30",
+      "event_hour": "",
+      "tier": 2,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Artivion Inc"
+    },
+    {
+      "ticker": "ARDX",
+      "event_date": "2026-07-30",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Ardelyx Inc"
+    },
+    {
+      "ticker": "ARVN",
+      "event_date": "2026-07-30",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Arvinas Inc"
+    },
+    {
+      "ticker": "ASX",
+      "event_date": "2026-07-30",
+      "event_hour": "",
+      "tier": 2,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "ASE Technology Holding Co., Ltd."
+    },
+    {
+      "ticker": "ATR",
+      "event_date": "2026-07-30",
+      "event_hour": "",
+      "tier": 2,
+      "date_confirmed": false,
+      "call_datetime_utc": "2026-07-31T13:00:00+00:00",
+      "company_name": "Aptargroup Inc"
+    },
+    {
+      "ticker": "AUPH",
+      "event_date": "2026-07-30",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Aurinia Pharmaceuticals Inc"
+    },
+    {
+      "ticker": "BAX",
+      "event_date": "2026-07-30",
+      "event_hour": "",
+      "tier": 2,
+      "date_confirmed": false,
+      "call_datetime_utc": "2026-07-30T12:30:00+00:00",
+      "company_name": "Baxter International Inc."
+    },
+    {
+      "ticker": "BBIO",
+      "event_date": "2026-07-30",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "BridgeBio Pharma Inc"
+    },
+    {
+      "ticker": "BCRX",
+      "event_date": "2026-07-30",
+      "event_hour": "bmo",
+      "tier": 3,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "BioCryst Pharmaceuticals Inc"
+    },
+    {
+      "ticker": "BFLY",
+      "event_date": "2026-07-30",
+      "event_hour": "",
+      "tier": 2,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Butterfly Network, Inc."
+    },
+    {
+      "ticker": "BIO",
+      "event_date": "2026-07-30",
+      "event_hour": "amc",
+      "tier": 2,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Bio-Rad Laboratories, Inc. Class A Common Stock"
+    },
+    {
+      "ticker": "BMY",
+      "event_date": "2026-07-30",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Bristol-Myers Squibb Company"
+    },
+    {
+      "ticker": "CBIO",
+      "event_date": "2026-07-30",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Crescent Biopharma Inc"
+    },
+    {
+      "ticker": "CDXS",
+      "event_date": "2026-07-30",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Codexis Inc"
+    },
+    {
+      "ticker": "CHKP",
+      "event_date": "2026-07-30",
+      "event_hour": "bmo",
+      "tier": 3,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Check Point Software Technologies Ltd"
+    },
+    {
+      "ticker": "CHRS",
+      "event_date": "2026-07-30",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Coherus Oncology Inc"
+    },
+    {
+      "ticker": "CI",
+      "event_date": "2026-07-30",
+      "event_hour": "bmo",
+      "tier": 1,
+      "date_confirmed": true,
+      "call_datetime_utc": "2026-07-30T10:30:00+00:00",
+      "company_name": "Cigna Group"
+    },
+    {
+      "ticker": "CIGI",
+      "event_date": "2026-07-30",
+      "event_hour": "",
+      "tier": 1,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Colliers International Group Inc"
+    },
+    {
+      "ticker": "COIN",
+      "event_date": "2026-07-30",
+      "event_hour": "amc",
+      "tier": 1,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Coinbase Global Inc"
+    },
+    {
+      "ticker": "COLL",
+      "event_date": "2026-07-30",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Collegium Pharmaceutical Inc"
+    },
+    {
+      "ticker": "CROX",
+      "event_date": "2026-07-30",
+      "event_hour": "bmo",
+      "tier": 1,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Crocs Inc"
+    },
+    {
+      "ticker": "CSTL",
+      "event_date": "2026-07-30",
+      "event_hour": "",
+      "tier": 2,
+      "date_confirmed": false,
+      "call_datetime_utc": "2026-07-30T20:30:00+00:00",
+      "company_name": "Castle Biosciences, Inc."
+    },
+    {
+      "ticker": "CYTK",
+      "event_date": "2026-07-30",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Cytokinetics, Inc."
+    },
+    {
+      "ticker": "DBX",
+      "event_date": "2026-07-30",
+      "event_hour": "amc",
+      "tier": 1,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Dropbox, Inc."
+    },
+    {
+      "ticker": "DXCM",
+      "event_date": "2026-07-30",
+      "event_hour": "",
+      "tier": 2,
+      "date_confirmed": false,
+      "call_datetime_utc": "2026-07-30T20:30:00+00:00",
+      "company_name": "DexCom, Inc."
+    },
+    {
+      "ticker": "DYN",
+      "event_date": "2026-07-30",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Dyne Therapeutics Inc"
+    },
+    {
+      "ticker": "ENOV",
+      "event_date": "2026-07-30",
+      "event_hour": "bmo",
+      "tier": 2,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Enovis Corporation"
+    },
+    {
+      "ticker": "FLGT",
+      "event_date": "2026-07-30",
+      "event_hour": "bmo",
+      "tier": 2,
+      "date_confirmed": true,
+      "call_datetime_utc": "2026-07-30T20:30:00+00:00",
+      "company_name": "Fulgent Genetics, Inc."
+    },
+    {
+      "ticker": "GH",
+      "event_date": "2026-07-30",
+      "event_hour": "amc",
+      "tier": 2,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Guardant Health, Inc."
+    },
+    {
+      "ticker": "GMED",
+      "event_date": "2026-07-30",
+      "event_hour": "",
+      "tier": 2,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Globus Medical Inc"
+    },
+    {
+      "ticker": "HCM",
+      "event_date": "2026-07-30",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "HUTCHMED (China) Ltd"
+    },
+    {
+      "ticker": "HR",
+      "event_date": "2026-07-30",
+      "event_hour": "",
+      "tier": 2,
+      "date_confirmed": false,
+      "call_datetime_utc": "2026-07-31T13:00:00+00:00",
+      "company_name": "Healthcare Realty Trust Inc"
+    },
+    {
+      "ticker": "ILMN",
+      "event_date": "2026-07-30",
+      "event_hour": "amc",
+      "tier": 2,
+      "date_confirmed": true,
+      "call_datetime_utc": "2026-07-30T20:30:00+00:00",
+      "company_name": "Illumina, Inc."
+    },
+    {
+      "ticker": "INDV",
+      "event_date": "2026-07-30",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Indivior Pharmaceuticals, Inc"
+    },
+    {
+      "ticker": "KKR",
+      "event_date": "2026-07-30",
+      "event_hour": "bmo",
+      "tier": 1,
+      "date_confirmed": true,
+      "call_datetime_utc": "2026-07-30T13:00:00+00:00",
+      "company_name": "KKR & Co Inc"
+    },
+    {
+      "ticker": "KPTI",
+      "event_date": "2026-07-30",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Karyopharm Therapeutics Inc"
+    },
+    {
+      "ticker": "KURA",
+      "event_date": "2026-07-30",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Kura Oncology Inc"
+    },
+    {
+      "ticker": "LH",
+      "event_date": "2026-07-30",
+      "event_hour": "",
+      "tier": 2,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Labcorp Holdings Inc"
+    },
+    {
+      "ticker": "LNTH",
+      "event_date": "2026-07-30",
+      "event_hour": "bmo",
+      "tier": 2,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Lantheus Holdings, Inc."
+    },
+    {
+      "ticker": "LXRX",
+      "event_date": "2026-07-30",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Lexicon Pharmaceuticals Inc"
+    },
+    {
+      "ticker": "MA",
+      "event_date": "2026-07-30",
+      "event_hour": "bmo",
+      "tier": 1,
+      "date_confirmed": true,
+      "call_datetime_utc": "2026-07-30T13:00:00+00:00",
+      "company_name": "Mastercard Inc"
+    },
+    {
+      "ticker": "MICC",
+      "event_date": "2026-07-30",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "The Magnum Ice Cream Company N.V."
+    },
+    {
+      "ticker": "MIRM",
+      "event_date": "2026-07-30",
+      "event_hour": "amc",
+      "tier": 3,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Mirum Pharmaceuticals Inc"
+    },
+    {
+      "ticker": "MMSI",
+      "event_date": "2026-07-30",
+      "event_hour": "amc",
+      "tier": 2,
+      "date_confirmed": true,
+      "call_datetime_utc": "2026-07-30T20:30:00+00:00",
+      "company_name": "Merit Medical Systems, Inc."
+    },
+    {
+      "ticker": "MPT",
+      "event_date": "2026-07-30",
+      "event_hour": "",
+      "tier": 2,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Medical Properties Trust, Inc."
+    },
+    {
+      "ticker": "MTD",
+      "event_date": "2026-07-30",
+      "event_hour": "amc",
+      "tier": 2,
+      "date_confirmed": true,
+      "call_datetime_utc": "2026-07-31T12:30:00+00:00",
+      "company_name": "Mettler-Toledo International Inc"
+    },
+    {
+      "ticker": "MYGN",
+      "event_date": "2026-07-30",
+      "event_hour": "amc",
+      "tier": 2,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Myriad Genetics, Inc."
+    },
+    {
+      "ticker": "NBIX",
+      "event_date": "2026-07-30",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Neurocrine Biosciences Inc"
+    },
+    {
+      "ticker": "NTLA",
+      "event_date": "2026-07-30",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Intellia Therapeutics Inc"
+    },
+    {
+      "ticker": "NTRA",
+      "event_date": "2026-07-30",
+      "event_hour": "amc",
+      "tier": 2,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Natera, Inc."
+    },
+    {
+      "ticker": "OMCL",
+      "event_date": "2026-07-30",
+      "event_hour": "bmo",
+      "tier": 2,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Omnicell, Inc."
+    },
+    {
+      "ticker": "PBYI",
+      "event_date": "2026-07-30",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Puma Biotechnology Inc"
+    },
+    {
+      "ticker": "PGNY",
+      "event_date": "2026-07-30",
+      "event_hour": "",
+      "tier": 2,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Progyny Inc"
+    },
+    {
+      "ticker": "PHAR",
+      "event_date": "2026-07-30",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Pharming Group N V ADS each representing 10 Ord Shs"
+    },
+    {
+      "ticker": "PRQR",
+      "event_date": "2026-07-30",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "ProQR Therapeutics NV"
+    },
+    {
+      "ticker": "PTCT",
+      "event_date": "2026-07-30",
+      "event_hour": "amc",
+      "tier": 3,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "PTC Therapeutics, Inc."
+    },
+    {
+      "ticker": "RARE",
+      "event_date": "2026-07-30",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Ultragenyx Pharmaceutical Inc"
+    },
+    {
+      "ticker": "RBLX",
+      "event_date": "2026-07-30",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Roblox Corp"
+    },
+    {
+      "ticker": "REGN",
+      "event_date": "2026-07-30",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Regeneron Pharmaceuticals Inc"
+    },
+    {
+      "ticker": "SANA",
+      "event_date": "2026-07-30",
+      "event_hour": "amc",
+      "tier": 3,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Sana Biotechnology Inc"
+    },
+    {
+      "ticker": "SIGA",
+      "event_date": "2026-07-30",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "SIGA Technologies Inc"
+    },
+    {
+      "ticker": "SNY",
+      "event_date": "2026-07-30",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Sanofi SA"
+    },
+    {
+      "ticker": "SYK",
+      "event_date": "2026-07-30",
+      "event_hour": "amc",
+      "tier": 2,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Stryker Corp"
+    },
+    {
+      "ticker": "TAK",
+      "event_date": "2026-07-30",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Takeda Pharmaceutical Co Ltd"
+    },
+    {
+      "ticker": "TARA",
+      "event_date": "2026-07-30",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Protara Therapeutics Inc"
+    },
+    {
+      "ticker": "TEM",
+      "event_date": "2026-07-30",
+      "event_hour": "",
+      "tier": 2,
+      "date_confirmed": false,
+      "call_datetime_utc": "2026-07-30T20:30:00+00:00",
+      "company_name": "Tempus AI, Inc."
+    },
+    {
+      "ticker": "TFX",
+      "event_date": "2026-07-30",
+      "event_hour": "bmo",
+      "tier": 2,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Teleflex Incorporated"
+    },
+    {
+      "ticker": "TMDX",
+      "event_date": "2026-07-30",
+      "event_hour": "",
+      "tier": 2,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "TransMedics Group Inc"
+    },
+    {
+      "ticker": "TRUP",
+      "event_date": "2026-07-30",
+      "event_hour": "amc",
+      "tier": 3,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Trupanion, Inc."
+    },
+    {
+      "ticker": "TVTX",
+      "event_date": "2026-07-30",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Travere Therapeutics Inc"
+    },
+    {
+      "ticker": "TWLO",
+      "event_date": "2026-07-30",
+      "event_hour": "amc",
+      "tier": 3,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Twilio Inc."
+    },
+    {
+      "ticker": "USPH",
+      "event_date": "2026-07-30",
+      "event_hour": "",
+      "tier": 2,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "US Physical Therapy Inc"
+    },
+    {
+      "ticker": "VCYT",
+      "event_date": "2026-07-30",
+      "event_hour": "amc",
+      "tier": 2,
+      "date_confirmed": true,
+      "call_datetime_utc": "2026-07-30T20:30:00+00:00",
+      "company_name": "Veracyte, Inc."
+    },
+    {
+      "ticker": "VXRT",
+      "event_date": "2026-07-30",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Vaxart Inc"
+    },
+    {
+      "ticker": "VYGR",
+      "event_date": "2026-07-30",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Voyager Therapeutics Inc"
+    },
+    {
+      "ticker": "ZYME",
+      "event_date": "2026-07-30",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Zymeworks Inc"
     }
   ]
 }
