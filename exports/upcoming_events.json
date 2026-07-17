@@ -1,33 +1,15 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-07-17T12:21:55Z",
+  "generated_at": "2026-07-17T20:18:51Z",
   "window": {
     "start": "2026-07-15",
     "end": "2026-07-31"
   },
   "counts": {
-    "events": 206
+    "events": 204
   },
   "events": [
-    {
-      "ticker": "ISRG",
-      "event_date": "2026-07-16",
-      "event_hour": "amc",
-      "tier": 2,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Intuitive Surgical Inc"
-    },
-    {
-      "ticker": "NFLX",
-      "event_date": "2026-07-16",
-      "event_hour": "amc",
-      "tier": 1,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Netflix Inc"
-    },
     {
       "ticker": "DHR",
       "event_date": "2026-07-21",
