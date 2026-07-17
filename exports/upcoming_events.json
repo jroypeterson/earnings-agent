@@ -1,24 +1,15 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-07-16T20:16:48Z",
+  "generated_at": "2026-07-17T12:21:55Z",
   "window": {
-    "start": "2026-07-14",
-    "end": "2026-07-30"
+    "start": "2026-07-15",
+    "end": "2026-07-31"
   },
   "counts": {
-    "events": 198
+    "events": 206
   },
   "events": [
-    {
-      "ticker": "DBVT",
-      "event_date": "2026-07-16",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "DBV Technologies SA - ADR"
-    },
     {
       "ticker": "ISRG",
       "event_date": "2026-07-16",
@@ -238,9 +229,9 @@
     {
       "ticker": "NVCR",
       "event_date": "2026-07-23",
-      "event_hour": "",
+      "event_hour": "bmo",
       "tier": 2,
-      "date_confirmed": false,
+      "date_confirmed": true,
       "call_datetime_utc": "2026-07-23T20:00:00+00:00",
       "company_name": "Novocure Limited"
     },
@@ -263,13 +254,13 @@
       "company_name": "SAP SE"
     },
     {
-      "ticker": "SPSC",
+      "ticker": "SMMT",
       "event_date": "2026-07-23",
       "event_hour": "",
       "tier": 3,
       "date_confirmed": false,
       "call_datetime_utc": null,
-      "company_name": "SPS Commerce Inc"
+      "company_name": "Summit Therapeutics Inc"
     },
     {
       "ticker": "TMO",
@@ -758,6 +749,15 @@
       "company_name": "FedEx Freight Corporation"
     },
     {
+      "ticker": "FICO",
+      "event_date": "2026-07-29",
+      "event_hour": "amc",
+      "tier": 1,
+      "date_confirmed": true,
+      "call_datetime_utc": "2026-07-29T21:00:00+00:00",
+      "company_name": "Fair Isaac Corp"
+    },
+    {
       "ticker": "FIVN",
       "event_date": "2026-07-29",
       "event_hour": "amc",
@@ -848,15 +848,6 @@
       "company_name": "Innoviva Inc"
     },
     {
-      "ticker": "IRTC",
-      "event_date": "2026-07-29",
-      "event_hour": "",
-      "tier": 2,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "iRhythm Holdings, Inc"
-    },
-    {
       "ticker": "META",
       "event_date": "2026-07-29",
       "event_hour": "amc",
@@ -918,6 +909,15 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Q2 Holdings Inc"
+    },
+    {
+      "ticker": "SCI",
+      "event_date": "2026-07-29",
+      "event_hour": "amc",
+      "tier": 2,
+      "date_confirmed": true,
+      "call_datetime_utc": "2026-07-30T13:00:00+00:00",
+      "company_name": "Service Corporation International"
     },
     {
       "ticker": "SEM",
@@ -1307,15 +1307,6 @@
       "company_name": "Cytokinetics, Inc."
     },
     {
-      "ticker": "DBX",
-      "event_date": "2026-07-30",
-      "event_hour": "amc",
-      "tier": 1,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Dropbox, Inc."
-    },
-    {
       "ticker": "DXCM",
       "event_date": "2026-07-30",
       "event_hour": "",
@@ -1476,6 +1467,15 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Madison Air Solutions Corporation"
+    },
+    {
+      "ticker": "MDGL",
+      "event_date": "2026-07-30",
+      "event_hour": "bmo",
+      "tier": 3,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Madrigal Pharmaceuticals Inc"
     },
     {
       "ticker": "MICC",
@@ -1667,6 +1667,15 @@
       "company_name": "Sanofi SA"
     },
     {
+      "ticker": "SPSC",
+      "event_date": "2026-07-30",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "SPS Commerce Inc"
+    },
+    {
       "ticker": "SYK",
       "event_date": "2026-07-30",
       "event_hour": "amc",
@@ -1739,15 +1748,6 @@
       "company_name": "Travere Therapeutics Inc"
     },
     {
-      "ticker": "TWLO",
-      "event_date": "2026-07-30",
-      "event_hour": "amc",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Twilio Inc."
-    },
-    {
       "ticker": "USPH",
       "event_date": "2026-07-30",
       "event_hour": "",
@@ -1755,6 +1755,15 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "US Physical Therapy Inc"
+    },
+    {
+      "ticker": "VCEL",
+      "event_date": "2026-07-30",
+      "event_hour": "",
+      "tier": 2,
+      "date_confirmed": false,
+      "call_datetime_utc": "2026-07-30T12:30:00+00:00",
+      "company_name": "Vericel Corporation"
     },
     {
       "ticker": "VCYT",
@@ -1784,13 +1793,76 @@
       "company_name": "Voyager Therapeutics Inc"
     },
     {
-      "ticker": "ZYME",
-      "event_date": "2026-07-30",
+      "ticker": "ABBV",
+      "event_date": "2026-07-31",
+      "event_hour": "bmo",
+      "tier": 3,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "AbbVie Common Stock"
+    },
+    {
+      "ticker": "ACH",
+      "event_date": "2026-07-31",
+      "event_hour": "bmo",
+      "tier": 2,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Accendra Health (fma Owens and Minor)"
+    },
+    {
+      "ticker": "BTSG",
+      "event_date": "2026-07-31",
+      "event_hour": "bmo",
+      "tier": 2,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Brightspring Health Services Inc"
+    },
+    {
+      "ticker": "KYMR",
+      "event_date": "2026-07-31",
       "event_hour": "",
       "tier": 3,
       "date_confirmed": false,
       "call_datetime_utc": null,
-      "company_name": "Zymeworks Inc"
+      "company_name": "Kymera Therapeutics Inc"
+    },
+    {
+      "ticker": "LIN",
+      "event_date": "2026-07-31",
+      "event_hour": "bmo",
+      "tier": 1,
+      "date_confirmed": true,
+      "call_datetime_utc": "2026-07-31T13:00:00+00:00",
+      "company_name": "Linde plc"
+    },
+    {
+      "ticker": "MRNA",
+      "event_date": "2026-07-31",
+      "event_hour": "bmo",
+      "tier": 3,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Moderna Inc"
+    },
+    {
+      "ticker": "OCGN",
+      "event_date": "2026-07-31",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Ocugen Inc"
+    },
+    {
+      "ticker": "PAYP",
+      "event_date": "2026-07-31",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "PayPay Corp"
     }
   ]
 }
