@@ -1327,6 +1327,62 @@ def test_edgar_fallback_blind_sweep_flags_unlisted_tier1(monkeypatch):
     assert "CCC" not in fb and "DDD" not in fb
 
 
+def test_edgar_fallback_probed_empty_tier1_falls_through_to_blind_sweep(monkeypatch):
+    """B3: a Tier-1 DB candidate whose narrow pass-1 window misses the real 8-K
+    (Finnhub parked the event on a WRONG/later date) must NOT be suppressed from
+    the wider pass-2 blind sweep. `db_probed` may only include names FOUND in
+    pass 1 — a probed-EMPTY name has to fall through, or we recreate the exact
+    "provider parked it on the wrong date" silent miss the sweep exists to catch.
+    """
+    import main
+    from datetime import date, timedelta
+    from storage import init_db, upsert_event, date_to_quarter
+    from edgar_client import Filing8K
+    from types import SimpleNamespace
+
+    today = date.today()
+    # DB event date is LATE (yesterday) — pass 1 searches [event-3, today] =
+    # [today-4, today]. The real filing sits at today-5, BEFORE that window, so
+    # pass 1 finds nothing. Pass 2 sweeps [today-6, today] and DOES cover it.
+    db_event = (today - timedelta(days=1)).isoformat()
+    real_filing_day = today - timedelta(days=5)
+
+    conn = init_db(":memory:")
+    upsert_event(conn, "AAA", db_event, "amc", None,
+                 quarter=date_to_quarter(db_event), reported=False, tier=1,
+                 company_name="Alpha Inc")
+
+    coverage = [SimpleNamespace(ticker="AAA", tier=1, company_name="Alpha Inc")]
+    monkeypatch.setattr(main, "load_coverage", lambda: coverage)
+    monkeypatch.setattr(main, "init_db", lambda *a, **k: conn)
+    monkeypatch.setattr(main, "get_cik", lambda t: "1234567")
+
+    def fake_filing(ticker, start, end):
+        # Only "found" when the search window actually spans the real filing
+        # day — pass-1's narrow window does not, pass-2's 6-day window does.
+        if ticker == "AAA" and start <= real_filing_day <= end:
+            return Filing8K(form="8-K", filing_date=real_filing_day.isoformat(),
+                            accession="0001234567-26-000009",
+                            primary_doc_title="Q results", items=("2.02",))
+        return None
+    monkeypatch.setattr(main, "find_earnings_release_filing", fake_filing)
+    monkeypatch.setattr(main, "find_results_6k", lambda *a, **k: None)
+
+    posted = {}
+    monkeypatch.setattr(main, "SLACK_WEBHOOK_EARNINGS", "https://example.invalid/wh")
+    monkeypatch.setattr(main, "SLACK_WEBHOOK_STATUS", None)
+    monkeypatch.setattr(main, "post_slack",
+                        lambda wh, blocks, fallback: posted.update(fallback=fallback))
+
+    main.run_edgar_results_fallback(dry_run=False, skip_heartbeat=True)
+
+    # Pre-fix (db_probed.add before the search) AAA was suppressed in pass 2 and
+    # never alerted. Post-fix it falls through and the blind sweep flags it.
+    assert "AAA" in posted.get("fallback", ""), (
+        "probed-empty Tier-1 name must fall through to the blind sweep"
+    )
+
+
 def test_coverage_alert_deduplicates_per_day(tmp_path, monkeypatch):
     """Verify kv_store dedup so we don't spam Slack across multiple runs."""
     import main, coverage

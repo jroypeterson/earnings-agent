@@ -1769,8 +1769,19 @@ def notify_results(
         except NotificationError as exc:
             logger.error(f"Slack results post failed: {exc}")
     else:
-        logger.warning("SLACK_WEBHOOK_EARNINGS not set — skipping Slack post.")
-        posted = True  # treat as "handled" — no retry target
+        # We have deliverable results (non-empty, guarded above) but no webhook.
+        # Historically this returned posted=True ("no retry target"), which let
+        # the caller mark the rows reported=1 — so a config-missing webhook made
+        # real beat/miss actuals vanish on a green run. SLACK_WEBHOOK_EARNINGS is
+        # a required secret, so reaching here IS a misconfiguration: treat it as a
+        # failed delivery so the caller leaves reported=0 and raises (fail-loud;
+        # both call sites raise on posted=False).
+        logger.error(
+            "SLACK_WEBHOOK_EARNINGS not set but %d result(s) need delivery — "
+            "treating as a failed post (rows stay reported=0 for retry).",
+            len(results),
+        )
+        posted = False
 
     # TickTick task updates (best-effort, don't block on failures)
     tt_config = get_ticktick_config()
@@ -2199,7 +2210,9 @@ def run_edgar_results_fallback(dry_run: bool = False, skip_heartbeat: bool = Fal
     )
 
     confirmed_missed: list[dict] = []
-    db_probed: set[str] = set()  # tickers EDGAR-probed in pass 1 (skip in pass 2)
+    db_probed: set[str] = set()  # tickers FOUND in pass 1 (skip in pass 2); a
+    #                              probed-but-EMPTY name is intentionally NOT
+    #                              added, so the wider pass-2 sweep re-probes it.
 
     # --- Pass 1: DB candidates (Finnhub listed the event but no actuals). ---
     for ticker, quarter, event_date, tier, company_name in candidates:
@@ -2216,7 +2229,6 @@ def run_edgar_results_fallback(dry_run: bool = False, skip_heartbeat: bool = Fal
             continue
         # Search a small window around the expected date: a few days early
         # (companies sometimes pre-announce) through today.
-        db_probed.add(ticker)
         filing = find_earnings_release_filing(
             ticker, ed - timedelta(days=3), today
         )
@@ -2225,8 +2237,18 @@ def run_edgar_results_fallback(dry_run: bool = False, skip_heartbeat: bool = Fal
             # the name hasn't reported (ICLR-class).
             filing = find_results_6k(ticker, ed - timedelta(days=3), today)
         if not filing:
-            continue  # Genuinely hasn't reported yet — estimated date slipped.
+            # Probed-EMPTY. Pass 1's window is narrow (event_date-3 .. today).
+            # If Finnhub parked the event on the WRONG (later) date, the real
+            # 8-K sits BEFORE this window and pass 1 misses it. Do NOT add this
+            # ticker to db_probed here — leave it for the wider Tier-1 blind
+            # sweep (pass 2, _TIER1_SWEEP_DAYS window) to re-probe. Suppressing
+            # it would recreate the exact "Finnhub parked it on the wrong date"
+            # silent miss the sweep exists to catch.
+            continue  # No filing in this window — let pass 2 re-probe if Tier 1.
 
+        # Probed-and-FOUND: this name is handled here, so suppress the wider
+        # pass-2 sweep for it (avoids a duplicate probe + a double-add).
+        db_probed.add(ticker)
         confirmed_missed.append({
             "ticker": ticker,
             "company_name": company_name or (
@@ -3611,6 +3633,20 @@ def run_cross_check(dry_run: bool = False, days_ahead: int = 14):
         f"{yf_missing} tickers with no yfinance data"
     )
 
+    # B4 fail-loud: a partial yfinance miss is expected (it's a scrapy source),
+    # but if EVERY event in the window returned no yfinance data, that's a
+    # systemic outage (429/empty) — the cross-check verified NOTHING, and a
+    # green "no disagreements" run would be a lie. Raise so _run_safeguard posts
+    # a degraded alert + the workflow goes red. Only the total-failure case
+    # trips this; a single live yfinance response clears it (no partial alarm).
+    if upcoming and yf_missing == len(upcoming):
+        conn.close()
+        raise RuntimeError(
+            f"yfinance returned no data for ALL {len(upcoming)} cross-checked "
+            f"Tier 1/2 event(s) — systemic yfinance outage; cross-check verified "
+            f"nothing this run (not trusting the 'no disagreements' result)."
+        )
+
     if not new_disagreements:
         conn.close()
         return
@@ -3985,6 +4021,8 @@ def run_check_replies(dry_run: bool = False, days_lookback: int = 14):
     acked = 0
     deferred = 0
     snoozed_reopened = 0
+    fetch_attempts = 0
+    fetch_failures = 0
     for q in questions:
         # Snooze expiry → reopen so next detection fires fresh
         if q["question_state"] == "snoozed":
@@ -4001,6 +4039,7 @@ def run_check_replies(dry_run: bool = False, days_lookback: int = 14):
         channel_id = q.get("slack_channel_id") or SLACK_CHANNEL_ID
         if not channel_id:
             continue
+        fetch_attempts += 1
         try:
             replies = fetch_thread_replies(
                 SLACK_BOT_TOKEN, channel_id, thread_ts, oldest=oldest
@@ -4009,6 +4048,7 @@ def run_check_replies(dry_run: bool = False, days_lookback: int = 14):
             logger.error(
                 f"Reply fetch failed for {q['ticker']}@{q['event_date']}: {exc}"
             )
+            fetch_failures += 1
             continue
         if not replies:
             continue
@@ -4065,6 +4105,20 @@ def run_check_replies(dry_run: bool = False, days_lookback: int = 14):
 
         if not dry_run and latest_ts and latest_ts != oldest:
             advance_reply_watermark(conn, q["ticker"], q["event_date"], latest_ts)
+
+    # B5 fail-loud: an isolated thread-fetch failure is tolerable (skip it, retry
+    # next run), but if EVERY reply fetch we attempted failed, the Slack
+    # token/scope is broken (e.g. conversations.replies revoked) — no operator
+    # command (lock/confirm/snooze/...) can land, and a green run would hide it.
+    # Raise so _run_safeguard alerts + the workflow goes red. Partial failures
+    # pass (one broken thread must not block the others).
+    if fetch_attempts and fetch_failures == fetch_attempts:
+        conn.close()
+        raise RuntimeError(
+            f"Slack reply fetch failed for ALL {fetch_attempts} open question(s) "
+            f"— conversations.replies is unavailable; no reply commands could be "
+            f"applied this run (not trusting a green --check-replies)."
+        )
 
     logger.info(
         f"--check-replies: {processed} reply(ies) processed, "

@@ -536,3 +536,124 @@ def test_failure_email_sends_with_creds(monkeypatch):
     assert sent["login"] == ("bot@gmail.com", "app-pw")
     assert sent["to"] == "jroypeterson+alerts@gmail.com"
     assert sent["subj"] == "earnings_agent: X failed"
+
+
+# --- B2: missing webhook must not silently mark results delivered ----------
+
+def test_notify_results_no_webhook_signals_failure(monkeypatch):
+    """B2: with deliverable results but SLACK_WEBHOOK_EARNINGS unset, notify_results
+    must return False (a failed delivery) so the caller leaves reported=0 and
+    raises — NOT True, which historically marked the actuals reported on a green
+    run and made real beat/miss posts vanish."""
+    from notifications import ResultRow
+    monkeypatch.setattr(main, "SLACK_WEBHOOK_EARNINGS", None)
+    monkeypatch.setattr(main, "load_coverage", lambda: [])
+    monkeypatch.setattr(main, "get_ticktick_config", lambda: None)  # skip TickTick
+    conn = storage.init_db(":memory:")
+    try:
+        row = ResultRow(ticker="FIVE", company_name="Five Below",
+                        event_date="2026-05-27", event_hour="amc",
+                        eps_actual=2.22, eps_estimate=1.77,
+                        rev_actual=1.285e9, rev_estimate=1.2e9, tier=1)
+        assert main.notify_results(conn, [row], date(2026, 5, 27)) is False
+        # No results -> trivially delivered (no false alarm on the empty case).
+        assert main.notify_results(conn, [], date(2026, 5, 27)) is True
+    finally:
+        conn.close()
+
+
+# --- B4: systemic yfinance outage in cross-check must fail loud -------------
+
+def _seed_upcoming(db_path, tickers, ev_date):
+    c = storage.init_db(db_path)
+    for tk in tickers:
+        storage.upsert_event(c, ticker=tk, event_date=ev_date, event_hour="amc",
+                             gcal_id=None, quarter=storage.date_to_quarter(ev_date),
+                             reported=False, tier=1, company_name=tk)
+    c.close()
+
+
+def test_cross_check_raises_when_all_yfinance_missing(monkeypatch, tmp_path):
+    """B4: if EVERY cross-checked event returns no yfinance data (systemic
+    429/outage), the run verified nothing — it must raise so _run_safeguard
+    alarms and the workflow goes red, not report a green 'no disagreements'."""
+    db_path = str(tmp_path / "xc.db")
+    future = (date.today() + timedelta(days=8)).isoformat()
+    _seed_upcoming(db_path, ["AAA", "BBB"], future)
+    monkeypatch.setattr(main, "init_db", lambda *a, **k: storage.init_db(db_path))
+    monkeypatch.setattr(main, "fetch_yfinance_earnings_date", lambda t: None)  # all miss
+
+    with pytest.raises(RuntimeError, match="systemic yfinance outage"):
+        main.run_cross_check(dry_run=True)
+
+
+def test_cross_check_no_alarm_on_partial_yfinance_miss(monkeypatch, tmp_path):
+    """B4 guard is total-failure only: one live yfinance response (even a clean
+    agreement) must clear it — a partial miss is expected and must not raise."""
+    db_path = str(tmp_path / "xc2.db")
+    future = (date.today() + timedelta(days=8)).isoformat()
+    _seed_upcoming(db_path, ["AAA", "BBB"], future)
+    monkeypatch.setattr(main, "init_db", lambda *a, **k: storage.init_db(db_path))
+
+    def fake_yf(t):
+        if t == "AAA":
+            return None                       # one genuine miss
+        return [date.fromisoformat(future)]   # BBB present + agrees -> no conflict
+    monkeypatch.setattr(main, "fetch_yfinance_earnings_date", fake_yf)
+
+    # Must return cleanly (no disagreements, no raise).
+    main.run_cross_check(dry_run=True)
+
+
+# --- B5: all-fail Slack reply fetch in --check-replies must fail loud -------
+
+def _seed_open_question(db_path, tickers, ev_date, channel="C123"):
+    c = storage.init_db(db_path)
+    for tk in tickers:
+        storage.upsert_event(c, ticker=tk, event_date=ev_date, event_hour="amc",
+                             gcal_id=None, quarter=storage.date_to_quarter(ev_date),
+                             reported=False, tier=1, company_name=tk)
+        storage.open_question(c, tk, ev_date, thread_ts=f"ts-{tk}", kind="xcheck",
+                              first_seen_iso="2026-06-01", channel_id=channel)
+    c.close()
+
+
+def test_check_replies_raises_when_all_fetches_fail(monkeypatch, tmp_path):
+    """B5: if EVERY open-question reply fetch fails (token/scope revoked), no
+    operator command can land — a green run would hide it. Raise on TOTAL
+    failure so _run_safeguard alarms + the workflow goes red."""
+    from slack_api import SlackAPIError
+    db_path = str(tmp_path / "cr.db")
+    _seed_open_question(db_path, ["AAA", "BBB"], "2026-06-10")
+    monkeypatch.setattr(main, "init_db", lambda *a, **k: storage.init_db(db_path))
+    monkeypatch.setattr(main, "SLACK_BOT_TOKEN", "xoxb-x")
+    monkeypatch.setattr(main, "SLACK_CHANNEL_ID", "C123")
+    monkeypatch.setattr(main, "SLACK_STATUS_CHANNEL_ID", None)
+
+    def boom(*a, **k):
+        raise SlackAPIError("missing_scope")
+    monkeypatch.setattr(main, "fetch_thread_replies", boom)
+
+    with pytest.raises(RuntimeError, match="ALL"):
+        main.run_check_replies(dry_run=True)
+
+
+def test_check_replies_no_raise_on_partial_fetch_failure(monkeypatch, tmp_path):
+    """B5 guard is total-failure only: if one thread fetch fails but another
+    succeeds, the run continues (skip the broken one, retry next run) — no raise."""
+    from slack_api import SlackAPIError
+    db_path = str(tmp_path / "cr2.db")
+    _seed_open_question(db_path, ["AAA", "BBB"], "2026-06-10")
+    monkeypatch.setattr(main, "init_db", lambda *a, **k: storage.init_db(db_path))
+    monkeypatch.setattr(main, "SLACK_BOT_TOKEN", "xoxb-x")
+    monkeypatch.setattr(main, "SLACK_CHANNEL_ID", "C123")
+    monkeypatch.setattr(main, "SLACK_STATUS_CHANNEL_ID", None)
+
+    def fetch(token, channel, thread_ts, oldest=None):
+        if thread_ts == "ts-AAA":
+            raise SlackAPIError("boom")
+        return []                            # BBB fetch succeeds (no new replies)
+    monkeypatch.setattr(main, "fetch_thread_replies", fetch)
+
+    # One failure of two attempts -> must complete without raising.
+    main.run_check_replies(dry_run=True)
