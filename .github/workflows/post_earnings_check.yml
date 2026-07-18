@@ -58,6 +58,12 @@ jobs:
       # missing state is never silent.
       - name: Restore earnings database
         id: restore_db
+        # continue-on-error: a transient GitHub-API error while enumerating
+        # cross-run artifacts (the action prints an HTML error page and exits
+        # non-zero) must not blank a nightly run — 2026-07-16 this step died
+        # here and the post-earnings check went dark for a night. Retried below;
+        # the abort-if-missing step still guards a genuinely-absent DB.
+        continue-on-error: true
         uses: dawidd6/action-download-artifact@bf251b5aa9c2f7eeb574a96ee720e24f801b7c11  # v6
         with:
           name: earnings-db
@@ -71,6 +77,23 @@ jobs:
           workflow_conclusion: success
           # Scope to main so a feature-branch run never pollutes the
           # persistent SQLite artifact for the production pipeline.
+          branch: main
+          if_no_artifact_found: warn
+          path: .
+
+      # Retry once on a transient downloader/API error. if_no_artifact_found=warn
+      # means a genuinely-missing artifact exits 0 (outcome=success), so this only
+      # re-fires on a real error — never on the legitimate bootstrap/no-artifact case.
+      # NOT continue-on-error: a persistent API outage should fail loud (Slack + email).
+      - name: Restore earnings database (retry after transient error)
+        id: restore_db_retry
+        if: steps.restore_db.outcome == 'failure'
+        uses: dawidd6/action-download-artifact@bf251b5aa9c2f7eeb574a96ee720e24f801b7c11  # v6
+        with:
+          name: earnings-db
+          search_artifacts: true
+          workflow_search: true
+          workflow_conclusion: success
           branch: main
           if_no_artifact_found: warn
           path: .
