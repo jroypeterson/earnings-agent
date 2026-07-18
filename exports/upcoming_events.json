@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-07-17T20:18:51Z",
+  "generated_at": "2026-07-18T12:04:21Z",
   "window": {
-    "start": "2026-07-15",
-    "end": "2026-07-31"
+    "start": "2026-07-16",
+    "end": "2026-08-01"
   },
   "counts": {
-    "events": 204
+    "events": 202
   },
   "events": [
     {
@@ -238,9 +238,9 @@
     {
       "ticker": "SMMT",
       "event_date": "2026-07-23",
-      "event_hour": "",
+      "event_hour": "amc",
       "tier": 3,
-      "date_confirmed": false,
+      "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "Summit Therapeutics Inc"
     },
@@ -265,7 +265,7 @@
     {
       "ticker": "THC",
       "event_date": "2026-07-24",
-      "event_hour": "amc",
+      "event_hour": "bmo",
       "tier": 2,
       "date_confirmed": true,
       "call_datetime_utc": "2026-07-24T15:30:00+00:00",
@@ -612,6 +612,15 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Apellis Pharmaceuticals Inc"
+    },
+    {
+      "ticker": "ARXS",
+      "event_date": "2026-07-29",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Arxis, Inc."
     },
     {
       "ticker": "AVTR",
@@ -1307,15 +1316,6 @@
       "company_name": "Dyne Therapeutics Inc"
     },
     {
-      "ticker": "ENOV",
-      "event_date": "2026-07-30",
-      "event_hour": "bmo",
-      "tier": 2,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Enovis Corporation"
-    },
-    {
       "ticker": "FLGT",
       "event_date": "2026-07-30",
       "event_hour": "bmo",
@@ -1332,15 +1332,6 @@
       "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "Guardant Health, Inc."
-    },
-    {
-      "ticker": "GMED",
-      "event_date": "2026-07-30",
-      "event_hour": "",
-      "tier": 2,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Globus Medical Inc"
     },
     {
       "ticker": "HCM",
@@ -1710,15 +1701,6 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "TransMedics Group Inc"
-    },
-    {
-      "ticker": "TRUP",
-      "event_date": "2026-07-30",
-      "event_hour": "amc",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Trupanion, Inc."
     },
     {
       "ticker": "TVTX",
