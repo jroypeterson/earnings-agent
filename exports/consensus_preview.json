@@ -1,13 +1,224 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-07-18T12:04:21Z",
+  "generated_at": "2026-07-19T12:07:01Z",
   "window": {
-    "start": "2026-07-18",
-    "end": "2026-07-21"
+    "start": "2026-07-19",
+    "end": "2026-07-22"
   },
   "counts": {
-    "previews": 0
+    "previews": 3
   },
-  "previews": []
+  "previews": [
+    {
+      "ticker": "MCO",
+      "company_name": "Moody's Corp",
+      "tier": 1,
+      "event_date": "2026-07-22",
+      "event_hour": "bmo",
+      "call_datetime_utc": "2026-07-22T13:00:00+00:00",
+      "last_price": 510.8599853515625,
+      "day_change_pct": -1.572200276023493,
+      "consensus": {
+        "eps": {
+          "mean": 4.238,
+          "count": null,
+          "low": null,
+          "high": null
+        },
+        "revenue": {
+          "mean": 2085871523.0,
+          "count": null,
+          "low": null,
+          "high": null
+        }
+      },
+      "qtd": {
+        "since": "2026-06-30",
+        "ticker_pct": 12.792539566828557,
+        "spx_pct": -0.4660124821415144,
+        "sector_etf": null,
+        "sector_etf_pct": null
+      },
+      "implied_move": {
+        "pct": 7.1,
+        "expiry": "2026-08-21",
+        "method": "ATM straddle",
+        "notes": [
+          "(includes 30 extra days of time value)"
+        ]
+      },
+      "post_earnings_moves": [
+        {
+          "event_date": "2026-04-22",
+          "move_pct": 1.551384967846435,
+          "window_label": "earnings-day close vs prior close"
+        }
+      ],
+      "beat_rates": {
+        "eps": {
+          "beats": null,
+          "total": null,
+          "source": "yfinance"
+        },
+        "revenue": {
+          "beats": 16,
+          "total": 20,
+          "source": "fmp"
+        }
+      },
+      "na_fields": [
+        {
+          "field": "qtd.sector_etf",
+          "reason": "no mapped ETF for sector 'Financials'"
+        },
+        {
+          "field": "beat_rates.eps",
+          "reason": "no yfinance surprise history"
+        },
+        {
+          "field": "consensus.eps.range",
+          "reason": "estimate range not available on FMP Starter plan"
+        }
+      ]
+    },
+    {
+      "ticker": "TSLA",
+      "company_name": "Tesla, Inc.",
+      "tier": 1,
+      "event_date": "2026-07-22",
+      "event_hour": "amc",
+      "call_datetime_utc": null,
+      "last_price": 380.8399963378906,
+      "day_change_pct": -2.613410035418371,
+      "consensus": {
+        "eps": {
+          "mean": 0.4542,
+          "count": null,
+          "low": null,
+          "high": null
+        },
+        "revenue": {
+          "mean": 24782591047.0,
+          "count": null,
+          "low": null,
+          "high": null
+        }
+      },
+      "qtd": {
+        "since": "2026-06-30",
+        "ticker_pct": -9.4531643339633,
+        "spx_pct": -0.4660124821415144,
+        "sector_etf": null,
+        "sector_etf_pct": null
+      },
+      "implied_move": {
+        "pct": 7.1,
+        "expiry": "2026-07-24",
+        "method": "ATM straddle",
+        "notes": []
+      },
+      "post_earnings_moves": [
+        {
+          "event_date": "2026-04-22",
+          "move_pct": -3.5586199575237787,
+          "window_label": "next-day close vs earnings-day close"
+        }
+      ],
+      "beat_rates": {
+        "eps": {
+          "beats": null,
+          "total": null,
+          "source": "yfinance"
+        },
+        "revenue": {
+          "beats": 12,
+          "total": 20,
+          "source": "fmp"
+        }
+      },
+      "na_fields": [
+        {
+          "field": "qtd.sector_etf",
+          "reason": "no mapped ETF for sector 'Tech'"
+        },
+        {
+          "field": "beat_rates.eps",
+          "reason": "no yfinance surprise history"
+        },
+        {
+          "field": "consensus.eps.range",
+          "reason": "estimate range not available on FMP Starter plan"
+        }
+      ]
+    },
+    {
+      "ticker": "WST",
+      "company_name": "West Pharmaceutical Services Inc",
+      "tier": 1,
+      "event_date": "2026-07-22",
+      "event_hour": "bmo",
+      "call_datetime_utc": null,
+      "last_price": 358.239990234375,
+      "day_change_pct": -1.1588158533108506,
+      "consensus": {
+        "eps": {
+          "mean": 2.1107,
+          "count": null,
+          "low": null,
+          "high": null
+        },
+        "revenue": {
+          "mean": 847963861.0,
+          "count": null,
+          "low": null,
+          "high": null
+        }
+      },
+      "qtd": {
+        "since": "2026-06-30",
+        "ticker_pct": -0.21170188457520892,
+        "spx_pct": -0.4660124821415144,
+        "sector_etf": "IHI",
+        "sector_etf_pct": 2.226266904509426
+      },
+      "implied_move": {
+        "pct": 10.8,
+        "expiry": "2026-08-21",
+        "method": "ATM straddle",
+        "notes": [
+          "(includes 30 extra days of time value)"
+        ]
+      },
+      "post_earnings_moves": [
+        {
+          "event_date": "2026-04-23",
+          "move_pct": 12.860320341632448,
+          "window_label": "earnings-day close vs prior close"
+        }
+      ],
+      "beat_rates": {
+        "eps": {
+          "beats": null,
+          "total": null,
+          "source": "yfinance"
+        },
+        "revenue": {
+          "beats": 13,
+          "total": 20,
+          "source": "fmp"
+        }
+      },
+      "na_fields": [
+        {
+          "field": "beat_rates.eps",
+          "reason": "no yfinance surprise history"
+        },
+        {
+          "field": "consensus.eps.range",
+          "reason": "estimate range not available on FMP Starter plan"
+        }
+      ]
+    }
+  ]
 }
