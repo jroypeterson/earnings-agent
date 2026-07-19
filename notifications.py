@@ -738,7 +738,74 @@ def _append_section_chunked(
         })
 
 
-def build_results_slack_blocks(results: list[ResultRow], as_of: date) -> list[dict]:
+def _season_pct(n: int, d: int) -> int:
+    return round(100 * n / d) if d else 0
+
+
+def build_season_funnel_elements(stats: dict | None) -> list[dict]:
+    """Context-block mrkdwn element(s) summarizing where we are in the season's
+    reporting funnel: % of scheduled names reported season-to-date, % landing
+    this week, and the Tier 1+2 (tracked) cut. Returns [] when no stats are
+    supplied. When the season has no scheduled events, returns a single explicit
+    "none scheduled yet" element rather than a misleading 0% (no silent 0)."""
+    if not stats:
+        return []
+
+    season = stats["season"]
+    expected = stats["expected"]
+
+    if expected == 0:
+        return [
+            {
+                "type": "mrkdwn",
+                "text": (
+                    f":bar_chart: *{season} season:* no scheduled reports in the "
+                    "calendar yet — funnel stats unavailable"
+                ),
+            }
+        ]
+
+    reported = stats["reported"]
+    remaining = stats["remaining"]
+    this_week = stats["this_week"]
+    ws = _fmt_date_safe(stats["this_week_start"])
+    we = _fmt_date_safe(stats["this_week_end"])
+
+    line = (
+        f":bar_chart: *{season} season funnel:* "
+        f"{reported} of {expected} reported ({_season_pct(reported, expected)}%) "
+        f"· {remaining} to go "
+        f"· this week ({ws}–{we}): {this_week} of {expected} scheduled "
+        f"({_season_pct(this_week, expected)}%)"
+    )
+    tracked_expected = stats.get("tracked_expected") or 0
+    if tracked_expected:
+        tracked_reported = stats.get("tracked_reported") or 0
+        line += (
+            f" · Tier 1+2 (tracked): {tracked_reported} of {tracked_expected} "
+            f"reported ({_season_pct(tracked_reported, tracked_expected)}%)"
+        )
+
+    elements = [{"type": "mrkdwn", "text": line}]
+
+    # Denominator honesty note — spell out exactly what the percentages divide by.
+    note = (
+        f"Denominator = {expected} coverage name(s) with a scheduled {season} "
+        "report date"
+    )
+    no_date = stats.get("no_date")
+    if no_date:
+        note += (
+            f"; {no_date} universe name(s) have no {season} date yet (excluded "
+            "from the percentages)"
+        )
+    elements.append({"type": "mrkdwn", "text": note})
+    return elements
+
+
+def build_results_slack_blocks(
+    results: list[ResultRow], as_of: date, season_stats: dict | None = None
+) -> list[dict]:
     header_text = f"Earnings Results — {_fmt_date_safe(as_of.isoformat())}"
     blocks: list[dict] = [
         {"type": "header", "text": {"type": "plain_text", "text": header_text[:150]}},
@@ -751,8 +818,13 @@ def build_results_slack_blocks(results: list[ResultRow], as_of: date) -> list[di
                 }
             ],
         },
-        {"type": "divider"},
     ]
+
+    funnel_elements = build_season_funnel_elements(season_stats)
+    if funnel_elements:
+        blocks.append({"type": "context", "elements": funnel_elements})
+
+    blocks.append({"type": "divider"})
 
     # Group by tier, then by mutually-exclusive subcategory within tier.
     by_tier: dict[int, list[ResultRow]] = {}

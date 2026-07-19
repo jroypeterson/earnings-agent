@@ -673,6 +673,136 @@ def date_to_quarter(d: str) -> str:
         return f"{dt.year}Q3"
 
 
+def compute_season_stats(
+    conn: sqlite3.Connection,
+    as_of,
+    universe_tickers=None,
+    also_reported=None,
+) -> dict:
+    """
+    Population statistics on reporting cadence for the current earnings season.
+
+    "Season" is the reporting quarter that ``as_of`` falls into (via
+    ``date_to_quarter`` — e.g. a mid-July ``as_of`` maps to that year's Q2
+    season). A company is IN the season if it has a scheduled event whose
+    press-release date maps to that reporting-quarter label.
+
+    Denominator honesty (the point of this function):
+      * ``expected`` = DISTINCT tickers with a scheduled event in the season
+        quarter — i.e. "coverage names with a scheduled report this season".
+        This is the ONLY denominator used for every percentage, and callers
+        must label it as such.
+      * Universe names with NO scheduled season date are NEVER folded into the
+        denominator silently. They are surfaced separately as ``no_date`` so a
+        percentage is never inflated or deflated by names that simply have no
+        date yet.
+
+    ``also_reported`` — tickers being announced in the SAME notification that
+    have not yet been flipped ``reported=1`` in the DB (the pipeline posts to
+    Slack first, then marks the DB). Those tickers are counted as reported (only
+    when they are in-season) so the season-to-date figure includes the batch the
+    message itself is announcing. Reconciliation ``reported + remaining ==
+    expected`` holds by construction.
+
+    Returns a dict. When the season has NO scheduled events, ``expected`` is 0
+    and every count is 0 — the caller must render an explicit "none scheduled
+    yet" note rather than a misleading 0%.
+    """
+    from datetime import timedelta
+
+    as_of_iso = as_of.isoformat()
+    season = date_to_quarter(as_of_iso)
+    week_start = as_of - timedelta(days=as_of.weekday())  # Monday of as_of's week
+    week_end = week_start + timedelta(days=6)             # Sunday
+    ws, we = week_start.isoformat(), week_end.isoformat()
+
+    def _tickers(where: str, params: tuple) -> set:
+        return {
+            row[0].upper()
+            for row in conn.execute(
+                f"SELECT DISTINCT ticker FROM events WHERE {where}", params
+            )
+            if row[0]
+        }
+
+    season_set = _tickers("quarter = ?", (season,))
+    also = {t.upper() for t in also_reported} if also_reported else set()
+
+    # A name being announced in THIS batch is, by definition, both expected and
+    # reported this season — even if it has no pre-scheduled DB event yet (a
+    # newly-discovered FMP-only reporter isn't inserted into `events` until after
+    # notify_results). Fold `also` into BOTH the expected set and reported set so
+    # it is never dropped from the funnel, and so an all-new batch can't hit the
+    # "empty season" path in the very post announcing it (Codex finding).
+    expected_set = season_set | also
+    expected = len(expected_set)
+
+    if expected == 0:
+        return {
+            "season": season,
+            "expected": 0,
+            "reported": 0,
+            "remaining": 0,
+            "this_week": 0,
+            "this_week_start": ws,
+            "this_week_end": we,
+            "tracked_expected": 0,
+            "tracked_reported": 0,
+            "by_tier": {},
+            "universe_size": (len(set(universe_tickers)) if universe_tickers else None),
+            "no_date": None,
+        }
+
+    reported_set = _tickers("quarter = ? AND reported = 1", (season,))
+    reported_set |= also  # all announced names count as reported (⊆ expected_set)
+    reported = len(reported_set)
+
+    week_set = _tickers(
+        "quarter = ? AND event_date BETWEEN ? AND ?", (season, ws, we)
+    )
+    this_week = len(week_set)
+
+    # Tier 1+2 = the actively-tracked cut (calendar + TickTick names).
+    tracked_set = _tickers("quarter = ? AND tier <= 2", (season,))
+    tracked_reported_set = _tickers(
+        "quarter = ? AND tier <= 2 AND reported = 1", (season,)
+    )
+    tracked_reported_set |= (also & tracked_set)
+
+    by_tier: dict[int, dict[str, int]] = {}
+    for t in (1, 2):
+        t_set = _tickers("quarter = ? AND tier = ?", (season, t))
+        t_rep = _tickers("quarter = ? AND tier = ? AND reported = 1", (season, t))
+        t_rep |= (also & t_set)
+        by_tier[t] = {"expected": len(t_set), "reported": len(t_rep)}
+
+    universe_size = None
+    no_date = None
+    if universe_tickers:
+        uset = {t.upper() for t in universe_tickers}
+        universe_size = len(uset)
+        # Only count universe names against the "no scheduled date" figure —
+        # season tickers not in the universe (rare) are not part of coverage. A
+        # name that just reported (in `also`) has a date by definition, so it's
+        # excluded from no_date even if it lacked a pre-scheduled DB event.
+        no_date = universe_size - len(uset & (season_set | also))
+
+    return {
+        "season": season,
+        "expected": expected,
+        "reported": reported,
+        "remaining": expected - reported,
+        "this_week": this_week,
+        "this_week_start": ws,
+        "this_week_end": we,
+        "tracked_expected": len(tracked_set),
+        "tracked_reported": len(tracked_reported_set),
+        "by_tier": by_tier,
+        "universe_size": universe_size,
+        "no_date": no_date,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Slack-question state (v9)
 # ---------------------------------------------------------------------------

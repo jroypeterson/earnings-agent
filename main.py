@@ -44,6 +44,7 @@ from storage import (
     upsert_event,
     record_estimate_snapshot,
     date_to_quarter,
+    compute_season_stats,
     set_date_lock,
     list_locked_events,
     is_ticker_date_locked,
@@ -1758,7 +1759,17 @@ def notify_results(
     coverage = load_coverage()
     coverage_map = {t.ticker: t for t in coverage}
 
-    blocks = build_results_slack_blocks(results, as_of)
+    # Population statistics on reporting cadence (season funnel). The rows in
+    # `results` have not yet been flipped reported=1 in the DB (post-then-mark),
+    # so pass them as `also_reported` to count the batch being announced.
+    season_stats = compute_season_stats(
+        conn,
+        as_of,
+        universe_tickers=[t.ticker for t in coverage],
+        also_reported={r.ticker for r in results},
+    )
+
+    blocks = build_results_slack_blocks(results, as_of, season_stats)
     fallback = build_results_fallback_text(results, as_of)
 
     posted = False
@@ -2079,8 +2090,16 @@ def run_check_results(
         _emit_heartbeat()
         return
 
-    # Build + post Slack — only ready rows go out.
-    blocks = build_results_slack_blocks(ready, target)
+    # Build + post Slack — only ready rows go out. Season funnel stats: `ready`
+    # rows aren't reported=1 in the DB yet (post-then-mark), so pass them as
+    # `also_reported` so season-to-date includes the batch being announced.
+    season_stats = compute_season_stats(
+        conn,
+        target,
+        universe_tickers=all_tickers,
+        also_reported={r.ticker for r in ready},
+    )
+    blocks = build_results_slack_blocks(ready, target, season_stats)
     fallback = build_results_fallback_text(ready, target)
 
     if dry_run:
