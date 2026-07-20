@@ -242,7 +242,15 @@ jobs:
         if: github.ref == 'refs/heads/main'
         run: python scripts/export_upcoming_events.py
 
-      - name: Commit upcoming_events.json if changed
+      # Rebuild the public earnings-calendar page (docs/index.html, served by
+      # GitHub Pages from the docs/ folder on main -- the daily-reads pattern).
+      # Regenerated from the DB every run so past/upcoming stay current; it is a
+      # read-only consumer of earnings_events.db.
+      - name: Build earnings calendar Pages site
+        if: github.ref == 'refs/heads/main'
+        run: python scripts/build_calendar_page.py
+
+      - name: Commit exports + Pages site if changed
         if: github.ref == 'refs/heads/main'
         run: |
           set -euo pipefail
@@ -250,12 +258,13 @@ jobs:
           git config user.email "earnings-agent-ci@users.noreply.github.com"
           git add exports/upcoming_events.json
           [ -f exports/consensus_preview.json ] && git add exports/consensus_preview.json || true
+          [ -f docs/index.html ] && git add docs/index.html docs/.nojekyll || true
           if git diff --cached --quiet; then
-            echo "no changes to exported JSON"
+            echo "no changes to exported JSON or Pages site"
             exit 0
           fi
           git pull --rebase --quiet || git rebase --abort || true
-          git commit -m "ci: refresh exports/*.json (upcoming_events + consensus_preview)"
+          git commit -m "ci: refresh exports/*.json + docs/index.html (earnings calendar page)"
           git push "https://${GITHUB_ACTOR}:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
             "HEAD:${GITHUB_REF_NAME:-main}" || echo "push failed (non-fatal)"
         env:

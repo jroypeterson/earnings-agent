@@ -188,3 +188,17 @@ Same keys as above (minus the JSON-blob form of Google creds — local uses the 
 - `slack_api.py` — Slack Web API client (bot-token): `chat.postMessage`, `conversations.replies`. Used by the threaded question flow.
 - `web_resolver.py` — web-search resolution of cross-check disagreements (Anthropic web_search tool → `WebVerdict`; see B1.5). Never raises; None on any failure.
 - `slack_replies.py` — reply-command parser + help/status text. `parse_reply(text, ctx) -> ParsedAction`. Caller dispatches the action via `_apply_action` in `main.py`.
+- `scripts/build_calendar_page.py` — renders the public earnings-calendar site to `docs/index.html` (see below).
+
+## Public earnings calendar page (`docs/index.html`)
+
+JP 2026-07-19: "a GitHub page that has all of the confirmed earnings on it, including past as well as the future."
+
+- **Pattern.** In-repo `docs/` GitHub Pages, same as the daily-reads project — NOT a separate Pages repo (the sector_chart_pack / hc_macro_policy style). `earnings-agent` is already a public repo that commits `exports/*.json` back from CI, so the page rides the same commit-back step in `daily_earnings_check.yml` (`Build earnings calendar Pages site` → `Commit exports + Pages site if changed`). Regenerated from the DB every daily run; never a static dump. `docs/.nojekyll` is written by the builder so Pages skips the Jekyll build.
+- **The DB is opened `mode=ro`.** It's a shared CI artifact; this is a pure consumer and must never mutate it.
+- **"Confirmed" is DERIVED, not a column.** There is no single confirmed flag, so `_status()` collapses the three real signals, highest authority first: `date_locked=1` → **Locked** (operator `--lock`, Slack `lock` reply, or corroborated EDGAR 8-K 2.02 / 6-K auto-correction); `date_confirmed=1` → **Announced** (company-announced — Finnhub `hour` in bmo/amc/dmh, IR RSS, IR email, or high-confidence web resolver); `reported=1` or actuals present → **Reported**; otherwise → **Estimated**. CONFIRMED = Locked | Announced | Reported.
+- **Estimated rows must never read as confirmed.** They render with a distinct amber badge AND are hidden by an off-by-default "Show estimated (unconfirmed) dates" toggle. Don't default that toggle on. `test_calendar_page.py` guards the precedence and the default-hidden behavior.
+- Upcoming sorts soonest-first (next-upcoming at top); past sorts newest-first with the full history still on the page. Company full names render alongside tickers (falling back to the ticker when `company_name` is blank).
+- **History depth is bounded by the DB's rolling window**, not by the page — the page shows everything the DB knows, which is roughly the trailing few months.
+
+

@@ -12,3 +12,8 @@ last_digest.html
 last_digest.txt
 .ticker_cik_cache.json
 *.tmp.*
+
+# Codex review output — kept on disk as proof-of-run, but untracked.
+# If tracked/untracked, each review appears in the next review's working-tree
+# diff and pollutes it with hundreds of KB of prior review text (2026-07-20).
+codex_feedback/

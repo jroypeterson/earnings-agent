@@ -53,6 +53,7 @@ calendar/TickTick/Slack surfaces, *including* trusting that silence means
 | 9 | Schedule-aware liveness monitoring | ✅ Done | `watchdog.yml` 3×/day computes each workflow's expected trigger from cadence; alerts within ~24h of a skipped weekday run, no weekend false alarms; auto-dispatches recovery |
 | 10 | Owner can override a wrong machine decision | ✅ Done | `--lock/--unlock/--list-locks`; Slack-native reply grammar (`--check-replies`, v9 per-question threads) drives DB state from in-thread replies |
 | 11 | Pre-earnings briefs / prediction accuracy tracking | ⬜ Not yet | PLAN.md Phases 5–6 unstarted; estimate snapshots are being stored to enable Phase 6 later |
+| 12 | Browsable public calendar of confirmed dates, past + future | 🟨 Built, not deployed | `scripts/build_calendar_page.py` → `docs/index.html`, rebuilt every daily run and committed back by `daily_earnings_check.yml`. Confirmation status derived (Locked / Announced / Reported); estimated dates badged and hidden by default. **GitHub Pages is not yet enabled on the repo** — awaiting review + JP's go-ahead |
 
 **Overall: the v1 goal is met and the system is live.** The date-correctness and
 no-silent-failure cores are mature and battle-tested against real incidents
@@ -130,6 +131,13 @@ brief/prediction phases — not missing core function.
 - **TickTick token** expires ~180d and needs manual re-auth (401 is detected and
   logged, not auto-refreshed).
 - **No formal SLO/event-color tracking** (the remaining slice of PLAN.md Phase 7).
+- **Calendar page history is only as deep as the DB's rolling window** (~trailing
+  months), so "past earnings" on `docs/index.html` is not a full archive. A
+  separate append-only history table would be needed for multi-year depth.
+- **Pages must still be enabled** (Settings → Pages → `main` / `docs`) before the
+  committed `docs/index.html` is reachable at
+  `https://jroypeterson.github.io/earnings-agent/`. Not done — deliberately
+  pending review/approval.
 
 ## 6. How to evaluate
 

@@ -31,6 +31,27 @@ class CalendarError(Exception):
     pass
 
 
+# Length of a timed (bmo/amc) earnings block. JP 2026-07-14: 15 minutes was too
+# short to actually sit with a release, so these are 30-minute holds.
+#
+# NOTE: `calendar_event_drift_kind` compares only the event's START time, never
+# its end, so changing this does NOT mark existing events as drifted — no mass
+# delete+recreate (the churn documented in CLAUDE.md). Events already on the
+# calendar keep their old 15-minute block until they're recreated for some
+# other reason; the calendar self-heals over a reporting quarter.
+EVENT_DURATION_MIN = 30
+
+_BMO_START = "07:00:00"
+_AMC_START = "16:30:00"
+
+
+def _timed_block(earnings_date: str, start_hms: str) -> tuple[str, str]:
+    """Return (start, end) dateTime strings for a timed earnings block."""
+    start = datetime.strptime(f"{earnings_date}T{start_hms}", "%Y-%m-%dT%H:%M:%S")
+    end = start + timedelta(minutes=EVENT_DURATION_MIN)
+    return start.strftime("%Y-%m-%dT%H:%M:%S"), end.strftime("%Y-%m-%dT%H:%M:%S")
+
+
 # ---------------------------------------------------------------------------
 # Retry helper
 # ---------------------------------------------------------------------------
@@ -525,20 +546,22 @@ def create_calendar_event(
     effective_hour = hour or hour_yf or ""
 
     if effective_hour == "bmo":
+        start_dt, end_dt = _timed_block(earnings_date, _BMO_START)
         event_body = {
             "summary": summary,
             "description": description,
-            "start": {"dateTime": f"{earnings_date}T07:00:00", "timeZone": TIMEZONE},
-            "end": {"dateTime": f"{earnings_date}T07:15:00", "timeZone": TIMEZONE},
+            "start": {"dateTime": start_dt, "timeZone": TIMEZONE},
+            "end": {"dateTime": end_dt, "timeZone": TIMEZONE},
             "reminders": {"useDefault": False, "overrides": [{"method": "popup", "minutes": 60}]},
             "extendedProperties": extended_props,
         }
     elif effective_hour == "amc":
+        start_dt, end_dt = _timed_block(earnings_date, _AMC_START)
         event_body = {
             "summary": summary,
             "description": description,
-            "start": {"dateTime": f"{earnings_date}T16:30:00", "timeZone": TIMEZONE},
-            "end": {"dateTime": f"{earnings_date}T16:45:00", "timeZone": TIMEZONE},
+            "start": {"dateTime": start_dt, "timeZone": TIMEZONE},
+            "end": {"dateTime": end_dt, "timeZone": TIMEZONE},
             "reminders": {"useDefault": False, "overrides": [{"method": "popup", "minutes": 60}]},
             "extendedProperties": extended_props,
         }
