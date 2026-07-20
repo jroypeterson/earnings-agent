@@ -1,83 +1,13 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-07-20T13:26:32Z",
+  "generated_at": "2026-07-20T20:48:35Z",
   "window": {
     "start": "2026-07-20",
     "end": "2026-07-23"
   },
   "counts": {
-    "previews": 1
+    "previews": 0
   },
-  "previews": [
-    {
-      "ticker": "ENSG",
-      "company_name": "Ensign Group Inc",
-      "tier": 1,
-      "event_date": "2026-07-23",
-      "event_hour": "amc",
-      "call_datetime_utc": null,
-      "last_price": 171.27999877929688,
-      "day_change_pct": -0.9312283047228463,
-      "consensus": {
-        "eps": {
-          "mean": 1.8794,
-          "count": null,
-          "low": null,
-          "high": null
-        },
-        "revenue": {
-          "mean": 1470111720.0,
-          "count": null,
-          "low": null,
-          "high": null
-        }
-      },
-      "qtd": {
-        "since": "2026-06-30",
-        "ticker_pct": 6.84965409763207,
-        "spx_pct": -0.4660124821415144,
-        "sector_etf": "XLV",
-        "sector_etf_pct": 1.5315723053658117
-      },
-      "implied_move": {
-        "pct": 11.9,
-        "expiry": "2026-08-21",
-        "method": "ATM straddle",
-        "notes": [
-          "stale quote",
-          "(includes 28 extra days of time value)"
-        ]
-      },
-      "post_earnings_moves": [
-        {
-          "event_date": "2026-04-30",
-          "move_pct": -1.590873113474138,
-          "window_label": "next-day close vs earnings-day close"
-        }
-      ],
-      "beat_rates": {
-        "eps": {
-          "beats": null,
-          "total": null,
-          "source": "yfinance"
-        },
-        "revenue": {
-          "beats": 13,
-          "total": 20,
-          "source": "fmp"
-        }
-      },
-      "na_fields": [
-        {
-          "field": "beat_rates.eps",
-          "reason": "no yfinance surprise history"
-        },
-        {
-          "field": "consensus.eps.range",
-          "reason": "estimate range not available on FMP Starter plan"
-        }
-      ]
-    }
-  ]
+  "previews": []
 }
