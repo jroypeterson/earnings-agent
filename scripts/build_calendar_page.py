@@ -43,6 +43,7 @@ from __future__ import annotations
 
 import argparse
 import html
+import re
 import sqlite3
 import sys
 from datetime import datetime, timezone
@@ -437,6 +438,14 @@ def render(rows: list[Row], *, today: str, generated_at: str, db_asof: Optional[
 """
 
 
+_GENERATED_LINE = re.compile(r'<p class="updated">Regenerated [^<]*</p>')
+
+
+def _strip_generated(html_text: str) -> str:
+    """Blank the regenerated-at line so two renders can be compared on content."""
+    return _GENERATED_LINE.sub('<p class="updated">Regenerated</p>', html_text)
+
+
 def build(db_path: Path, out_path: Path) -> dict:
     rows = load_rows(db_path)
     now = datetime.now(timezone.utc)
@@ -462,10 +471,28 @@ def build(db_path: Path, out_path: Path) -> dict:
     nojekyll = out_path.parent / ".nojekyll"
     if not nojekyll.exists():
         nojekyll.write_text("", encoding="utf-8")
-    # Atomic write: a half-written index.html would be served as-is by Pages.
-    tmp = out_path.with_suffix(out_path.suffix + ".tmp")
-    tmp.write_text(page, encoding="utf-8")
-    tmp.replace(out_path)
+
+    # Skip the write when only the "Regenerated <timestamp>" line would change.
+    # The page is ~745KB and CI commits it every daily run, so rewriting it on a
+    # no-op day would add ~270MB/year of history to a public repo for zero
+    # information. Comparing with the timestamp line normalised out means the
+    # displayed timestamp comes to mean "when this data last changed", which is
+    # the more useful reading anyway.
+    unchanged = False
+    if out_path.exists():
+        try:
+            unchanged = _strip_generated(out_path.read_text(encoding="utf-8")) == \
+                        _strip_generated(page)
+        except OSError:
+            unchanged = False
+    if unchanged:
+        print(f"page content unchanged; left {out_path} alone "
+              f"(only the regenerated-at timestamp would have moved)")
+    else:
+        # Atomic write: a half-written index.html would be served as-is by Pages.
+        tmp = out_path.with_suffix(out_path.suffix + ".tmp")
+        tmp.write_text(page, encoding="utf-8")
+        tmp.replace(out_path)
 
     upcoming = [r for r in rows if r.date >= today]
     past = [r for r in rows if r.date < today]

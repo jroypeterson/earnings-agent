@@ -190,3 +190,46 @@ def test_normal_date_still_renders_readably():
                 rev_est=None, rev_act=None, url="")
     out = bcp._row_html(r)
     assert "Thu Aug 06, 2026" in out
+
+
+# --- The page is ~745KB and CI commits it every daily run. Rewriting it when
+# only the "Regenerated <timestamp>" line moved would add ~270MB/year of
+# history to a public repo for zero information. ---
+
+def test_rebuild_with_unchanged_data_leaves_the_file_alone(tmp_path):
+    db = _mkdb(tmp_path, [("IRTC", "iRhythm Holdings", "2026-08-06", "amc", 2,
+                           "2026Q2", 0, 1, 0, None, None, None, None, "",
+                           "2026-01-01")])
+    out = tmp_path / "docs" / "index.html"
+    bcp.build(db, out)
+    first = out.read_text(encoding="utf-8")
+    mtime = out.stat().st_mtime_ns
+    bcp.build(db, out)
+    assert out.read_text(encoding="utf-8") == first
+    assert out.stat().st_mtime_ns == mtime, "file should not have been rewritten"
+
+
+def test_rebuild_after_a_real_data_change_does_rewrite(tmp_path):
+    rows = [("IRTC", "iRhythm Holdings", "2026-08-06", "amc", 2, "2026Q2",
+             0, 1, 0, None, None, None, None, "", "2026-01-01")]
+    db = _mkdb(tmp_path, rows)
+    out = tmp_path / "docs" / "index.html"
+    bcp.build(db, out)
+    first = out.read_text(encoding="utf-8")
+
+    second = tmp_path / "second"
+    second.mkdir()
+    db2 = _mkdb(second, rows + [
+        ("DGX", "Quest Diagnostics", "2026-07-20", "bmo", 2, "2026Q2",
+         0, 1, 0, None, None, None, None, "", "2026-01-01")])
+    bcp.build(db2, out)
+    assert out.read_text(encoding="utf-8") != first
+    assert "Quest Diagnostics" in out.read_text(encoding="utf-8")
+
+
+def test_strip_generated_only_normalises_the_timestamp_line():
+    a = '<p class="updated">Regenerated 2026-07-20 03:23 UTC &middot; 5 past</p><div>x</div>'
+    b = '<p class="updated">Regenerated 2026-07-20 09:99 UTC &middot; 5 past</p><div>x</div>'
+    assert bcp._strip_generated(a) == bcp._strip_generated(b)
+    c = '<p class="updated">Regenerated 2026-07-20 03:23 UTC &middot; 5 past</p><div>y</div>'
+    assert bcp._strip_generated(a) != bcp._strip_generated(c)
