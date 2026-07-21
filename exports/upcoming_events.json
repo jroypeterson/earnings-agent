@@ -1,24 +1,15 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-07-21T12:46:52Z",
+  "generated_at": "2026-07-21T20:39:50Z",
   "window": {
     "start": "2026-07-19",
     "end": "2026-08-04"
   },
   "counts": {
-    "events": 280
+    "events": 279
   },
   "events": [
-    {
-      "ticker": "DHR",
-      "event_date": "2026-07-21",
-      "event_hour": "bmo",
-      "tier": 2,
-      "date_confirmed": true,
-      "call_datetime_utc": "2026-07-21T12:00:00+00:00",
-      "company_name": "Danaher Corp"
-    },
     {
       "ticker": "ICLR",
       "event_date": "2026-07-21",
@@ -29,15 +20,6 @@
       "company_name": "ICON PLC"
     },
     {
-      "ticker": "NVS",
-      "event_date": "2026-07-21",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Novartis AG"
-    },
-    {
       "ticker": "OSSFF",
       "event_date": "2026-07-21",
       "event_hour": "",
@@ -45,15 +27,6 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Embla Medical hf."
-    },
-    {
-      "ticker": "UCB",
-      "event_date": "2026-07-21",
-      "event_hour": "bmo",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "UCB SA"
     },
     {
       "ticker": "CYH",
@@ -1289,15 +1262,6 @@
       "company_name": "Dyne Therapeutics Inc"
     },
     {
-      "ticker": "FIVN",
-      "event_date": "2026-07-30",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Five9 Inc"
-    },
-    {
       "ticker": "FLGT",
       "event_date": "2026-07-30",
       "event_hour": "bmo",
@@ -1955,6 +1919,15 @@
       "company_name": "Iterum Therapeutics PLC"
     },
     {
+      "ticker": "JAZZ",
+      "event_date": "2026-08-03",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Jazz Pharmaceuticals PLC"
+    },
+    {
       "ticker": "LPCN",
       "event_date": "2026-08-03",
       "event_hour": "",
@@ -1971,6 +1944,15 @@
       "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "Masimo Corporation"
+    },
+    {
+      "ticker": "MED",
+      "event_date": "2026-08-03",
+      "event_hour": "",
+      "tier": 2,
+      "date_confirmed": false,
+      "call_datetime_utc": "2026-08-03T20:30:00+00:00",
+      "company_name": "Medartis Holding AG"
     },
     {
       "ticker": "QDEL",
@@ -1991,6 +1973,15 @@
       "company_name": "Rigel Pharmaceuticals Inc"
     },
     {
+      "ticker": "SBRA",
+      "event_date": "2026-08-03",
+      "event_hour": "",
+      "tier": 2,
+      "date_confirmed": false,
+      "call_datetime_utc": "2026-08-04T17:00:00+00:00",
+      "company_name": "Sabra Health Care REIT Inc"
+    },
+    {
       "ticker": "SEMR",
       "event_date": "2026-08-03",
       "event_hour": "",
@@ -1998,6 +1989,15 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Semrush"
+    },
+    {
+      "ticker": "SIBN",
+      "event_date": "2026-08-03",
+      "event_hour": "",
+      "tier": 2,
+      "date_confirmed": false,
+      "call_datetime_utc": "2026-08-03T20:30:00+00:00",
+      "company_name": "SI-BONE, Inc."
     },
     {
       "ticker": "SNTI",
@@ -2196,15 +2196,6 @@
       "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "Crinetics Pharmaceuticals Inc"
-    },
-    {
-      "ticker": "CTSO",
-      "event_date": "2026-08-04",
-      "event_hour": "amc",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Cytosorbents Corp"
     },
     {
       "ticker": "DAY",

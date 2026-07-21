@@ -1,85 +1,13 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-07-21T12:46:51Z",
+  "generated_at": "2026-07-21T20:39:50Z",
   "window": {
     "start": "2026-07-21",
     "end": "2026-07-24"
   },
   "counts": {
-    "previews": 1
+    "previews": 0
   },
-  "previews": [
-    {
-      "ticker": "CNI",
-      "company_name": "Canadian National Railway Co",
-      "tier": 1,
-      "event_date": "2026-07-24",
-      "event_hour": "bmo",
-      "call_datetime_utc": null,
-      "last_price": 126.69000244140625,
-      "day_change_pct": -1.8135289157780585,
-      "consensus": {
-        "eps": {
-          "mean": 1.4,
-          "count": null,
-          "low": null,
-          "high": null
-        },
-        "revenue": {
-          "mean": 3238361000.0,
-          "count": null,
-          "low": null,
-          "high": null
-        }
-      },
-      "qtd": {
-        "since": "2026-06-30",
-        "ticker_pct": 6.247907339069456,
-        "spx_pct": -0.6266979864455321,
-        "sector_etf": null,
-        "sector_etf_pct": null
-      },
-      "implied_move": {
-        "pct": 6.1,
-        "expiry": "2026-08-21",
-        "method": "ATM straddle",
-        "notes": [
-          "stale quote",
-          "(includes 28 extra days of time value)"
-        ]
-      },
-      "post_earnings_moves": [],
-      "beat_rates": {
-        "eps": {
-          "beats": null,
-          "total": null,
-          "source": "yfinance"
-        },
-        "revenue": {
-          "beats": 11,
-          "total": 20,
-          "source": "fmp"
-        }
-      },
-      "na_fields": [
-        {
-          "field": "qtd.sector_etf",
-          "reason": "no mapped ETF for sector 'Industrials'"
-        },
-        {
-          "field": "post_earnings_moves",
-          "reason": "no computable prior reactions"
-        },
-        {
-          "field": "beat_rates.eps",
-          "reason": "no yfinance surprise history"
-        },
-        {
-          "field": "consensus.eps.range",
-          "reason": "estimate range not available on FMP Starter plan"
-        }
-      ]
-    }
-  ]
+  "previews": []
 }
