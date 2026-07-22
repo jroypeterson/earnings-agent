@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-07-22T12:47:52Z",
+  "generated_at": "2026-07-22T20:37:09Z",
   "window": {
     "start": "2026-07-20",
     "end": "2026-08-05"
   },
   "counts": {
-    "events": 378
+    "events": 380
   },
   "events": [
     {
@@ -29,24 +29,6 @@
       "company_name": "Community Health Systems Inc"
     },
     {
-      "ticker": "GOOG",
-      "event_date": "2026-07-22",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Alphabet Inc Class C"
-    },
-    {
-      "ticker": "HCSG",
-      "event_date": "2026-07-22",
-      "event_hour": "bmo",
-      "tier": 2,
-      "date_confirmed": true,
-      "call_datetime_utc": "2026-07-22T12:30:00+00:00",
-      "company_name": "Healthcare Services Group Inc"
-    },
-    {
       "ticker": "IMA",
       "event_date": "2026-07-22",
       "event_hour": "amc",
@@ -54,15 +36,6 @@
       "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "ImageneBio Inc"
-    },
-    {
-      "ticker": "MCO",
-      "event_date": "2026-07-22",
-      "event_hour": "bmo",
-      "tier": 1,
-      "date_confirmed": true,
-      "call_datetime_utc": "2026-07-22T13:00:00+00:00",
-      "company_name": "Moody's Corp"
     },
     {
       "ticker": "MEDP",
@@ -90,15 +63,6 @@
       "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "ServiceNow, Inc."
-    },
-    {
-      "ticker": "RDY",
-      "event_date": "2026-07-22",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Dr Reddy's Laboratories Ltd"
     },
     {
       "ticker": "TSLA",
@@ -2117,6 +2081,15 @@
       "company_name": "Artiva Biotherapeutics Inc"
     },
     {
+      "ticker": "ARWR",
+      "event_date": "2026-08-04",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Arrowhead Pharmaceuticals Inc"
+    },
+    {
       "ticker": "ATEC",
       "event_date": "2026-08-04",
       "event_hour": "",
@@ -2207,6 +2180,15 @@
       "company_name": "Healthpeak Properties Inc"
     },
     {
+      "ticker": "DOCN",
+      "event_date": "2026-08-04",
+      "event_hour": "bmo",
+      "tier": 3,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "DigitalOcean Holdings Inc"
+    },
+    {
       "ticker": "DV",
       "event_date": "2026-08-04",
       "event_hour": "amc",
@@ -2277,6 +2259,24 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Hinge Health Inc"
+    },
+    {
+      "ticker": "HRMY",
+      "event_date": "2026-08-04",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Harmony Biosciences Holdings Inc"
+    },
+    {
+      "ticker": "HSIC",
+      "event_date": "2026-08-04",
+      "event_hour": "bmo",
+      "tier": 2,
+      "date_confirmed": true,
+      "call_datetime_utc": "2026-08-04T12:00:00+00:00",
+      "company_name": "Henry Schein, Inc."
     },
     {
       "ticker": "IDXX",
@@ -2396,6 +2396,15 @@
       "company_name": "Qnity Electronics Inc."
     },
     {
+      "ticker": "QLYS",
+      "event_date": "2026-08-04",
+      "event_hour": "amc",
+      "tier": 3,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Qualys Inc"
+    },
+    {
       "ticker": "QURE",
       "event_date": "2026-08-04",
       "event_hour": "bmo",
@@ -2459,6 +2468,15 @@
       "company_name": "Spotify Technology SA"
     },
     {
+      "ticker": "STVN",
+      "event_date": "2026-08-04",
+      "event_hour": "bmo",
+      "tier": 2,
+      "date_confirmed": true,
+      "call_datetime_utc": "2026-08-04T12:30:00+00:00",
+      "company_name": "Stevanato Group S.p.A."
+    },
+    {
       "ticker": "TMDX",
       "event_date": "2026-08-04",
       "event_hour": "",
@@ -2475,6 +2493,15 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "UFP Technologies, Inc."
+    },
+    {
+      "ticker": "ULS",
+      "event_date": "2026-08-04",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "UL Solutions Inc."
     },
     {
       "ticker": "VREX",
@@ -3321,15 +3348,6 @@
       "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "Uber Technologies, Inc."
-    },
-    {
-      "ticker": "ULS",
-      "event_date": "2026-08-05",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "UL Solutions Inc."
     },
     {
       "ticker": "UTHR",
