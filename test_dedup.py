@@ -887,6 +887,93 @@ def test_reported_row_survives_same_quarter_phantom_upsert():
     assert rq is not None and rq["event_date"] == "2026-05-27"
 
 
+def test_ticktick_pointer_survives_same_quarter_date_move():
+    """Fix C: when a projected-date row (carrying the TickTick task id) is
+    collapsed into the actual-date row by upsert_event's same-quarter DELETE,
+    the pointer must be carried onto the new row — otherwise the one-shot
+    reported-marking can never find the task (the UNH 2026-07 failure)."""
+    from storage import (
+        init_db, upsert_event, find_existing_event, date_to_quarter,
+        find_task_pointer_for_quarter,
+    )
+
+    conn = init_db(":memory:")
+    upsert_event(conn, "UNH", "2026-07-27", "bmo", None,
+                 quarter=date_to_quarter("2026-07-27"),
+                 eps_estimate=4.89, reported=False, tier=2, company_name="UnitedHealth")
+    conn.execute(
+        "UPDATE events SET ticktick_task_id = ? WHERE ticker = ? AND event_date = ?",
+        ("TT_TASK_123", "UNH", "2026-07-27"))
+    conn.commit()
+
+    upsert_event(conn, "UNH", "2026-07-16", "bmo", None,
+                 quarter=date_to_quarter("2026-07-16"),
+                 eps_estimate=4.89, eps_actual=6.38, reported=False, tier=2,
+                 company_name="UnitedHealth")
+
+    assert find_existing_event(conn, "UNH", "2026-07-27") is None
+    moved = find_existing_event(conn, "UNH", "2026-07-16")
+    assert moved is not None
+    assert moved["ticktick_task_id"] == "TT_TASK_123", "pointer was not carried forward"
+    assert find_task_pointer_for_quarter(
+        conn, "UNH", date_to_quarter("2026-07-16")) == "TT_TASK_123"
+
+
+def test_ticktick_pointer_not_carried_from_reported_row():
+    """The carry must only rescue an *unreported* projected row. A reported row's
+    date doesn't move, so it is never a source — and the reported=0 DELETE guard
+    (ICLR phantom fix) must stay intact."""
+    from storage import init_db, upsert_event, find_existing_event, date_to_quarter
+
+    conn = init_db(":memory:")
+    upsert_event(conn, "ICLR", "2026-05-27", "amc", None,
+                 quarter=date_to_quarter("2026-05-27"),
+                 eps_actual=2.52, reported=True, tier=2, company_name="ICON PLC")
+    conn.execute(
+        "UPDATE events SET ticktick_task_id = ? WHERE ticker = ? AND event_date = ?",
+        ("REPORTED_TASK", "ICLR", "2026-05-27"))
+    conn.commit()
+
+    upsert_event(conn, "ICLR", "2026-06-02", "amc", None,
+                 quarter=date_to_quarter("2026-06-02"),
+                 reported=False, tier=2, company_name="ICON PLC")
+
+    survived = find_existing_event(conn, "ICLR", "2026-05-27")
+    assert survived is not None and survived["reported"] is True
+    assert survived["ticktick_task_id"] == "REPORTED_TASK"
+    phantom = find_existing_event(conn, "ICLR", "2026-06-02")
+    assert phantom is not None and phantom["ticktick_task_id"] is None
+
+
+def test_upsert_spares_date_locked_row_and_its_pointer():
+    """A same-quarter provider insert must NOT delete an operator-locked row or
+    carry its TickTick pointer to the provider date (that would silently move the
+    locked task on the next reconcile). Mirrors the reported=0 guard."""
+    from storage import init_db, upsert_event, find_existing_event, date_to_quarter
+
+    conn = init_db(":memory:")
+    upsert_event(conn, "ABC", "2026-08-20", "bmo", None,
+                 quarter=date_to_quarter("2026-08-20"),
+                 reported=False, tier=2, company_name="ABC Inc")
+    conn.execute(
+        "UPDATE events SET date_locked = 1, ticktick_task_id = 'T_LOCK' "
+        "WHERE ticker = 'ABC' AND event_date = '2026-08-20'"
+    )
+    conn.commit()
+
+    # Provider actuals land on a different date in the same quarter.
+    upsert_event(conn, "ABC", "2026-08-21", "amc", None,
+                 quarter=date_to_quarter("2026-08-21"),
+                 reported=False, tier=2, company_name="ABC Inc")
+
+    # Locked row survives WITH its pointer; the new row did not inherit it.
+    locked = find_existing_event(conn, "ABC", "2026-08-20")
+    assert locked is not None and locked["date_locked"] is True
+    assert locked["ticktick_task_id"] == "T_LOCK"
+    new = find_existing_event(conn, "ABC", "2026-08-21")
+    assert new is not None and new["ticktick_task_id"] is None
+
+
 def _fh(sym, d, **kw):
     base = {"symbol": sym, "date": d, "hour": kw.get("hour", ""),
             "epsEstimate": kw.get("epsEstimate"), "epsActual": kw.get("epsActual"),

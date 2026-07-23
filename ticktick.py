@@ -309,6 +309,26 @@ def list_tasks_in_project(token: str, project_id: str) -> list[dict]:
         return []
 
 
+def _list_tasks_strict(token: str, project_id: str) -> list[dict]:
+    """Like list_tasks_in_project but RAISES TickTickError on a read failure
+    instead of returning [] — so callers can tell "empty list" from "read
+    failed". Used by the reconcile gather, where a swallowed failure would look
+    like a deleted task and could drive a wrong-sibling adoption."""
+    try:
+        resp = requests.get(
+            f"{TICKTICK_API_BASE}/project/{project_id}/data",
+            headers=_headers(token),
+            timeout=30,
+        )
+    except requests.RequestException as exc:
+        raise TickTickError(f"read of project {project_id} failed: {exc}") from exc
+    if resp.status_code == 401:
+        raise TickTickTokenExpired("TickTick access token expired")
+    if resp.status_code == 200:
+        return resp.json().get("tasks", [])
+    raise TickTickError(f"read of project {project_id} failed: HTTP {resp.status_code}")
+
+
 def find_existing_task_by_ticker(tasks: list[dict], ticker: str) -> dict | None:
     """
     Search a list of TickTick tasks for one matching a ticker.
@@ -388,6 +408,64 @@ def _gather_quarter_existing_tasks(
     return result
 
 
+def _gather_quarter_tasks_full(
+    token: str,
+    projects: list[dict],
+    quarters: set[str],
+) -> tuple[dict[str, dict[str, list[tuple[str, str, dict]]]], set[str]]:
+    """
+    Like `_gather_quarter_existing_tasks` but keeps the FULL task object (not
+    just its id) and ALL candidates per ticker, so the caller can (a) inspect
+    the live title / status / date and (b) honor an existing DB pointer instead
+    of arbitrarily picking one when a ticker has tasks in two sibling lists of
+    the same quarter (a mid-quarter tier promotion leaves a task in the old
+    list). Caller does candidate selection — see reconcile_ticktick_tasks.
+
+    Returns `(result, degraded)` where:
+      result = { quarter: { ticker: [(project_id, project_name, task_dict), ...] } }
+      degraded = set of quarters where a list read FAILED. A failed read looks
+        like an empty list, so those quarters' candidate sets may be incomplete —
+        the caller must not adopt a NULL-pointer task there (it could pick a
+        stale sibling in a still-readable list while the real task's list failed).
+    """
+    result: dict[str, dict[str, list[tuple[str, str, dict]]]] = {q: {} for q in quarters}
+    degraded: set[str] = set()
+    for p in projects:
+        name = p.get("name", "")
+        for q in quarters:
+            if name.startswith(f"{q} Earnings"):
+                pid = p["id"]
+                try:
+                    tasks = _list_tasks_strict(token, pid)
+                except TickTickTokenExpired:
+                    raise
+                except TickTickError as exc:
+                    logger.warning(
+                        f"  TickTick: read of '{name}' failed ({exc}); "
+                        f"quarter {q} marked degraded (no NULL-pointer adoption)"
+                    )
+                    degraded.add(q)
+                    break
+                for t in tasks:
+                    ticker = _ticker_from_task_title(t.get("title", ""))
+                    if not ticker:
+                        continue
+                    result[q].setdefault(ticker, []).append((pid, name, t))
+                break
+    return result, degraded
+
+
+def _task_date_stale(task: dict, event_date: str) -> bool:
+    """True if the task's startDate OR dueDate (date part) differs from
+    event_date. Both matter: TickTick snaps dueDate back to startDate, so a
+    task whose dueDate looks right but startDate is stale will silently revert."""
+    for field in ("startDate", "dueDate"):
+        v = (task.get(field) or "")[:10]
+        if v and v != event_date:
+            return True
+    return False
+
+
 def get_all_earnings_lists(token: str) -> list[dict]:
     """Find all TickTick lists that look like earnings lists."""
     try:
@@ -458,22 +536,29 @@ def create_task(
     title: str,
     content: str,
     due_date: str,
+    tags: list[str] | None = None,
 ) -> str | None:
     """
     Create a task in TickTick. Returns the task ID on success, None on failure.
 
     Args:
         due_date: YYYY-MM-DD format earnings date
+        tags: optional workspace tags to attach (e.g. the coverage sector,
+              "Healthcare Services" / "MedTech"). Case is preserved by the API.
     """
-    # TickTick expects ISO 8601 with timezone
+    # TickTick expects ISO 8601 with timezone. Set startDate == dueDate so a
+    # later date correction (which must move BOTH) has a start to move.
     due_datetime = f"{due_date}T09:00:00.000+0000"
 
     payload = {
         "title": title,
         "content": content,
+        "startDate": due_datetime,
         "dueDate": due_datetime,
         "projectId": list_id,
     }
+    if tags:
+        payload["tags"] = tags
 
     try:
         resp = requests.post(
@@ -499,37 +584,108 @@ def create_task(
         return None
 
 
+def _find_task_in_project(token: str, project_id: str, task_id: str) -> dict | None:
+    """
+    Fetch one task by scanning its project's `/data` payload.
+
+    The Open API's documented single-task GET (`/task/{projectId}/{taskId}`)
+    returns HTTP 404 for every task in practice — verified 2026-07-22 across
+    8/8 tasks in two lists using ids taken straight from `/project/{id}/data`
+    (so both ids were provably correct). `/project/{id}/data` is the only
+    reliable read, so every task read routes through it.
+    """
+    for t in list_tasks_in_project(token, project_id):
+        if t.get("id") == task_id:
+            return t
+    return None
+
+
+def _due_iso(event_date: str) -> str:
+    """Format a YYYY-MM-DD date as the TickTick ISO timestamp used on create."""
+    return f"{event_date}T09:00:00.000+0000"
+
+
+# Coverage sectors we surface as TickTick tags (JP's request). Restricted to the
+# two Tier-2 sectors — other sectors are left untagged rather than guessed.
+_SECTOR_TAGS = {"Healthcare Services", "MedTech"}
+
+
+def sector_tag(sector: str | None) -> str | None:
+    """Return the TickTick tag for a coverage sector, or None if not tagged."""
+    return sector if sector in _SECTOR_TAGS else None
+
+
+def _merge_tags(existing: list[str] | None, add: str) -> list[str] | None:
+    """Add `add` to `existing` if not already present (case-insensitive).
+    Returns the merged list, or None if no change is needed (tag already there)."""
+    existing = existing or []
+    if any((t or "").lower() == add.lower() for t in existing):
+        return None
+    return existing + [add]
+
+
 def update_task_content(
     token: str,
     list_id: str,
     task_id: str,
-    new_content: str,
+    new_content: str | None = None,
     new_title: str | None = None,
+    new_date: str | None = None,
+    new_tags: list[str] | None = None,
+    allow_completed: bool = False,
 ) -> bool:
-    """Update a task's content (and optionally title). Returns success."""
+    """
+    Update a task's title / content / date in place. Returns success.
+
+    Reads the task via the project `/data` endpoint (the single-task GET is
+    dead — see `_find_task_in_project`), mutates ONLY the provided fields, and
+    POSTs the full object back.
+
+    `new_date` (YYYY-MM-DD) sets BOTH `startDate` AND `dueDate`. TickTick snaps
+    `dueDate` back to `startDate` server-side, so writing `dueDate` alone
+    silently reverts within ~a minute (verified 2026-07-22 on the UNH task:
+    title moved but the date bounced back to the stale `startDate`). Both must
+    move together.
+
+    Pass `new_content=None` (the default) to leave the body untouched — this is
+    what preserves the user's checklist ticks and notes during a pre-report
+    date correction. Only `mark_task_reported` rewrites the body (at report
+    time, when the checklist is spent).
+
+    A COMPLETED task (status==2) is left untouched unless `allow_completed=True`:
+    reopening/rewriting a task the user ticked off is the worst clobber, and this
+    is the single write chokepoint, so the invariant is enforced here for every
+    caller (reconcile AND the notify_results/--check-results path). Returns True
+    (a no-op success) so callers don't treat the intentional skip as a failure.
+    """
+    task = _find_task_in_project(token, list_id, task_id)
+    if task is None:
+        logger.warning(f"  Task {task_id} not found in project {list_id}; cannot update")
+        return False
+
+    if task.get("status") == 2 and not allow_completed:
+        logger.info(f"  Task {task_id} is completed — leaving it untouched")
+        return True
+
+    if new_content is not None:
+        task["content"] = new_content
+    if new_title is not None:
+        task["title"] = new_title
+    if new_date is not None:
+        iso = _due_iso(new_date)
+        task["startDate"] = iso
+        task["dueDate"] = iso
+    if new_tags is not None:
+        task["tags"] = new_tags
+    # POST /task/{taskId} requires the id + projectId in the body.
+    task["id"] = task_id
+    task["projectId"] = list_id
+
     try:
-        # First get the existing task
-        resp = requests.get(
-            f"{TICKTICK_API_BASE}/task/{list_id}/{task_id}",
-            headers=_headers(token),
-            timeout=15,
-        )
-        if resp.status_code == 401:
-            raise TickTickTokenExpired("TickTick access token expired")
-        if resp.status_code != 200:
-            logger.warning(f"  Failed to fetch task {task_id}: HTTP {resp.status_code}")
-            return False
-
-        task_data = resp.json()
-        task_data["content"] = new_content
-        if new_title is not None:
-            task_data["title"] = new_title
-
-        # Update the task
         resp = requests.post(
             f"{TICKTICK_API_BASE}/task/{task_id}",
             headers=_headers(token),
-            json=task_data,
+            json=task,
             timeout=15,
         )
         if resp.status_code == 401:
@@ -538,7 +694,9 @@ def update_task_content(
             logger.info(f"  Updated TickTick task {task_id}")
             return True
         else:
-            logger.warning(f"  Failed to update task {task_id}: HTTP {resp.status_code}")
+            logger.warning(
+                f"  Failed to update task {task_id}: HTTP {resp.status_code} — {resp.text}"
+            )
             return False
     except TickTickTokenExpired:
         raise
@@ -563,22 +721,31 @@ def mark_task_reported(
     move_pct: float | None = None,
     position: str = "",
     move_label: str | None = None,
+    list_id: str | None = None,
+    tags: list[str] | None = None,
 ) -> bool:
     """
-    Mark a TickTick task as reported: prepend "[REPORTED]" to the title and
-    embed actuals (beat/miss) in the content.
+    Mark a TickTick task as reported: prepend "[REPORTED]" to the title, embed
+    actuals (beat/miss) in the content, and correct the due date to the actual
+    report `event_date` (projected dates are routinely wrong — this is the same
+    write that fixes the stale date).
 
-    The task lives in the quarterly list keyed on (event_date, tier), so we
-    look up the list ID by name rather than tracking it in the DB.
+    `list_id` is the project the task actually lives in. When known (the caller
+    located the task by scanning the quarter's lists), pass it so we fetch the
+    RIGHT list. When None (legacy callers) we reconstruct the list name from
+    (event_date, tier) — but that reconstruction can miss a sibling/legacy list
+    and, worse, `find_or_create_list` would then CREATE a spurious empty list,
+    so prefer passing `list_id`.
     """
-    list_name = _quarter_list_name(event_date, tier, position=position)
-    try:
-        list_id = find_or_create_list(token, list_name)
-    except TickTickTokenExpired:
-        raise
-    if not list_id:
-        logger.warning(f"  Could not resolve TickTick list '{list_name}' — task {task_id} not updated")
-        return False
+    if list_id is None:
+        list_name = _quarter_list_name(event_date, tier, position=position)
+        try:
+            list_id = find_or_create_list(token, list_name)
+        except TickTickTokenExpired:
+            raise
+        if not list_id:
+            logger.warning(f"  Could not resolve TickTick list '{list_name}' — task {task_id} not updated")
+            return False
 
     new_title = "[REPORTED] " + build_task_title(ticker, event_date, hour)
     new_content = build_task_content(
@@ -598,7 +765,10 @@ def mark_task_reported(
             suffix += f" ({move_label})"
         new_content += suffix
 
-    return update_task_content(token, list_id, task_id, new_content, new_title=new_title)
+    return update_task_content(
+        token, list_id, task_id, new_content, new_title=new_title,
+        new_date=event_date, new_tags=tags,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -779,8 +949,12 @@ def sync_ticktick_tasks(
                 stats["skipped"] += 1
                 continue
 
+            tag = sector_tag(event.get("sector"))
             try:
-                task_id = create_task(token, list_id, title, content, event_date)
+                task_id = create_task(
+                    token, list_id, title, content, event_date,
+                    tags=[tag] if tag else None,
+                )
             except TickTickTokenExpired:
                 logger.error(
                     "TickTick access token expired. Re-run the OAuth flow at "
@@ -806,5 +980,343 @@ def sync_ticktick_tasks(
     logger.info(
         f"TickTick sync: {stats['created']} created, "
         f"{stats['skipped']} already had tasks, {stats['errors']} errors"
+    )
+    return stats
+
+
+# ---------------------------------------------------------------------------
+# Reconcile — make TickTick a projection of DB truth (self-healing)
+# ---------------------------------------------------------------------------
+
+
+def reconcile_ticktick_tasks(
+    conn,
+    today,
+    *,
+    sector_by_ticker: dict | None = None,
+    lookback_days: int = 14,
+    lookahead_days: int = 45,
+    max_db_staleness_days: int = 4,
+    dry_run: bool = False,
+) -> dict:
+    """
+    Idempotent desired-state pass over Tier 1/2 TickTick tasks.
+
+    `sync_ticktick_tasks` only CREATES tasks (and only for `event_date >= today`)
+    and never edits an existing one. So two things drift and never self-correct:
+      1. A task's due date/title, when the projected earnings date was wrong
+         (Finnhub cadence projections routinely miss by a week+). The pointer to
+         the task also gets destroyed when `upsert_event` collapses the
+         projected-date row into the actual-date row, so the one-shot
+         reported-marking in `notify_results` can't find the task and skips it
+         silently — leaving the task open, unmarked, at the stale date forever.
+      2. Any Tier 1/2 name that reported while its task pointer was lost.
+
+    This pass fixes both by treating the DB as truth and the TickTick tasks as a
+    projection to be reconciled each run. It is keyed on (ticker, reporting
+    quarter): task IDENTITY comes from scanning the quarter's lists live (only
+    two lists per quarter, so ~2-4 API calls amortized across the whole run),
+    and the DB `ticktick_task_id` is treated as a cache that gets backfilled.
+
+    For each Tier 1/2 event in [today-lookback, today+lookahead]:
+      - locate the task by scanning the quarter's lists; backfill the DB pointer;
+      - NEVER touch a completed task (`status == 2`) — reopening/rewriting a task
+        the user ticked off is the worst possible clobber;
+      - if the DB row is reported and the task isn't `[REPORTED]` yet → mark it
+        reported (rewrites title + body with actuals AND corrects the date);
+      - else (pre-report) if the task's due date != the event's current date →
+        correct the title + start/due date ONLY, leaving the body (checklist
+        ticks / notes) intact.
+
+    The window is quarter-scoped in effect: only quarters that the window's
+    events map to are scanned, so long-closed quarters are never re-touched
+    regardless of `lookback_days`.
+
+    Set `dry_run=True` to log every change it WOULD make without writing — used
+    for the first run so the bulk repair can be eyeballed before it writes.
+    """
+    from datetime import timedelta, date
+
+    stats = {
+        "checked": 0,
+        "date_fixed": 0,
+        "marked_reported": 0,
+        "tag_added": 0,
+        "pointer_backfilled": 0,
+        "skipped_done": 0,
+        "skipped_phantom": 0,
+        "skipped_stale": 0,
+        "skipped_ambiguous": 0,
+        "no_task": 0,
+        "errors": 0,
+    }
+    sector_by_ticker = sector_by_ticker or {}
+    from storage import find_reported_event_for_quarter
+
+    config = get_ticktick_config()
+    if not config:
+        logger.info("TickTick not configured — skipping reconcile")
+        return stats
+    token = config["token"]
+
+    lo = (today - timedelta(days=lookback_days)).isoformat()
+    hi = (today + timedelta(days=lookahead_days)).isoformat()
+
+    # Staleness guard. Reconcile pushes DB truth ONTO TickTick, so a stale DB
+    # (e.g. a frozen local copy, or a failed CI-artifact restore that fell back
+    # to an old snapshot) would faithfully corrupt TickTick — reverting a correct
+    # date to an old projection, or un-reporting a name. Refuse rather than act on
+    # input we can't trust. Scope the freshness check to the rows reconcile
+    # actually mutates by date: UNREPORTED Tier 1/2 events in-window. A live CI
+    # sync stamps updated_at=now on these every run; a reported past row is
+    # legitimately old (sync stops touching it) so it must NOT count toward
+    # staleness, and an unrelated fresh row elsewhere must NOT mask a frozen
+    # target set. NULL (no unreported targets) → nothing risky to write → proceed.
+    # date_locked rows are operator overrides: intentionally pinned and
+    # legitimately old, so they must NOT count toward staleness (one old lock
+    # would otherwise abort the whole reconcile).
+    newest = conn.execute(
+        "SELECT MAX(updated_at) FROM events "
+        "WHERE tier <= 2 AND reported = 0 AND date_locked = 0 "
+        "AND event_date BETWEEN ? AND ?",
+        (lo, hi),
+    ).fetchone()[0]
+    if newest:
+        try:
+            newest_date = date.fromisoformat(str(newest)[:10])
+            age = (today - newest_date).days
+            if age > max_db_staleness_days:
+                logger.error(
+                    "TickTick reconcile ABORTED: reconcile-target rows look stale "
+                    "(newest unreported Tier 1/2 event updated %s, %d days old > %d). "
+                    "Reconcile would push stale dates onto TickTick. Refusing.",
+                    newest_date, age, max_db_staleness_days,
+                )
+                stats["errors"] += 1
+                return stats
+        except ValueError:
+            pass  # unparseable timestamp — don't block on it
+    rows = conn.execute(
+        "SELECT ticker, event_date, event_hour, quarter, reported, "
+        "eps_estimate, eps_actual, rev_estimate, rev_actual, tier, "
+        "company_name, ticktick_task_id, updated_at, date_locked "
+        "FROM events WHERE tier <= 2 AND event_date BETWEEN ? AND ? "
+        "ORDER BY event_date, ticker",
+        (lo, hi),
+    ).fetchall()
+    if not rows:
+        logger.info("TickTick reconcile: no Tier 1/2 events in window")
+        return stats
+
+    # Canonicalize to ONE row per (ticker, reporting-quarter). Finnhub
+    # double-lists a name that flapped dates (a reported row WITH actuals plus a
+    # no-actuals phantom forward date, both in the same quarter — the ICLR
+    # class). Without this, processing the phantom (reported=0) row would move
+    # the reported task to the phantom date and strip its [REPORTED] title. A
+    # reported row wins; then the later event_date. (row layout: event_date=1,
+    # reported=4.)
+    canonical: dict[tuple, tuple] = {}
+    for r in rows:
+        key = (r[0], _reporting_quarter(r[1]))
+        cur = canonical.get(key)
+        if cur is None or (int(r[4] or 0), r[1]) > (int(cur[4] or 0), cur[1]):
+            canonical[key] = r
+    rows = list(canonical.values())
+
+    quarters = {_reporting_quarter(r[1]) for r in rows}
+    try:
+        projects = _list_all_projects(token)
+        qmap, degraded_quarters = _gather_quarter_tasks_full(token, projects, quarters)
+    except TickTickTokenExpired:
+        logger.error(
+            "TickTick access token expired — reconcile aborted. Re-run the OAuth "
+            "flow at developer.ticktick.com and update TICKTICK_ACCESS_TOKEN."
+        )
+        stats["errors"] += 1
+        return stats
+
+    prefix = "[dry-run] " if dry_run else ""
+
+    for r in rows:
+        (ticker, event_date, event_hour, quarter, reported,
+         eps_est, eps_act, rev_est, rev_act, tier, company_name, db_task_id,
+         row_updated, date_locked) = r
+        stats["checked"] += 1
+
+        # Per-row staleness skip. The wholesale-frozen-DB case aborts loudly
+        # above; this catches PARTIAL staleness the global MAX check can't — a
+        # single unreported row that stopped being synced (an unseen/dropped
+        # ticker) while its siblings stay fresh. Its projected date can't be
+        # trusted, so don't push it. Reported rows are exempt (their date is the
+        # real report date, correct however old the row); so are date_locked rows
+        # (operator-pinned, trusted regardless of age).
+        if not reported and not date_locked and row_updated:
+            try:
+                if (today - date.fromisoformat(str(row_updated)[:10])).days > max_db_staleness_days:
+                    stats["skipped_stale"] += 1
+                    continue
+            except ValueError:
+                pass
+
+        # DB-wide phantom guard. An unreported row whose quarter is ALREADY
+        # reported at a different date is a Finnhub phantom forward-listing —
+        # acting on it would move the [REPORTED] task to the phantom date and
+        # strip the prefix. This catches the case the in-window canonicalization
+        # can't: the real reported row sits OUTSIDE the reconcile window. Uses the
+        # stored DB quarter ("2026Q1"), scanning the whole table, not just window.
+        if not reported:
+            rep = find_reported_event_for_quarter(conn, ticker, quarter)
+            if rep and rep["event_date"] != event_date:
+                stats["skipped_phantom"] += 1
+                continue
+
+        rq = _reporting_quarter(event_date)
+        candidates = qmap.get(rq, {}).get(ticker) or []
+        if not candidates:
+            stats["no_task"] += 1
+            continue
+
+        # Candidate selection.
+        #  - A non-null DB pointer is authoritative: use the matching live task.
+        #  - If it's set but matches NO candidate this run, do NOT clobber it or
+        #    mutate an arbitrary sibling. A per-list read failure surfaces as an
+        #    empty list (list_tasks_in_project swallows errors), indistinguishable
+        #    from a real delete — either way, skip and let a healthy next run
+        #    reconcile rather than repoint onto the wrong task.
+        #  - Only when the pointer is NULL do we adopt a task, preferring an OPEN
+        #    candidate over a completed legacy one (a done T_OLD listed first must
+        #    not shadow the live T_GOOD).
+        if db_task_id:
+            chosen = next((c for c in candidates if c[2].get("id") == db_task_id), None)
+            if chosen is None:
+                logger.warning(
+                    "  TickTick: %s DB pointer %s matches no live task this run "
+                    "(deleted, or a transient list read failure) — skipping to avoid "
+                    "clobbering onto the wrong task.",
+                    ticker, db_task_id,
+                )
+                stats["skipped_ambiguous"] += 1
+                continue
+        else:
+            # NULL pointer → adopt a task. But if this quarter had a list read
+            # failure, the visible candidates may be incomplete (the real task's
+            # list is the one that failed), so adopting/backfilling could latch
+            # onto a stale sibling. Skip; a healthy next run adopts correctly.
+            if rq in degraded_quarters:
+                logger.warning(
+                    "  TickTick: %s has no DB pointer and quarter %s had a list "
+                    "read failure — skipping adoption to avoid a wrong sibling.",
+                    ticker, rq,
+                )
+                stats["skipped_ambiguous"] += 1
+                continue
+            pool = [c for c in candidates if c[2].get("status") != 2] or candidates
+            if len(pool) > 1:
+                logger.warning(
+                    "  TickTick: %s has %d open tasks in %s across %s with no DB "
+                    "pointer — adopting '%s'. Dedupe manually.",
+                    ticker, len(pool), rq, sorted({c[1] for c in pool}), pool[0][1],
+                )
+            chosen = pool[0]
+        pid, pname, task = chosen
+        task_id = task.get("id")
+
+        # Backfill the DB pointer (cache) only when it's missing or dead. If it
+        # already matched a live candidate, `chosen` honored it and task_id ==
+        # db_task_id, so no write.
+        if db_task_id != task_id:
+            stats["pointer_backfilled"] += 1
+            if not dry_run:
+                conn.execute(
+                    "UPDATE events SET ticktick_task_id = ?, updated_at = datetime('now') "
+                    "WHERE ticker = ? AND event_date = ?",
+                    (task_id, ticker, event_date),
+                )
+                conn.commit()
+
+        # Never touch a task the user has completed.
+        if task.get("status") == 2:
+            stats["skipped_done"] += 1
+            continue
+
+        title = task.get("title", "") or ""
+        # Sector tag to ensure (merged in without clobbering the user's tags).
+        want_tag = sector_tag(sector_by_ticker.get(ticker))
+        merged_tags = _merge_tags(task.get("tags"), want_tag) if want_tag else None
+        # Date repair is independent of reported/title state and checks BOTH
+        # date fields (dueDate alone would miss a stale startDate that then drags
+        # dueDate back).
+        date_stale = _task_date_stale(task, event_date)
+        try:
+            if reported and "[REPORTED]" not in title:
+                # Transition to reported in ONE write: title + date + actuals body
+                # + sector tag together. Splitting the tag into a second write
+                # would re-read /project/data and, if that read lags, clobber the
+                # just-posted [REPORTED] repair with a stale object.
+                logger.info(
+                    f"  {prefix}mark reported: {ticker} {event_date} (list='{pname}')"
+                )
+                if merged_tags is not None:
+                    logger.info(f"  {prefix}add tag {want_tag!r}: {ticker} (list='{pname}')")
+                if not dry_run:
+                    ok = mark_task_reported(
+                        token, task_id,
+                        ticker=ticker, event_date=event_date, hour=event_hour,
+                        tier=tier, company_name=company_name,
+                        eps_estimate=eps_est, eps_actual=eps_act,
+                        revenue_estimate=rev_est, revenue_actual=rev_act,
+                        list_id=pid, tags=merged_tags,
+                    )
+                    if not ok:
+                        stats["errors"] += 1
+                        continue
+                stats["marked_reported"] += 1
+                if merged_tags is not None:
+                    stats["tag_added"] += 1
+            elif date_stale or merged_tags is not None:
+                # Title/date fix + tag in ONE write, for BOTH pre-report tasks and
+                # already-[REPORTED] tasks whose date is stale. Body (checklist /
+                # actuals) is left untouched. On an already-reported task the
+                # title keeps its "[REPORTED] " prefix.
+                new_title = None
+                if date_stale:
+                    new_title = build_task_title(ticker, event_date, event_hour)
+                    if reported and "[REPORTED]" in title:
+                        new_title = "[REPORTED] " + new_title
+                    logger.info(
+                        f"  {prefix}fix date: {ticker} -> {event_date} (list='{pname}')"
+                    )
+                if merged_tags is not None:
+                    logger.info(f"  {prefix}add tag {want_tag!r}: {ticker} (list='{pname}')")
+                if not dry_run:
+                    ok = update_task_content(
+                        token, pid, task_id,
+                        new_title=new_title,
+                        new_date=event_date if date_stale else None,
+                        new_tags=merged_tags,
+                    )
+                    if not ok:
+                        stats["errors"] += 1
+                        continue
+                if date_stale:
+                    stats["date_fixed"] += 1
+                if merged_tags is not None:
+                    stats["tag_added"] += 1
+        except TickTickTokenExpired:
+            logger.error("TickTick access token expired mid-reconcile — stopping")
+            stats["errors"] += 1
+            break
+        except Exception as exc:  # best-effort per task; never abort the whole pass
+            logger.warning(f"  TickTick reconcile failed for {ticker} {event_date}: {exc}")
+            stats["errors"] += 1
+
+    logger.info(
+        "TickTick reconcile%s: checked=%d date_fixed=%d marked_reported=%d "
+        "tag_added=%d backfilled=%d skipped_done=%d skipped_phantom=%d "
+        "skipped_stale=%d skipped_ambiguous=%d no_task=%d errors=%d"
+        % (" [dry-run]" if dry_run else "", stats["checked"], stats["date_fixed"],
+           stats["marked_reported"], stats["tag_added"], stats["pointer_backfilled"],
+           stats["skipped_done"], stats["skipped_phantom"], stats["skipped_stale"],
+           stats["skipped_ambiguous"], stats["no_task"], stats["errors"])
     )
     return stats

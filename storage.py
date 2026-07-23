@@ -411,6 +411,27 @@ def find_reported_event_for_quarter(
     return None
 
 
+def find_task_pointer_for_quarter(
+    conn: sqlite3.Connection, ticker: str, quarter: str
+) -> str | None:
+    """
+    Return a TickTick task id for this ticker+reporting-quarter from ANY date
+    row that carries one, or None. DB-only (no API cost).
+
+    Used by `notify_results` as a fallback when the exact actual-date row has
+    no pointer — the pointer may sit on a sibling projected-date row for the
+    same quarter. Prefers a reported row, then the most recently updated.
+    """
+    cur = conn.execute(
+        "SELECT ticktick_task_id FROM events "
+        "WHERE ticker = ? AND quarter = ? AND ticktick_task_id IS NOT NULL "
+        "ORDER BY reported DESC, updated_at DESC LIMIT 1",
+        (ticker, quarter),
+    )
+    row = cur.fetchone()
+    return row[0] if row and row[0] else None
+
+
 def find_event_for_ticker_near_date(
     conn: sqlite3.Connection, ticker: str, event_date: str, window_days: int = 14
 ) -> dict | None:
@@ -533,10 +554,34 @@ def upsert_event(
         # genuine post-report date correction leaves a harmless duplicate
         # (skipped by the actuals detector; cleaned by --cleanup), which is
         # far better than losing the actuals.
+        # Carry the TickTick pointer forward across a same-quarter date move.
+        # The DELETE below drops the old projected-date row; if we didn't
+        # rescue its `ticktick_task_id` first, the freshly-inserted actual-date
+        # row would be born pointerless and the one-shot reported-marking in
+        # notify_results could never find the task (it would sit open + stale
+        # at the wrong date forever). Take the newest same-quarter, unreported
+        # row's pointer. gcal_id is deliberately NOT carried — calendar ids are
+        # date-move-sensitive and the calendar has its own create-first mover.
+        carried_task_id = None
         if quarter:
+            row = conn.execute(
+                "SELECT ticktick_task_id FROM events "
+                "WHERE ticker = ? AND quarter = ? AND event_date != ? "
+                "AND reported = 0 AND date_locked = 0 AND ticktick_task_id IS NOT NULL "
+                "ORDER BY updated_at DESC LIMIT 1",
+                (ticker, quarter, event_date),
+            ).fetchone()
+            if row:
+                carried_task_id = row[0]
+            # Spare date_locked rows too, not just reported ones: a lock is an
+            # operator override pinning the date, so a same-quarter provider
+            # insert must NOT delete it (and must NOT carry its pointer to the
+            # provider date — that would silently move the locked task in
+            # TickTick on the next reconcile). Worst case: a harmless duplicate,
+            # same as the reported-row guard.
             conn.execute(
                 "DELETE FROM events WHERE ticker = ? AND quarter = ? "
-                "AND event_date != ? AND reported = 0",
+                "AND event_date != ? AND reported = 0 AND date_locked = 0",
                 (ticker, quarter, event_date),
             )
         conn.execute(
@@ -546,15 +591,15 @@ def upsert_event(
                                 gcal_id, quarter,
                                 eps_estimate, eps_actual, rev_estimate, rev_actual,
                                 reported, tier, company_name, source_fingerprint,
-                                date_confirmed)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                date_confirmed, ticktick_task_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (ticker, event_date, event_hour, event_hour_yf,
              call_datetime_utc, call_source,
              gcal_id, quarter,
              eps_estimate, eps_actual, rev_estimate, rev_actual,
              int(reported), tier, company_name, source_fingerprint,
-             date_confirmed),
+             date_confirmed, carried_task_id),
         )
 
     conn.commit()
