@@ -1623,18 +1623,31 @@ def post_heartbeat(
     stats: dict[str, object],
     *,
     duration_sec: float | None = None,
+    status: str = "ok",
+    warnings: tuple[str, ...] | list[str] = (),
 ) -> None:
     """
-    Post a compact success heartbeat to Slack.
+    Post a compact heartbeat to Slack.
 
     run_name: short label shown in the heartbeat header (e.g. "Daily sync").
     stats: ordered dict of label -> value. None/0 values still render so the
         reader can confirm a zero came from the run, not a missing field.
+    status: "ok" (green check) or "partial" (warning triangle). Callers set
+        "partial" when the run finished but its counters are abnormal — e.g.
+        a zero workload the cadence can't explain (HEALTH_REPORTING.md §4.2
+        abnormal-counts rule). Never silently green over abnormal counts.
+    warnings: short reason strings rendered after the counters when partial.
     """
     parts = [f"{label}: {value}" for label, value in stats.items()]
     if duration_sec is not None:
         parts.append(f"{duration_sec:.1f}s")
     detail = "  ·  ".join(parts) if parts else "ok"
+
+    icon = ":warning:" if status == "partial" else ":white_check_mark:"
+    label_word = "PARTIAL" if status == "partial" else "OK"
+    warn_text = ""
+    if warnings:
+        warn_text = "   ·   " + "  ·  ".join(f"⚠ {w}" for w in warnings)
 
     today = date.today().isoformat()
     blocks = [
@@ -1643,12 +1656,12 @@ def post_heartbeat(
             "elements": [
                 {
                     "type": "mrkdwn",
-                    "text": f":white_check_mark: *{run_name}* — {today}   ·   {detail}",
+                    "text": f"{icon} *{run_name}* — {today}   ·   {detail}{warn_text}",
                 }
             ],
         }
     ]
-    fallback = f"{run_name} OK · {today} · {detail}"
+    fallback = f"{run_name} {label_word} · {today} · {detail}{warn_text}"
 
     try:
         post_slack(webhook_url, blocks, fallback)

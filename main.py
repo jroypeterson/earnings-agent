@@ -41,6 +41,7 @@ from storage import (
     find_existing_event,
     find_event_for_ticker_near_date,
     find_reported_event_for_quarter,
+    find_task_pointer_for_quarter,
     upsert_event,
     record_estimate_snapshot,
     date_to_quarter,
@@ -79,6 +80,7 @@ from calendar_sync import (
 )
 from ticktick import (
     sync_ticktick_tasks,
+    reconcile_ticktick_tasks,
     get_ticktick_config,
     show_ticktick_status,
     mark_task_reported,
@@ -168,6 +170,7 @@ from edgar_client import (
     reset_request_stats as edgar_reset_request_stats,
     get_request_stats as edgar_get_request_stats,
 )
+import daily_summary
 
 logger = logging.getLogger("earnings_agent")
 
@@ -1489,6 +1492,7 @@ def run(
                 "company_name": row[6],
                 "ticktick_task_id": row[7],
                 "position": position,
+                "sector": info.sector if info else "",
             })
 
         if ticktick_events:
@@ -1541,11 +1545,23 @@ def run(
                 f"{tt_stats.get('created', 0)} new / "
                 f"{tt_stats.get('errors', 0)} err"
             )
+        # Abnormal-counts rule (HEALTH_REPORTING.md §4.2): a ~1094-ticker
+        # universe over the full sync window essentially never yields ZERO
+        # merged events — a 0 here is a provider outage returning 200-empty
+        # (the failure mode A1's cap-hit guard can't see), not a quiet day.
+        hb_status, hb_warnings = "ok", []
+        if len(earnings) == 0:
+            hb_status = "partial"
+            hb_warnings.append(
+                "0 events from Finnhub+FMP across the full window — provider outage?"
+            )
         post_heartbeat(
             SLACK_WEBHOOK_EARNINGS,
             "Daily sync",
             stats,
             duration_sec=time.monotonic() - start_ts,
+            status=hb_status,
+            warnings=hb_warnings,
         )
 
 
@@ -1804,6 +1820,22 @@ def notify_results(
             existing = find_existing_event(conn, r.ticker, r.event_date)
             task_id = existing.get("ticktick_task_id") if existing else None
             if not task_id:
+                # The pointer may live on a sibling projected-date row for the
+                # same reporting quarter (projected date != actual date). This
+                # DB-only lookup costs nothing; the daily reconcile pass is the
+                # API-scan backstop for the case where the DB lost it entirely.
+                task_id = find_task_pointer_for_quarter(
+                    conn, r.ticker, date_to_quarter(r.event_date)
+                )
+            if not task_id:
+                # Fail LOUD, not silent: a Tier 1/2 name reported but we can't
+                # find its TickTick task, so it won't be marked [REPORTED] here.
+                # reconcile_ticktick_tasks will locate + repair it via API scan.
+                logger.warning(
+                    "  No TickTick task found for reported %s %s (tier %s) — "
+                    "left for reconcile to backfill",
+                    r.ticker, r.event_date, r.tier,
+                )
                 continue
             # Position is needed so Tier 1 reports go into the correct
             # Portfolio vs Researching TickTick list.
@@ -1839,6 +1871,106 @@ def notify_results(
                 logger.warning(f"  TickTick update failed for {r.ticker}: {exc}")
 
     return posted
+
+
+def run_reconcile_ticktick(dry_run: bool = False):
+    """
+    CLI entry for the TickTick reconcile pass. Makes the Tier 1/2 tasks a
+    projection of DB truth: corrects stale dates, marks reported names
+    [REPORTED], and backfills lost task pointers. `--dry-run` previews.
+    """
+    conn = init_db()
+    try:
+        # Sector map so reconcile can ensure the sector tag (Healthcare
+        # Services / MedTech). The events table has no sector column, so it
+        # comes from coverage.
+        try:
+            sector_by_ticker = {t.ticker: t.sector for t in load_coverage()}
+        except Exception as exc:  # coverage load is best-effort for tagging
+            logger.warning(f"Coverage load failed; reconcile will skip tags: {exc}")
+            sector_by_ticker = {}
+        stats = reconcile_ticktick_tasks(
+            conn, date.today(), sector_by_ticker=sector_by_ticker, dry_run=dry_run
+        )
+    finally:
+        conn.close()
+    # Fail LOUD: a staleness abort, token expiry, or per-task write failure all
+    # bump stats["errors"]. Exit non-zero so the problem is visible (the daily
+    # workflow step is continue-on-error, so this surfaces without failing the
+    # critical sync; a manual run sees a real non-zero exit).
+    if stats.get("errors"):
+        logger.error("TickTick reconcile finished with %d error(s)", stats["errors"])
+        sys.exit(1)
+
+
+# ---------------------------------------------------------------------------
+# Same-day narrative summaries
+# ---------------------------------------------------------------------------
+
+
+def run_daily_summary(
+    target_date: str | None = None,
+    dry_run: bool = False,
+    with_narrative: bool = True,
+):
+    """Post same-day NARRATIVE earnings summaries for Tier 1/2 coverage names.
+
+    Sibling to `run_check_results`, not a replacement: that one posts the
+    beat/miss NUMBERS, this one posts what the quarter SAID (guidance changes +
+    the 2-3 things that moved the story), sourced from the company's own SEC
+    8-K Item 2.02 EX-99 press release.
+
+    Cost profile: EDGAR is free. The only metered call is one LLM request per
+    name WITH a release; `--no-llm` removes even that (deterministic guidance
+    extraction still runs).
+    """
+    target = date.fromisoformat(target_date) if target_date else date.today()
+
+    coverage = load_coverage()
+    if not coverage:
+        logger.error("No tickers loaded. Cannot build summaries.")
+        sys.exit(1)
+    coverage_map = {t.ticker: t for t in coverage}
+
+    conn = init_db()
+    edgar_reset_request_stats()
+
+    rows = daily_summary.build_day(
+        conn, coverage_map, target, with_narrative=with_narrative
+    )
+
+    reqs, fails = edgar_get_request_stats()
+    with_release = sum(1 for r in rows if r.has_release)
+    logger.info(
+        f"Daily summary {target.isoformat()}: {len(rows)} Tier 1/2 name(s), "
+        f"{with_release} with a press release; EDGAR {reqs} req / {fails} failures"
+    )
+    # A total EDGAR outage must not masquerade as "nobody filed a release".
+    if rows and with_release == 0 and fails:
+        logger.error(
+            f"EDGAR degraded: {fails}/{reqs} requests failed and zero releases "
+            f"were retrieved for {len(rows)} reporting name(s)."
+        )
+
+    text = daily_summary.render_text(rows, target)
+    if dry_run or not SLACK_WEBHOOK_EARNINGS:
+        if not SLACK_WEBHOOK_EARNINGS and not dry_run:
+            logger.warning("SLACK_WEBHOOK_EARNINGS unset - printing instead of posting.")
+        # The Windows console is cp1252; the card carries emoji markers. Encode
+        # defensively so a dry-run never dies on the terminal's codec.
+        try:
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
+        print(text)
+        return rows
+
+    post_slack(
+        SLACK_WEBHOOK_EARNINGS,
+        daily_summary.build_slack_blocks(rows, target),
+        f"Earnings summaries - {target.isoformat()}",
+    )
+    return rows
 
 
 # ---------------------------------------------------------------------------
@@ -2345,6 +2477,15 @@ def run_edgar_results_fallback(dry_run: bool = False, skip_heartbeat: bool = Fal
     def _emit_heartbeat():
         if skip_heartbeat or dry_run or not (SLACK_WEBHOOK_STATUS or SLACK_WEBHOOK_EARNINGS):
             return
+        # §4.2 abnormal-counts: an EMPTY Tier-1 universe means the coverage load
+        # came back with nothing — the blind sweep covered nothing, which must
+        # not read as green. (swept==0 alone is NOT the tell — Codex round-1
+        # High: pass 2 skips tickers already DB-probed in pass 1, so a healthy
+        # fully-probed run legitimately sweeps 0.)
+        hb_status, hb_warnings = "ok", []
+        if not tier1_tickers:
+            hb_status = "partial"
+            hb_warnings.append("Tier-1 universe is EMPTY — coverage load broken?")
         post_heartbeat(
             SLACK_WEBHOOK_STATUS or SLACK_WEBHOOK_EARNINGS,
             "Missed-results check",
@@ -2354,6 +2495,8 @@ def run_edgar_results_fallback(dry_run: bool = False, skip_heartbeat: bool = Fal
                 "confirmed_missed": len(confirmed_missed),
             },
             duration_sec=time.monotonic() - start_ts,
+            status=hb_status,
+            warnings=hb_warnings,
         )
 
     if not confirmed_missed:
@@ -4251,6 +4394,13 @@ def main():
         help="Show TickTick earnings review queue status",
     )
     parser.add_argument(
+        "--reconcile-ticktick",
+        action="store_true",
+        help="Reconcile Tier 1/2 TickTick tasks against DB truth: fix stale "
+             "dates, mark reported names [REPORTED], backfill lost pointers. "
+             "Use with --dry-run to preview changes without writing.",
+    )
+    parser.add_argument(
         "--weekly-digest",
         action="store_true",
         help="Build and send the weekly earnings digest (Slack + email HTML for MCP draft)",
@@ -4267,10 +4417,24 @@ def main():
              "Item 2.02) but Finnhub has no actuals yet (the FIVE-class miss)",
     )
     parser.add_argument(
+        "--daily-summary",
+        action="store_true",
+        help="Post same-day NARRATIVE summaries (guidance + what moved the story, "
+             "sourced from the SEC 8-K EX-99 press release) for Tier 1/2 names "
+             "reporting on --date. Complements --check-results, which posts the numbers.",
+    )
+    parser.add_argument(
+        "--no-llm",
+        action="store_true",
+        help="For --daily-summary: skip the LLM narrative pass (guidance extraction "
+             "is deterministic and still runs). Zero metered API spend.",
+    )
+    parser.add_argument(
         "--date",
         type=str,
         default=None,
-        help="Target date (YYYY-MM-DD) for --check-results. Defaults to today.",
+        help="Target date (YYYY-MM-DD) for --check-results / --daily-summary. "
+             "Defaults to today.",
     )
     parser.add_argument(
         "--no-heartbeat",
@@ -4361,6 +4525,8 @@ def main():
             logger.error("TickTick not configured. Set TICKTICK_ACCESS_TOKEN in .env")
             sys.exit(1)
         show_ticktick_status(config["token"])
+    elif args.reconcile_ticktick:
+        run_reconcile_ticktick(dry_run=args.dry_run)
     elif args.weekly_digest:
         run_weekly_digest(dry_run=args.dry_run)
     elif args.check_results:
@@ -4368,6 +4534,12 @@ def main():
             target_date=args.date,
             dry_run=args.dry_run,
             skip_heartbeat=args.no_heartbeat,
+        )
+    elif args.daily_summary:
+        run_daily_summary(
+            target_date=args.date,
+            dry_run=args.dry_run,
+            with_narrative=not args.no_llm,
         )
     elif args.check_missed_results:
         _run_safeguard(
