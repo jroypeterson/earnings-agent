@@ -1,83 +1,13 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-07-23T12:50:16Z",
+  "generated_at": "2026-07-23T20:37:03Z",
   "window": {
     "start": "2026-07-23",
     "end": "2026-07-26"
   },
   "counts": {
-    "previews": 1
+    "previews": 0
   },
-  "previews": [
-    {
-      "ticker": "WST",
-      "company_name": "West Pharmaceutical Services Inc",
-      "tier": 1,
-      "event_date": "2026-07-23",
-      "event_hour": "bmo",
-      "call_datetime_utc": null,
-      "last_price": 358.4100036621094,
-      "day_change_pct": -0.23103958212562192,
-      "consensus": {
-        "eps": {
-          "mean": 2.08,
-          "count": null,
-          "low": null,
-          "high": null
-        },
-        "revenue": {
-          "mean": 839979200.0,
-          "count": null,
-          "low": null,
-          "high": null
-        }
-      },
-      "qtd": {
-        "since": "2026-06-30",
-        "ticker_pct": -0.16434438381354458,
-        "spx_pct": 0.08569621122215793,
-        "sector_etf": "IHI",
-        "sector_etf_pct": 0.0
-      },
-      "implied_move": {
-        "pct": 10.3,
-        "expiry": "2026-08-21",
-        "method": "ATM straddle",
-        "notes": [
-          "stale quote",
-          "(includes 29 extra days of time value)"
-        ]
-      },
-      "post_earnings_moves": [
-        {
-          "event_date": "2026-04-23",
-          "move_pct": 12.860320341632448,
-          "window_label": "earnings-day close vs prior close"
-        }
-      ],
-      "beat_rates": {
-        "eps": {
-          "beats": null,
-          "total": null,
-          "source": "yfinance"
-        },
-        "revenue": {
-          "beats": 13,
-          "total": 20,
-          "source": "fmp"
-        }
-      },
-      "na_fields": [
-        {
-          "field": "beat_rates.eps",
-          "reason": "no yfinance surprise history"
-        },
-        {
-          "field": "consensus.eps.range",
-          "reason": "estimate range not available on FMP Starter plan"
-        }
-      ]
-    }
-  ]
+  "previews": []
 }
