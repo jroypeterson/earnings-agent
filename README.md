@@ -91,6 +91,10 @@ python main.py --no-ticktick
 # View your TickTick earnings review queue
 python main.py --ticktick-status
 
+# Reconcile TickTick tasks against DB truth (fix stale dates, mark reported,
+# backfill lost pointers, ensure sector tags). Add --dry-run to preview.
+python main.py --reconcile-ticktick [--dry-run]
+
 # Clean up duplicate calendar events
 python main.py --cleanup
 ```

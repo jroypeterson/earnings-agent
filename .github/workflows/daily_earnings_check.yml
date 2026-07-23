@@ -218,6 +218,26 @@ jobs:
           GOOGLE_CREDENTIALS_PATH: credentials.json
         run: python main.py --check-replies
 
+      # Reconcile TickTick tasks against DB truth: fix stale dates, mark
+      # reported names [REPORTED], backfill lost task pointers. The create-only
+      # sync above never edits an existing task, so a name whose projected date
+      # was wrong (or whose pointer was lost on a date move) drifts and its task
+      # sits open + stale forever (the UNH 2Q26 failure). Self-healing projection
+      # of DB state with a built-in staleness guard (refuses on a stale DB).
+      # Best-effort (TickTick hygiene, not a date-safeguard) so it can never fail
+      # the critical sync.
+      #
+      # FIRST-DEPLOY: --dry-run so the bulk repair (a full quarter of unmarked
+      # tasks) is LOGGED for review before it writes. Remove --dry-run to enable
+      # writes once the first CI log has been eyeballed.
+      - name: Reconcile TickTick tasks (dry-run)
+        if: github.ref == 'refs/heads/main'
+        continue-on-error: true
+        env:
+          TICKTICK_ACCESS_TOKEN: ${{ secrets.TICKTICK_ACCESS_TOKEN }}
+          COVERAGE_MANAGER_PATH: ${{ github.workspace }}/coverage-manager
+        run: python main.py --reconcile-ticktick --dry-run
+
       # Pre-earnings Consensus Metrics Preview (StreetAccount §9A) for upcoming
       # Tier-1 reporters -> #street-account + exports/consensus_preview.json
       # (hand-off for sa-monitor). A FEATURE, not a safeguard: continue-on-error
