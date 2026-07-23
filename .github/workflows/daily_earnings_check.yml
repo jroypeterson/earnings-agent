@@ -263,10 +263,18 @@ jobs:
             echo "no changes to exported JSON or Pages site"
             exit 0
           fi
-          git pull --rebase --quiet || git rebase --abort || true
+          # Commit FIRST, then rebase onto the moved remote, then push — the
+          # sigma-alert-proven race guard. (The old order ran pull --rebase with
+          # a STAGED index, which errors unconditionally and was swallowed by
+          # '|| true', so on a remote race the commit-back was silently lost.)
           git commit -m "ci: refresh exports/*.json + docs/index.html (earnings calendar page)"
+          git pull --rebase --quiet origin "${GITHUB_REF_NAME:-main}" || {
+            git rebase --abort || true
+            echo "::error::rebase onto origin failed - export commit-back NOT pushed"
+            exit 1
+          }
           git push "https://${GITHUB_ACTOR}:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
-            "HEAD:${GITHUB_REF_NAME:-main}" || echo "push failed (non-fatal)"
+            "HEAD:${GITHUB_REF_NAME:-main}"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
