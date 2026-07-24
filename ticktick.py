@@ -567,6 +567,11 @@ def create_task(
     payload = {
         "title": title,
         "content": content,
+        # The three standard review sub-items (JP's earnings process). Items
+        # make the task CHECKLIST-kind, whose visible note is `desc` — mirror
+        # the body there so it renders either way.
+        "items": [{"title": t, "status": 0} for t in SUBTASK_TITLES],
+        "desc": content,
         "startDate": due_datetime,
         "dueDate": due_datetime,
         "projectId": list_id,
@@ -619,6 +624,29 @@ def _due_iso(event_date: str) -> str:
     return f"{event_date}T09:00:00.000+0000"
 
 
+# The three review artifacts JP's earnings process covers (2026-07-24 request):
+# every managed earnings task carries these as TickTick checklist sub-items
+# (the Open API `items` array — verified live: items round-trip on create, a
+# TEXT task upgrades to CHECKLIST via the full-object POST with `content`
+# preserved, and appending items leaves existing items' ticked status alone).
+SUBTASK_TITLES = ("Earnings call", "Press release", "10-Q")
+
+
+def _merge_subtasks(existing: list[dict] | None) -> list[dict] | None:
+    """
+    Return `existing` checklist items plus any of the three standard sub-items
+    that are missing (case-insensitive title match), or None when nothing needs
+    adding. Existing item dicts pass through UNTOUCHED — their ids and ticked
+    statuses are preserved; we only ever append.
+    """
+    existing = list(existing or [])
+    have = {(i.get("title") or "").strip().lower() for i in existing}
+    to_add = [t for t in SUBTASK_TITLES if t.lower() not in have]
+    if not to_add:
+        return None
+    return existing + [{"title": t, "status": 0} for t in to_add]
+
+
 # Coverage sectors we surface as TickTick tags (JP's request). Restricted to the
 # two Tier-2 sectors — other sectors are left untagged rather than guessed.
 _SECTOR_TAGS = {"Healthcare Services", "MedTech"}
@@ -647,6 +675,7 @@ def update_task_content(
     new_date: str | None = None,
     new_tags: list[str] | None = None,
     allow_completed: bool = False,
+    ensure_subtasks: bool = False,
 ) -> bool:
     """
     Update a task's title / content / date in place. Returns success.
@@ -691,6 +720,21 @@ def update_task_content(
         task["dueDate"] = iso
     if new_tags is not None:
         task["tags"] = new_tags
+    if ensure_subtasks:
+        # Append any missing standard review sub-items; never touches existing
+        # items (ids / ticked statuses pass through unchanged).
+        merged = _merge_subtasks(task.get("items"))
+        if merged is not None:
+            task["items"] = merged
+    # A task with checklist items is CHECKLIST-kind, whose visible note in the
+    # TickTick UI is `desc`, not `content`. Keep desc mirrored so the body
+    # (consensus / actuals) stays visible: a fresh content rewrite wins;
+    # otherwise backfill an empty desc from the existing content.
+    if task.get("items"):
+        if new_content is not None:
+            task["desc"] = new_content
+        elif not task.get("desc") and task.get("content"):
+            task["desc"] = task["content"]
     # POST /task/{taskId} requires the id + projectId in the body.
     task["id"] = task_id
     task["projectId"] = list_id
@@ -781,7 +825,7 @@ def mark_task_reported(
 
     return update_task_content(
         token, list_id, task_id, new_content, new_title=new_title,
-        new_date=event_date, new_tags=tags,
+        new_date=event_date, new_tags=tags, ensure_subtasks=True,
     )
 
 
@@ -1064,6 +1108,7 @@ def reconcile_ticktick_tasks(
         "marked_reported": 0,
         "tag_added": 0,
         "est_marked": 0,
+        "items_added": 0,
         "pointer_backfilled": 0,
         "skipped_done": 0,
         "skipped_phantom": 0,
@@ -1271,19 +1316,29 @@ def reconcile_ticktick_tasks(
         # push — but an unconfirmed date sitting in TickTick unmarked is exactly
         # how ENSG 2Q26 looked authoritative while wrong. Append the ' (est.)'
         # marker to the live title (title-only; the task's own date is left
-        # untouched) and move on. Idempotent: no write when already marked.
+        # untouched), ensure the standard sub-items, and move on. Idempotent:
+        # no write when already marked and complete.
         if stale_row:
             stats["skipped_stale"] += 1
-            if (not date_confirmed and "[REPORTED]" not in title
-                    and EST_SUFFIX not in title):
-                logger.info(
-                    f"  {prefix}est-annotate (stale row, date not pushed): "
-                    f"{ticker} (list='{pname}')"
-                )
+            needs_est = (not date_confirmed and "[REPORTED]" not in title
+                         and EST_SUFFIX not in title)
+            items_missing = _merge_subtasks(task.get("items")) is not None
+            if needs_est or items_missing:
+                if needs_est:
+                    logger.info(
+                        f"  {prefix}est-annotate (stale row, date not pushed): "
+                        f"{ticker} (list='{pname}')"
+                    )
+                if items_missing:
+                    logger.info(
+                        f"  {prefix}add review sub-items: {ticker} (list='{pname}')"
+                    )
                 if not dry_run:
                     try:
                         ok = update_task_content(
-                            token, pid, task_id, new_title=title + EST_SUFFIX
+                            token, pid, task_id,
+                            new_title=title + EST_SUFFIX if needs_est else None,
+                            ensure_subtasks=True,
                         )
                     except TickTickTokenExpired:
                         logger.error("TickTick access token expired mid-reconcile — stopping")
@@ -1297,7 +1352,10 @@ def reconcile_ticktick_tasks(
                     if not ok:
                         stats["errors"] += 1
                         continue
-                stats["est_marked"] += 1
+                if needs_est:
+                    stats["est_marked"] += 1
+                if items_missing:
+                    stats["items_added"] += 1
             continue
 
         # Sector tag to ensure (merged in without clobbering the user's tags).
@@ -1307,6 +1365,8 @@ def reconcile_ticktick_tasks(
         # date fields (dueDate alone would miss a stale startDate that then drags
         # dueDate back).
         date_stale = _task_date_stale(task, event_date)
+        # Standard review sub-items to ensure (appended in the same write).
+        items_missing = _merge_subtasks(task.get("items")) is not None
         try:
             if reported and "[REPORTED]" not in title:
                 # Transition to reported in ONE write: title + date + actuals body
@@ -1333,6 +1393,8 @@ def reconcile_ticktick_tasks(
                 stats["marked_reported"] += 1
                 if merged_tags is not None:
                     stats["tag_added"] += 1
+                if items_missing:
+                    stats["items_added"] += 1
             else:
                 # Desired title. Confirmed = company-announced or operator-locked
                 # (reported rows are real dates, never est-marked). A title whose
@@ -1346,7 +1408,8 @@ def reconcile_ticktick_tasks(
                 if reported and "[REPORTED]" in title:
                     expected_title = "[REPORTED] " + expected_title
                 title_stale = title != expected_title
-                if date_stale or title_stale or merged_tags is not None:
+                if date_stale or title_stale or merged_tags is not None \
+                        or items_missing:
                     # Title/date fix + tag in ONE write, for BOTH pre-report tasks
                     # and already-[REPORTED] tasks whose date is stale. Body
                     # (checklist / actuals) is left untouched. On an already-
@@ -1363,12 +1426,17 @@ def reconcile_ticktick_tasks(
                         )
                     if merged_tags is not None:
                         logger.info(f"  {prefix}add tag {want_tag!r}: {ticker} (list='{pname}')")
+                    if items_missing:
+                        logger.info(
+                            f"  {prefix}add review sub-items: {ticker} (list='{pname}')"
+                        )
                     if not dry_run:
                         ok = update_task_content(
                             token, pid, task_id,
                             new_title=new_title,
                             new_date=event_date if date_stale else None,
                             new_tags=merged_tags,
+                            ensure_subtasks=True,
                         )
                         if not ok:
                             stats["errors"] += 1
@@ -1379,6 +1447,8 @@ def reconcile_ticktick_tasks(
                         stats["title_fixed"] += 1
                     if merged_tags is not None:
                         stats["tag_added"] += 1
+                    if items_missing:
+                        stats["items_added"] += 1
         except TickTickTokenExpired:
             logger.error("TickTick access token expired mid-reconcile — stopping")
             stats["errors"] += 1
@@ -1389,12 +1459,12 @@ def reconcile_ticktick_tasks(
 
     logger.info(
         "TickTick reconcile%s: checked=%d date_fixed=%d title_fixed=%d "
-        "marked_reported=%d tag_added=%d est_marked=%d backfilled=%d "
-        "skipped_done=%d skipped_phantom=%d skipped_stale=%d "
+        "marked_reported=%d tag_added=%d est_marked=%d items_added=%d "
+        "backfilled=%d skipped_done=%d skipped_phantom=%d skipped_stale=%d "
         "skipped_ambiguous=%d no_task=%d errors=%d"
         % (" [dry-run]" if dry_run else "", stats["checked"], stats["date_fixed"],
            stats["title_fixed"], stats["marked_reported"], stats["tag_added"],
-           stats["est_marked"], stats["pointer_backfilled"],
+           stats["est_marked"], stats["items_added"], stats["pointer_backfilled"],
            stats["skipped_done"], stats["skipped_phantom"], stats["skipped_stale"],
            stats["skipped_ambiguous"], stats["no_task"], stats["errors"])
     )

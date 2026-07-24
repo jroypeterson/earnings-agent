@@ -13,6 +13,14 @@ import ticktick
 from storage import init_db, upsert_event, find_existing_event, date_to_quarter
 
 
+# A converged task carries the three standard review sub-items (JP's earnings
+# process); fixtures asserting "no write needed" must include them.
+def _std_items():
+    return [{"title": "Earnings call", "status": 0},
+            {"title": "Press release", "status": 0},
+            {"title": "10-Q", "status": 0}]
+
+
 class _Resp:
     def __init__(self, status=200, payload=None):
         self.status_code = status
@@ -206,7 +214,7 @@ def test_reconcile_skips_tag_when_already_present(monkeypatch):
     tasks = {"P_HC": [{
         "id": "T_ABC", "title": "ABC Q2 2026 Earnings (Aug 05 BMO)",
         "content": "body", "dueDate": "2026-08-05T09:00:00.000+0000",
-        "status": 0, "tags": ["MedTech"],
+        "status": 0, "tags": ["MedTech"], "items": _std_items(),
     }]}
     posts = _stub_api(monkeypatch, tasks)
     monkeypatch.setattr(ticktick, "_list_all_projects", lambda token: [project])
@@ -325,6 +333,7 @@ def test_reconcile_phantom_row_does_not_corrupt_reported_task(monkeypatch):
         "id": "T_ICLR", "title": "[REPORTED] ICLR Q1 2026 Earnings (May 27 AMC)",
         "content": "actuals", "startDate": "2026-05-27T09:00:00.000+0000",
         "dueDate": "2026-05-27T09:00:00.000+0000", "status": 0,
+        "items": _std_items(),
     }]}
     posts = _stub_api(monkeypatch, tasks)
     monkeypatch.setattr(ticktick, "_list_all_projects", lambda token: [project])
@@ -469,10 +478,12 @@ def test_reconcile_skips_row_with_stale_updated_at(monkeypatch):
     project = {"id": "P_HC", "name": "2Q26 Earnings - HC Svcs & MedTech"}
     stale = "2026-08-01T09:00:00.000+0000"  # both tasks have a wrong date
     tasks = {"P_HC": [
+        # items present so the stale row needs NO items-upgrade write either —
+        # isolates the assertion to "stale date must not be pushed".
         {"id": "T_ABC", "title": "ABC Q2 2026 Earnings (Aug 01 BMO)", "content": "b",
-         "startDate": stale, "dueDate": stale, "status": 0},
+         "startDate": stale, "dueDate": stale, "status": 0, "items": _std_items()},
         {"id": "T_XYZ", "title": "XYZ Q2 2026 Earnings (Aug 01 BMO)", "content": "b",
-         "startDate": stale, "dueDate": stale, "status": 0},
+         "startDate": stale, "dueDate": stale, "status": 0, "items": _std_items()},
     ]}
     posts = _stub_api(monkeypatch, tasks)
     monkeypatch.setattr(ticktick, "_list_all_projects", lambda token: [project])
@@ -724,6 +735,7 @@ def test_reconcile_title_converged_writes_nothing(monkeypatch):
         "id": "T_ABC", "title": "ABC Q2 2026 Earnings (Aug 05) (est.)", "content": "b",
         "startDate": "2026-08-05T09:00:00.000+0000",
         "dueDate": "2026-08-05T09:00:00.000+0000", "status": 0,
+        "items": _std_items(),
     }]}
     posts = _stub_api(monkeypatch, tasks)
     monkeypatch.setattr(ticktick, "_list_all_projects", lambda token: [project])
@@ -797,10 +809,12 @@ def test_reconcile_stale_row_est_annotation_is_idempotent(monkeypatch):
     tasks = {"P_CORE": [
         {"id": "T_ENSG", "title": "ENSG Q2 2026 Earnings (Jul 22) (est.)",
          "content": "b", "startDate": "2026-07-22T09:00:00.000+0000",
-         "dueDate": "2026-07-22T09:00:00.000+0000", "status": 0},
+         "dueDate": "2026-07-22T09:00:00.000+0000", "status": 0,
+         "items": _std_items()},
         {"id": "T_XYZ", "title": "XYZ Q2 2026 Earnings (Jul 28 BMO)",
          "content": "b", "startDate": "2026-07-28T09:00:00.000+0000",
-         "dueDate": "2026-07-28T09:00:00.000+0000", "status": 0},
+         "dueDate": "2026-07-28T09:00:00.000+0000", "status": 0,
+         "items": _std_items()},
     ]}
     posts = _stub_api(monkeypatch, tasks)
     monkeypatch.setattr(ticktick, "_list_all_projects", lambda token: [p_core])
@@ -874,6 +888,164 @@ def test_sync_locked_event_title_has_no_est_marker(monkeypatch):
 
     assert stats["created"] == 1
     assert created == ["ABC Q2 2026 Earnings (Aug 05)"]
+
+
+def test_merge_subtasks_appends_only_missing():
+    """_merge_subtasks: appends only the missing standard sub-items (case-
+    insensitive), preserves existing item dicts (ids / ticked status) untouched,
+    and returns None when nothing needs adding."""
+    # Empty -> all three.
+    merged = ticktick._merge_subtasks(None)
+    assert [i["title"] for i in merged] == ["Earnings call", "Press release", "10-Q"]
+    # Partial, ticked, case-insensitive -> append the other two, keep the tick.
+    existing = [{"id": "i1", "title": "earnings CALL", "status": 1}]
+    merged = ticktick._merge_subtasks(existing)
+    assert merged[0] == {"id": "i1", "title": "earnings CALL", "status": 1}
+    assert [i["title"] for i in merged[1:]] == ["Press release", "10-Q"]
+    # Complete (plus a user's own item) -> None, nothing to write.
+    full = _std_items() + [{"title": "My own note", "status": 0}]
+    assert ticktick._merge_subtasks(full) is None
+
+
+def test_create_task_includes_subtasks_and_desc(monkeypatch):
+    """New earnings tasks are born with the three review sub-items; body is
+    mirrored into `desc` (a CHECKLIST-kind task renders desc, not content)."""
+    posts = []
+
+    def fake_post(url, headers=None, json=None, timeout=None):
+        posts.append(json)
+        return _Resp(200, {"id": "NEW"})
+
+    monkeypatch.setattr(ticktick.requests, "post", fake_post)
+    tid = ticktick.create_task("tok", "L1", "ABC Q2 2026 Earnings (Aug 05 BMO)",
+                               "body text", "2026-08-05")
+    assert tid == "NEW"
+    body = posts[0]
+    assert [i["title"] for i in body["items"]] == ["Earnings call", "Press release", "10-Q"]
+    assert body["desc"] == "body text"
+    assert body["content"] == "body text"
+
+
+def test_reconcile_adds_subtasks_to_converged_task_single_write(monkeypatch):
+    """An existing task that is otherwise fully converged (right date, right
+    title, right tags) still gets upgraded with the three sub-items — in ONE
+    write, body untouched, desc mirrored from content."""
+    monkeypatch.setenv("TICKTICK_ACCESS_TOKEN", "tok")
+    conn = init_db(":memory:")
+    upsert_event(conn, "ABC", "2026-08-05", "bmo", None,
+                 quarter=date_to_quarter("2026-08-05"),
+                 reported=False, tier=2, company_name="ABC Inc")
+    project = {"id": "P_HC", "name": "2Q26 Earnings - HC Svcs & MedTech"}
+    tasks = {"P_HC": [{
+        "id": "T_ABC", "title": "ABC Q2 2026 Earnings (Aug 05 BMO)",
+        "content": "consensus body", "startDate": "2026-08-05T09:00:00.000+0000",
+        "dueDate": "2026-08-05T09:00:00.000+0000", "status": 0,
+    }]}
+    posts = _stub_api(monkeypatch, tasks)
+    monkeypatch.setattr(ticktick, "_list_all_projects", lambda token: [project])
+
+    stats = ticktick.reconcile_ticktick_tasks(
+        conn, date(2026, 7, 22), max_db_staleness_days=10_000)
+
+    assert stats["items_added"] == 1
+    assert stats["date_fixed"] == 0 and stats["title_fixed"] == 0
+    assert len(posts) == 1
+    body = posts[0]["body"]
+    assert [i["title"] for i in body["items"]] == ["Earnings call", "Press release", "10-Q"]
+    assert body["content"] == "consensus body"      # body untouched
+    assert body["desc"] == "consensus body"         # visible on CHECKLIST kind
+    assert body["startDate"] == "2026-08-05T09:00:00.000+0000"  # date untouched
+
+
+def test_reconcile_subtasks_preserve_user_items_and_ticks(monkeypatch):
+    """Upgrading a task that already has SOME items (one ticked, plus a user's
+    own) must append only the missing standard items and leave the rest alone."""
+    monkeypatch.setenv("TICKTICK_ACCESS_TOKEN", "tok")
+    conn = init_db(":memory:")
+    upsert_event(conn, "ABC", "2026-08-05", "bmo", None,
+                 quarter=date_to_quarter("2026-08-05"),
+                 reported=False, tier=2, company_name="ABC Inc")
+    project = {"id": "P_HC", "name": "2Q26 Earnings - HC Svcs & MedTech"}
+    tasks = {"P_HC": [{
+        "id": "T_ABC", "title": "ABC Q2 2026 Earnings (Aug 05 BMO)", "content": "b",
+        "startDate": "2026-08-05T09:00:00.000+0000",
+        "dueDate": "2026-08-05T09:00:00.000+0000", "status": 0,
+        "items": [{"id": "u1", "title": "Earnings call", "status": 1},
+                  {"id": "u2", "title": "My own follow-up", "status": 0}],
+    }]}
+    posts = _stub_api(monkeypatch, tasks)
+    monkeypatch.setattr(ticktick, "_list_all_projects", lambda token: [project])
+
+    stats = ticktick.reconcile_ticktick_tasks(
+        conn, date(2026, 7, 22), max_db_staleness_days=10_000)
+
+    assert stats["items_added"] == 1
+    body = posts[0]["body"]
+    assert body["items"][0] == {"id": "u1", "title": "Earnings call", "status": 1}
+    assert body["items"][1] == {"id": "u2", "title": "My own follow-up", "status": 0}
+    assert [i["title"] for i in body["items"][2:]] == ["Press release", "10-Q"]
+
+
+def test_mark_reported_ensures_subtasks_and_mirrors_desc(monkeypatch):
+    """The mark-reported rewrite also ensures the sub-items and mirrors the new
+    actuals body into desc so it stays visible on a CHECKLIST-kind task."""
+    tasks = {"L1": [{
+        "id": "T1", "title": "UNH Q2 2026 Earnings (Jul 27 BMO)", "content": "old",
+        "startDate": "2026-07-27T09:00:00.000+0000",
+        "dueDate": "2026-07-27T09:00:00.000+0000", "status": 0,
+    }]}
+    posts = _stub_api(monkeypatch, tasks)
+    ok = ticktick.mark_task_reported(
+        "tok", "T1", ticker="UNH", event_date="2026-07-16", hour="bmo", tier=2,
+        company_name="UnitedHealth", eps_estimate=4.89, eps_actual=6.38,
+        revenue_estimate=111e9, revenue_actual=112e9, list_id="L1")
+    assert ok is True
+    body = posts[0]["body"]
+    assert [i["title"] for i in body["items"]] == ["Earnings call", "Press release", "10-Q"]
+    assert body["desc"] == body["content"]          # actuals visible either way
+    assert body["title"].startswith("[REPORTED]")
+
+
+def test_reconcile_stale_row_write_includes_subtasks(monkeypatch):
+    """The stale-row est-annotation write also carries the sub-items upgrade
+    (one write), and an annotated-but-itemless stale task still gets a write
+    for the items alone."""
+    monkeypatch.setenv("TICKTICK_ACCESS_TOKEN", "tok")
+    conn = init_db(":memory:")
+    upsert_event(conn, "ENSG", "2026-07-23", "", None,
+                 quarter=date_to_quarter("2026-07-23"),
+                 reported=False, tier=1, company_name="Ensign Group Inc")
+    upsert_event(conn, "XYZ", "2026-07-28", "bmo", None,
+                 quarter=date_to_quarter("2026-07-28"),
+                 reported=False, tier=2, company_name="XYZ Inc")
+    conn.execute("UPDATE events SET updated_at='2026-06-22 21:38:06' WHERE ticker='ENSG'")
+    conn.execute("UPDATE events SET updated_at='2026-07-24 03:00:00' WHERE ticker='XYZ'")
+    conn.commit()
+    p_core = {"id": "P_CORE", "name": "2Q26 Earnings - Core Watchlist - Positions/Researching"}
+    tasks = {"P_CORE": [
+        # Already est-annotated but has no items -> items-only write.
+        {"id": "T_ENSG", "title": "ENSG Q2 2026 Earnings (Jul 22) (est.)",
+         "content": "b", "startDate": "2026-07-22T09:00:00.000+0000",
+         "dueDate": "2026-07-22T09:00:00.000+0000", "status": 0},
+        {"id": "T_XYZ", "title": "XYZ Q2 2026 Earnings (Jul 28 BMO)",
+         "content": "b", "startDate": "2026-07-28T09:00:00.000+0000",
+         "dueDate": "2026-07-28T09:00:00.000+0000", "status": 0,
+         "items": _std_items()},
+    ]}
+    posts = _stub_api(monkeypatch, tasks)
+    monkeypatch.setattr(ticktick, "_list_all_projects", lambda token: [p_core])
+
+    stats = ticktick.reconcile_ticktick_tasks(conn, date(2026, 7, 24))
+
+    assert stats["skipped_stale"] == 1
+    assert stats["est_marked"] == 0        # already annotated
+    assert stats["items_added"] == 1       # but items were missing
+    ensg_posts = [p for p in posts if p["url"].endswith("T_ENSG")]
+    assert len(ensg_posts) == 1
+    body = ensg_posts[0]["body"]
+    assert body["title"] == "ENSG Q2 2026 Earnings (Jul 22) (est.)"  # unchanged
+    assert body["startDate"] == "2026-07-22T09:00:00.000+0000"       # not pushed
+    assert [i["title"] for i in body["items"]] == ["Earnings call", "Press release", "10-Q"]
 
 
 def test_reconcile_dry_run_writes_nothing(monkeypatch):
