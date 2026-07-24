@@ -643,6 +643,239 @@ def test_reconcile_refuses_stale_db(monkeypatch):
     assert called["projects"] is False, "should abort before touching the API"
 
 
+def test_build_task_title_est_marker():
+    """An unconfirmed (estimated) date must carry the same ' (est.)' suffix the
+    calendar titles use — a wrong estimate must never look authoritative."""
+    assert ticktick.build_task_title("ENSG", "2026-07-30", None, confirmed=False) \
+        == "ENSG Q2 2026 Earnings (Jul 30) (est.)"
+    assert ticktick.build_task_title("ENSG", "2026-07-30", "amc", confirmed=True) \
+        == "ENSG Q2 2026 Earnings (Jul 30 AMC)"
+    # Default stays confirmed (mark_task_reported path — a reported date is real).
+    assert ticktick.build_task_title("ENSG", "2026-07-30", "amc") \
+        == "ENSG Q2 2026 Earnings (Jul 30 AMC)"
+
+
+def test_reconcile_est_marker_applied_on_date_fix(monkeypatch):
+    """A fresh UNCONFIRMED row whose task date drifted gets the date fix AND the
+    ' (est.)' title marker in the same single write."""
+    monkeypatch.setenv("TICKTICK_ACCESS_TOKEN", "tok")
+    conn = init_db(":memory:")
+    # hour '' -> date_confirmed=0 (cadence estimate).
+    upsert_event(conn, "ABC", "2026-08-05", "", None,
+                 quarter=date_to_quarter("2026-08-05"),
+                 reported=False, tier=2, company_name="ABC Inc")
+    project = {"id": "P_HC", "name": "2Q26 Earnings - HC Svcs & MedTech"}
+    tasks = {"P_HC": [{
+        "id": "T_ABC", "title": "ABC Q2 2026 Earnings (Aug 12)", "content": "b",
+        "startDate": "2026-08-12T09:00:00.000+0000",
+        "dueDate": "2026-08-12T09:00:00.000+0000", "status": 0,
+    }]}
+    posts = _stub_api(monkeypatch, tasks)
+    monkeypatch.setattr(ticktick, "_list_all_projects", lambda token: [project])
+
+    stats = ticktick.reconcile_ticktick_tasks(
+        conn, date(2026, 7, 22), max_db_staleness_days=10_000)
+
+    assert stats["date_fixed"] == 1
+    assert len(posts) == 1
+    body = posts[0]["body"]
+    assert body["title"] == "ABC Q2 2026 Earnings (Aug 05) (est.)"
+    assert body["dueDate"] == "2026-08-05T09:00:00.000+0000"
+
+
+def test_reconcile_drops_est_marker_when_date_confirmed(monkeypatch):
+    """When the company confirms (hour set -> date_confirmed=1) at the SAME date,
+    the stale ' (est.)' marker must be removed even though the date is right."""
+    monkeypatch.setenv("TICKTICK_ACCESS_TOKEN", "tok")
+    conn = init_db(":memory:")
+    upsert_event(conn, "ABC", "2026-08-05", "amc", None,
+                 quarter=date_to_quarter("2026-08-05"),
+                 reported=False, tier=2, company_name="ABC Inc")
+    project = {"id": "P_HC", "name": "2Q26 Earnings - HC Svcs & MedTech"}
+    tasks = {"P_HC": [{
+        "id": "T_ABC", "title": "ABC Q2 2026 Earnings (Aug 05) (est.)", "content": "b",
+        "startDate": "2026-08-05T09:00:00.000+0000",
+        "dueDate": "2026-08-05T09:00:00.000+0000", "status": 0,
+    }]}
+    posts = _stub_api(monkeypatch, tasks)
+    monkeypatch.setattr(ticktick, "_list_all_projects", lambda token: [project])
+
+    stats = ticktick.reconcile_ticktick_tasks(
+        conn, date(2026, 7, 22), max_db_staleness_days=10_000)
+
+    assert stats["title_fixed"] == 1
+    assert stats["date_fixed"] == 0
+    assert len(posts) == 1
+    body = posts[0]["body"]
+    assert body["title"] == "ABC Q2 2026 Earnings (Aug 05 AMC)"
+    # Date untouched.
+    assert body["startDate"] == "2026-08-05T09:00:00.000+0000"
+
+
+def test_reconcile_title_converged_writes_nothing(monkeypatch):
+    """Idempotence: est-marked title + matching date + unconfirmed row -> no write."""
+    monkeypatch.setenv("TICKTICK_ACCESS_TOKEN", "tok")
+    conn = init_db(":memory:")
+    upsert_event(conn, "ABC", "2026-08-05", "", None,
+                 quarter=date_to_quarter("2026-08-05"),
+                 reported=False, tier=2, company_name="ABC Inc")
+    project = {"id": "P_HC", "name": "2Q26 Earnings - HC Svcs & MedTech"}
+    tasks = {"P_HC": [{
+        "id": "T_ABC", "title": "ABC Q2 2026 Earnings (Aug 05) (est.)", "content": "b",
+        "startDate": "2026-08-05T09:00:00.000+0000",
+        "dueDate": "2026-08-05T09:00:00.000+0000", "status": 0,
+    }]}
+    posts = _stub_api(monkeypatch, tasks)
+    monkeypatch.setattr(ticktick, "_list_all_projects", lambda token: [project])
+
+    stats = ticktick.reconcile_ticktick_tasks(
+        conn, date(2026, 7, 22), max_db_staleness_days=10_000)
+
+    assert stats["date_fixed"] == 0 and stats["title_fixed"] == 0
+    assert posts == []
+
+
+def test_reconcile_stale_row_gets_est_annotation_without_date_push(monkeypatch):
+    """The ENSG 2Q26 failure class: an unconfirmed row whose sync stopped (row
+    stale > threshold) is date-SKIPPED by the staleness guard — but its task must
+    still be annotated ' (est.)' (title-only append, live date left alone) so the
+    untrusted date can't look authoritative in TickTick."""
+    monkeypatch.setenv("TICKTICK_ACCESS_TOKEN", "tok")
+    conn = init_db(":memory:")
+    upsert_event(conn, "ENSG", "2026-07-23", "", None,
+                 quarter=date_to_quarter("2026-07-23"),
+                 reported=False, tier=1, company_name="Ensign Group Inc")  # stale
+    upsert_event(conn, "XYZ", "2026-07-28", "bmo", None,
+                 quarter=date_to_quarter("2026-07-28"),
+                 reported=False, tier=2, company_name="XYZ Inc")           # fresh
+    conn.execute("UPDATE events SET updated_at='2026-06-22 21:38:06' WHERE ticker='ENSG'")
+    conn.execute("UPDATE events SET updated_at='2026-07-24 03:00:00' WHERE ticker='XYZ'")
+    conn.commit()
+    p_core = {"id": "P_CORE", "name": "2Q26 Earnings - Core Watchlist - Positions/Researching"}
+    p_hc = {"id": "P_HC", "name": "2Q26 Earnings - HC Svcs & MedTech"}
+    tasks = {
+        "P_CORE": [{"id": "T_ENSG", "title": "ENSG Q2 2026 Earnings (Jul 22)",
+                    "content": "checklist body",
+                    "startDate": "2026-07-22T09:00:00.000+0000",
+                    "dueDate": "2026-07-22T09:00:00.000+0000", "status": 0}],
+        "P_HC": [{"id": "T_XYZ", "title": "XYZ Q2 2026 Earnings (Jul 28 BMO)",
+                  "content": "b", "startDate": "2026-07-28T09:00:00.000+0000",
+                  "dueDate": "2026-07-28T09:00:00.000+0000", "status": 0}],
+    }
+    posts = _stub_api(monkeypatch, tasks)
+    monkeypatch.setattr(ticktick, "_list_all_projects", lambda token: [p_core, p_hc])
+
+    stats = ticktick.reconcile_ticktick_tasks(conn, date(2026, 7, 24))  # default staleness
+
+    assert stats["skipped_stale"] == 1
+    assert stats["est_marked"] == 1
+    ensg_posts = [p for p in posts if p["url"].endswith("T_ENSG")]
+    assert len(ensg_posts) == 1
+    body = ensg_posts[0]["body"]
+    # Title-only annotation: live (stale) date NOT pushed, DB date NOT pushed.
+    assert body["title"] == "ENSG Q2 2026 Earnings (Jul 22) (est.)"
+    assert body["startDate"] == "2026-07-22T09:00:00.000+0000"
+    assert body["dueDate"] == "2026-07-22T09:00:00.000+0000"
+    assert body["content"] == "checklist body"
+
+
+def test_reconcile_stale_row_est_annotation_is_idempotent(monkeypatch):
+    """Second pass over an already-annotated stale row must not write again or
+    stack ' (est.) (est.)'."""
+    monkeypatch.setenv("TICKTICK_ACCESS_TOKEN", "tok")
+    conn = init_db(":memory:")
+    upsert_event(conn, "ENSG", "2026-07-23", "", None,
+                 quarter=date_to_quarter("2026-07-23"),
+                 reported=False, tier=1, company_name="Ensign Group Inc")
+    upsert_event(conn, "XYZ", "2026-07-28", "bmo", None,
+                 quarter=date_to_quarter("2026-07-28"),
+                 reported=False, tier=2, company_name="XYZ Inc")
+    conn.execute("UPDATE events SET updated_at='2026-06-22 21:38:06' WHERE ticker='ENSG'")
+    conn.execute("UPDATE events SET updated_at='2026-07-24 03:00:00' WHERE ticker='XYZ'")
+    conn.commit()
+    p_core = {"id": "P_CORE", "name": "2Q26 Earnings - Core Watchlist - Positions/Researching"}
+    tasks = {"P_CORE": [
+        {"id": "T_ENSG", "title": "ENSG Q2 2026 Earnings (Jul 22) (est.)",
+         "content": "b", "startDate": "2026-07-22T09:00:00.000+0000",
+         "dueDate": "2026-07-22T09:00:00.000+0000", "status": 0},
+        {"id": "T_XYZ", "title": "XYZ Q2 2026 Earnings (Jul 28 BMO)",
+         "content": "b", "startDate": "2026-07-28T09:00:00.000+0000",
+         "dueDate": "2026-07-28T09:00:00.000+0000", "status": 0},
+    ]}
+    posts = _stub_api(monkeypatch, tasks)
+    monkeypatch.setattr(ticktick, "_list_all_projects", lambda token: [p_core])
+
+    stats = ticktick.reconcile_ticktick_tasks(conn, date(2026, 7, 24))
+
+    assert stats["skipped_stale"] == 1
+    assert stats["est_marked"] == 0
+    assert [p for p in posts if p["url"].endswith("T_ENSG")] == []
+
+
+def test_sync_creates_unconfirmed_task_with_est_title(monkeypatch):
+    """Task creation must carry the est-marker for unconfirmed dates and omit it
+    for company-confirmed ones — the guard starts at birth, not just reconcile."""
+    monkeypatch.setenv("TICKTICK_ACCESS_TOKEN", "tok")
+    conn = init_db(":memory:")
+    upsert_event(conn, "ABC", "2026-08-05", "", None,
+                 quarter=date_to_quarter("2026-08-05"),
+                 reported=False, tier=2, company_name="ABC Inc")
+    upsert_event(conn, "DEF", "2026-08-06", "amc", None,
+                 quarter=date_to_quarter("2026-08-06"),
+                 reported=False, tier=2, company_name="DEF Inc")
+    created = []
+
+    def fake_create(token, list_id, title, content, due_date, tags=None):
+        created.append(title)
+        return f"TID{len(created)}"
+
+    monkeypatch.setattr(ticktick, "create_task", fake_create)
+    monkeypatch.setattr(ticktick, "_list_all_projects",
+                        lambda token: [{"id": "P_HC", "name": "2Q26 Earnings - HC Svcs & MedTech"}])
+    monkeypatch.setattr(ticktick, "list_tasks_in_project", lambda token, pid: [])
+    monkeypatch.setattr(ticktick, "_gather_quarter_existing_tasks",
+                        lambda token, projects, quarters: {q: {} for q in quarters})
+
+    events = [
+        {"ticker": "ABC", "event_date": "2026-08-05", "event_hour": "",
+         "tier": 2, "company_name": "ABC Inc", "date_confirmed": 0, "date_locked": 0},
+        {"ticker": "DEF", "event_date": "2026-08-06", "event_hour": "amc",
+         "tier": 2, "company_name": "DEF Inc", "date_confirmed": 1, "date_locked": 0},
+    ]
+    stats = ticktick.sync_ticktick_tasks(conn, events)
+
+    assert stats["created"] == 2
+    assert created[0] == "ABC Q2 2026 Earnings (Aug 05) (est.)"
+    assert created[1] == "DEF Q2 2026 Earnings (Aug 06 AMC)"
+
+
+def test_sync_locked_event_title_has_no_est_marker(monkeypatch):
+    """A date_locked row is operator-verified truth — no est-marker even though
+    Finnhub's hour (and so date_confirmed) may be empty."""
+    monkeypatch.setenv("TICKTICK_ACCESS_TOKEN", "tok")
+    conn = init_db(":memory:")
+    upsert_event(conn, "ABC", "2026-08-05", "", None,
+                 quarter=date_to_quarter("2026-08-05"),
+                 reported=False, tier=2, company_name="ABC Inc")
+    created = []
+    monkeypatch.setattr(ticktick, "create_task",
+                        lambda token, list_id, title, content, due_date, tags=None:
+                        created.append(title) or "TID1")
+    monkeypatch.setattr(ticktick, "_list_all_projects",
+                        lambda token: [{"id": "P_HC", "name": "2Q26 Earnings - HC Svcs & MedTech"}])
+    monkeypatch.setattr(ticktick, "list_tasks_in_project", lambda token, pid: [])
+    monkeypatch.setattr(ticktick, "_gather_quarter_existing_tasks",
+                        lambda token, projects, quarters: {q: {} for q in quarters})
+
+    events = [{"ticker": "ABC", "event_date": "2026-08-05", "event_hour": "",
+               "tier": 2, "company_name": "ABC Inc",
+               "date_confirmed": 0, "date_locked": 1}]
+    stats = ticktick.sync_ticktick_tasks(conn, events)
+
+    assert stats["created"] == 1
+    assert created == ["ABC Q2 2026 Earnings (Aug 05)"]
+
+
 def test_reconcile_dry_run_writes_nothing(monkeypatch):
     monkeypatch.setenv("TICKTICK_ACCESS_TOKEN", "tok")
     conn = init_db(":memory:")

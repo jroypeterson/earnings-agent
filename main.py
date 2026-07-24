@@ -1470,7 +1470,7 @@ def run(
         # Gather all Tier 1+2 events that need TickTick tasks
         cur = conn.execute(
             "SELECT ticker, event_date, event_hour, eps_estimate, rev_estimate, "
-            "tier, company_name, ticktick_task_id "
+            "tier, company_name, ticktick_task_id, date_confirmed, date_locked "
             "FROM events WHERE tier <= 2 AND event_date >= ? "
             "ORDER BY event_date, ticker",
             (today.isoformat(),)
@@ -1491,6 +1491,10 @@ def run(
                 "tier": row[5],
                 "company_name": row[6],
                 "ticktick_task_id": row[7],
+                # Confirmation state drives the ' (est.)' title marker so an
+                # unannounced (projected) date never looks authoritative.
+                "date_confirmed": row[8],
+                "date_locked": row[9],
                 "position": position,
                 "sector": info.sector if info else "",
             })

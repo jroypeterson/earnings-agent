@@ -191,12 +191,25 @@ def find_or_create_list(token: str, list_name: str) -> str | None:
 # ---------------------------------------------------------------------------
 
 
+# Suffix marking a date the company has NOT announced (Finnhub cadence
+# projection / aggregator guess). Mirrors the calendar-title convention
+# (CLAUDE.md "Confirmed/estimated flag") so an estimated date can never look
+# authoritative in TickTick — the ENSG 2Q26 failure class.
+EST_SUFFIX = " (est.)"
+
+
 def build_task_title(
     ticker: str,
     event_date: str,
     hour: str | None,
+    confirmed: bool = True,
 ) -> str:
-    """Build the TickTick task title. e.g. 'UNH Q1 2026 Earnings (Apr 21 BMO)'"""
+    """Build the TickTick task title. e.g. 'UNH Q1 2026 Earnings (Apr 21 BMO)'.
+
+    `confirmed=False` appends the ' (est.)' marker (same convention as the
+    calendar titles): the date is a projection, not company-announced. Default
+    True keeps the mark-reported path unchanged — a reported date is real.
+    """
     quarter = date_to_quarter(event_date)
     # Format quarter for display: "2025Q4" -> "Q4 2025"
     q_label = f"Q{quarter[-1]} {quarter[:4]}"
@@ -211,7 +224,8 @@ def build_task_title(
     elif hour == "amc":
         timing = " AMC"
 
-    return f"{ticker} {q_label} Earnings ({date_str}{timing})"
+    suffix = "" if confirmed else EST_SUFFIX
+    return f"{ticker} {q_label} Earnings ({date_str}{timing}){suffix}"
 
 
 def build_task_content(
@@ -903,7 +917,13 @@ def sync_ticktick_tasks(
             ticker = event["ticker"]
             event_date = event["event_date"]
             hour = event.get("event_hour") or event.get("hour")
-            title = build_task_title(ticker, event_date, hour)
+            # Confirmed = company-announced (date_confirmed / a bmo-amc-dmh hour)
+            # or operator-locked. Anything else is a cadence projection and the
+            # title must say so (' (est.)') from birth.
+            confirmed = bool(
+                event.get("date_confirmed") or event.get("date_locked")
+            ) or (hour or "").lower() in ("bmo", "amc", "dmh")
+            title = build_task_title(ticker, event_date, hour, confirmed=confirmed)
             content = build_task_content(
                 ticker=ticker,
                 hour=hour,
@@ -1040,8 +1060,10 @@ def reconcile_ticktick_tasks(
     stats = {
         "checked": 0,
         "date_fixed": 0,
+        "title_fixed": 0,
         "marked_reported": 0,
         "tag_added": 0,
+        "est_marked": 0,
         "pointer_backfilled": 0,
         "skipped_done": 0,
         "skipped_phantom": 0,
@@ -1099,7 +1121,8 @@ def reconcile_ticktick_tasks(
     rows = conn.execute(
         "SELECT ticker, event_date, event_hour, quarter, reported, "
         "eps_estimate, eps_actual, rev_estimate, rev_actual, tier, "
-        "company_name, ticktick_task_id, updated_at, date_locked "
+        "company_name, ticktick_task_id, updated_at, date_locked, "
+        "date_confirmed "
         "FROM events WHERE tier <= 2 AND event_date BETWEEN ? AND ? "
         "ORDER BY event_date, ticker",
         (lo, hi),
@@ -1140,21 +1163,24 @@ def reconcile_ticktick_tasks(
     for r in rows:
         (ticker, event_date, event_hour, quarter, reported,
          eps_est, eps_act, rev_est, rev_act, tier, company_name, db_task_id,
-         row_updated, date_locked) = r
+         row_updated, date_locked, date_confirmed) = r
         stats["checked"] += 1
 
-        # Per-row staleness skip. The wholesale-frozen-DB case aborts loudly
+        # Per-row staleness flag. The wholesale-frozen-DB case aborts loudly
         # above; this catches PARTIAL staleness the global MAX check can't — a
         # single unreported row that stopped being synced (an unseen/dropped
         # ticker) while its siblings stay fresh. Its projected date can't be
         # trusted, so don't push it. Reported rows are exempt (their date is the
         # real report date, correct however old the row); so are date_locked rows
         # (operator-pinned, trusted regardless of age).
+        # NOT an immediate skip anymore (ENSG 2Q26): the task still needs its
+        # ' (est.)' annotation so the untrusted date can't look authoritative —
+        # the row is skipped for DATE pushes further below.
+        stale_row = False
         if not reported and not date_locked and row_updated:
             try:
                 if (today - date.fromisoformat(str(row_updated)[:10])).days > max_db_staleness_days:
-                    stats["skipped_stale"] += 1
-                    continue
+                    stale_row = True
             except ValueError:
                 pass
 
@@ -1240,6 +1266,40 @@ def reconcile_ticktick_tasks(
             continue
 
         title = task.get("title", "") or ""
+
+        # Stale row: its projected date can't be trusted, so NO date/title/body
+        # push — but an unconfirmed date sitting in TickTick unmarked is exactly
+        # how ENSG 2Q26 looked authoritative while wrong. Append the ' (est.)'
+        # marker to the live title (title-only; the task's own date is left
+        # untouched) and move on. Idempotent: no write when already marked.
+        if stale_row:
+            stats["skipped_stale"] += 1
+            if (not date_confirmed and "[REPORTED]" not in title
+                    and EST_SUFFIX not in title):
+                logger.info(
+                    f"  {prefix}est-annotate (stale row, date not pushed): "
+                    f"{ticker} (list='{pname}')"
+                )
+                if not dry_run:
+                    try:
+                        ok = update_task_content(
+                            token, pid, task_id, new_title=title + EST_SUFFIX
+                        )
+                    except TickTickTokenExpired:
+                        logger.error("TickTick access token expired mid-reconcile — stopping")
+                        stats["errors"] += 1
+                        break
+                    except Exception as exc:
+                        logger.warning(
+                            f"  TickTick est-annotate failed for {ticker}: {exc}")
+                        stats["errors"] += 1
+                        continue
+                    if not ok:
+                        stats["errors"] += 1
+                        continue
+                stats["est_marked"] += 1
+            continue
+
         # Sector tag to ensure (merged in without clobbering the user's tags).
         want_tag = sector_tag(sector_by_ticker.get(ticker))
         merged_tags = _merge_tags(task.get("tags"), want_tag) if want_tag else None
@@ -1273,35 +1333,52 @@ def reconcile_ticktick_tasks(
                 stats["marked_reported"] += 1
                 if merged_tags is not None:
                     stats["tag_added"] += 1
-            elif date_stale or merged_tags is not None:
-                # Title/date fix + tag in ONE write, for BOTH pre-report tasks and
-                # already-[REPORTED] tasks whose date is stale. Body (checklist /
-                # actuals) is left untouched. On an already-reported task the
-                # title keeps its "[REPORTED] " prefix.
-                new_title = None
-                if date_stale:
-                    new_title = build_task_title(ticker, event_date, event_hour)
-                    if reported and "[REPORTED]" in title:
-                        new_title = "[REPORTED] " + new_title
-                    logger.info(
-                        f"  {prefix}fix date: {ticker} -> {event_date} (list='{pname}')"
-                    )
-                if merged_tags is not None:
-                    logger.info(f"  {prefix}add tag {want_tag!r}: {ticker} (list='{pname}')")
-                if not dry_run:
-                    ok = update_task_content(
-                        token, pid, task_id,
-                        new_title=new_title,
-                        new_date=event_date if date_stale else None,
-                        new_tags=merged_tags,
-                    )
-                    if not ok:
-                        stats["errors"] += 1
-                        continue
-                if date_stale:
-                    stats["date_fixed"] += 1
-                if merged_tags is not None:
-                    stats["tag_added"] += 1
+            else:
+                # Desired title. Confirmed = company-announced or operator-locked
+                # (reported rows are real dates, never est-marked). A title whose
+                # est-marker state drifted (estimate got confirmed, or an
+                # unmarked estimate — the ENSG class) is repaired even when the
+                # date is right.
+                expected_title = build_task_title(
+                    ticker, event_date, event_hour,
+                    confirmed=bool(reported or date_confirmed or date_locked),
+                )
+                if reported and "[REPORTED]" in title:
+                    expected_title = "[REPORTED] " + expected_title
+                title_stale = title != expected_title
+                if date_stale or title_stale or merged_tags is not None:
+                    # Title/date fix + tag in ONE write, for BOTH pre-report tasks
+                    # and already-[REPORTED] tasks whose date is stale. Body
+                    # (checklist / actuals) is left untouched. On an already-
+                    # reported task the title keeps its "[REPORTED] " prefix.
+                    new_title = expected_title if (date_stale or title_stale) else None
+                    if date_stale:
+                        logger.info(
+                            f"  {prefix}fix date: {ticker} -> {event_date} (list='{pname}')"
+                        )
+                    elif title_stale:
+                        logger.info(
+                            f"  {prefix}fix title: {ticker} -> {expected_title!r} "
+                            f"(list='{pname}')"
+                        )
+                    if merged_tags is not None:
+                        logger.info(f"  {prefix}add tag {want_tag!r}: {ticker} (list='{pname}')")
+                    if not dry_run:
+                        ok = update_task_content(
+                            token, pid, task_id,
+                            new_title=new_title,
+                            new_date=event_date if date_stale else None,
+                            new_tags=merged_tags,
+                        )
+                        if not ok:
+                            stats["errors"] += 1
+                            continue
+                    if date_stale:
+                        stats["date_fixed"] += 1
+                    elif title_stale:
+                        stats["title_fixed"] += 1
+                    if merged_tags is not None:
+                        stats["tag_added"] += 1
         except TickTickTokenExpired:
             logger.error("TickTick access token expired mid-reconcile — stopping")
             stats["errors"] += 1
@@ -1311,11 +1388,13 @@ def reconcile_ticktick_tasks(
             stats["errors"] += 1
 
     logger.info(
-        "TickTick reconcile%s: checked=%d date_fixed=%d marked_reported=%d "
-        "tag_added=%d backfilled=%d skipped_done=%d skipped_phantom=%d "
-        "skipped_stale=%d skipped_ambiguous=%d no_task=%d errors=%d"
+        "TickTick reconcile%s: checked=%d date_fixed=%d title_fixed=%d "
+        "marked_reported=%d tag_added=%d est_marked=%d backfilled=%d "
+        "skipped_done=%d skipped_phantom=%d skipped_stale=%d "
+        "skipped_ambiguous=%d no_task=%d errors=%d"
         % (" [dry-run]" if dry_run else "", stats["checked"], stats["date_fixed"],
-           stats["marked_reported"], stats["tag_added"], stats["pointer_backfilled"],
+           stats["title_fixed"], stats["marked_reported"], stats["tag_added"],
+           stats["est_marked"], stats["pointer_backfilled"],
            stats["skipped_done"], stats["skipped_phantom"], stats["skipped_stale"],
            stats["skipped_ambiguous"], stats["no_task"], stats["errors"])
     )
