@@ -1,13 +1,83 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-07-23T20:37:03Z",
+  "generated_at": "2026-07-24T12:46:08Z",
   "window": {
-    "start": "2026-07-23",
-    "end": "2026-07-26"
+    "start": "2026-07-24",
+    "end": "2026-07-27"
   },
   "counts": {
-    "previews": 0
+    "previews": 1
   },
-  "previews": []
+  "previews": [
+    {
+      "ticker": "WELL",
+      "company_name": "Welltower Inc",
+      "tier": 1,
+      "event_date": "2026-07-27",
+      "event_hour": "amc",
+      "call_datetime_utc": "2026-07-28T20:00:00+00:00",
+      "last_price": 247.0500030517578,
+      "day_change_pct": 0.8202782487338361,
+      "consensus": {
+        "eps": {
+          "mean": 0.6388,
+          "count": null,
+          "low": null,
+          "high": null
+        },
+        "revenue": {
+          "mean": 3440341904.0,
+          "count": null,
+          "low": null,
+          "high": null
+        }
+      },
+      "qtd": {
+        "since": "2026-06-30",
+        "ticker_pct": 8.84698494208894,
+        "spx_pct": -1.1502908031659784,
+        "sector_etf": "XLV",
+        "sector_etf_pct": 1.752173651285995
+      },
+      "implied_move": {
+        "pct": 6.3,
+        "expiry": "2026-08-21",
+        "method": "ATM straddle",
+        "notes": [
+          "stale quote",
+          "(includes 24 extra days of time value)"
+        ]
+      },
+      "post_earnings_moves": [
+        {
+          "event_date": "2026-04-28",
+          "move_pct": -0.9989272449062,
+          "window_label": "next-day close vs earnings-day close"
+        }
+      ],
+      "beat_rates": {
+        "eps": {
+          "beats": null,
+          "total": null,
+          "source": "yfinance"
+        },
+        "revenue": {
+          "beats": 14,
+          "total": 20,
+          "source": "fmp"
+        }
+      },
+      "na_fields": [
+        {
+          "field": "beat_rates.eps",
+          "reason": "no yfinance surprise history"
+        },
+        {
+          "field": "consensus.eps.range",
+          "reason": "estimate range not available on FMP Starter plan"
+        }
+      ]
+    }
+  ]
 }
