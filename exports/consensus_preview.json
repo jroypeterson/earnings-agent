@@ -1,13 +1,299 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-07-24T20:44:33Z",
+  "generated_at": "2026-07-25T12:09:58Z",
   "window": {
-    "start": "2026-07-24",
-    "end": "2026-07-27"
+    "start": "2026-07-25",
+    "end": "2026-07-28"
   },
   "counts": {
-    "previews": 0
+    "previews": 4
   },
-  "previews": []
+  "previews": [
+    {
+      "ticker": "SPGI",
+      "company_name": "S&P Global Inc",
+      "tier": 1,
+      "event_date": "2026-07-28",
+      "event_hour": "bmo",
+      "call_datetime_utc": "2026-07-28T12:30:00+00:00",
+      "last_price": 420.0,
+      "day_change_pct": -2.1115922272284284,
+      "consensus": {
+        "eps": {
+          "mean": 5.0513,
+          "count": null,
+          "low": null,
+          "high": null
+        },
+        "revenue": {
+          "mean": 4164377460.0,
+          "count": null,
+          "low": null,
+          "high": null
+        }
+      },
+      "qtd": {
+        "since": "2026-06-30",
+        "ticker_pct": 9.00653402711746,
+        "spx_pct": -1.1502908031659784,
+        "sector_etf": null,
+        "sector_etf_pct": null
+      },
+      "implied_move": {
+        "pct": 6.2,
+        "expiry": "2026-07-31",
+        "method": "ATM straddle",
+        "notes": [
+          "wide market"
+        ]
+      },
+      "post_earnings_moves": [
+        {
+          "event_date": "2026-04-28",
+          "move_pct": -0.8576949846614107,
+          "window_label": "earnings-day close vs prior close"
+        }
+      ],
+      "beat_rates": {
+        "eps": {
+          "beats": null,
+          "total": null,
+          "source": "yfinance"
+        },
+        "revenue": {
+          "beats": 17,
+          "total": 20,
+          "source": "fmp"
+        }
+      },
+      "na_fields": [
+        {
+          "field": "qtd.sector_etf",
+          "reason": "no mapped ETF for sector 'Financials'"
+        },
+        {
+          "field": "beat_rates.eps",
+          "reason": "no yfinance surprise history"
+        },
+        {
+          "field": "consensus.eps.range",
+          "reason": "estimate range not available on FMP Starter plan"
+        }
+      ]
+    },
+    {
+      "ticker": "UPS",
+      "company_name": "United Parcel Service Inc",
+      "tier": 1,
+      "event_date": "2026-07-28",
+      "event_hour": "bmo",
+      "call_datetime_utc": null,
+      "last_price": 114.0999984741211,
+      "day_change_pct": -1.5020700265685243,
+      "consensus": {
+        "eps": {
+          "mean": 1.6653,
+          "count": null,
+          "low": null,
+          "high": null
+        },
+        "revenue": {
+          "mean": 21861848596.0,
+          "count": null,
+          "low": null,
+          "high": null
+        }
+      },
+      "qtd": {
+        "since": "2026-06-30",
+        "ticker_pct": 6.139533464298692,
+        "spx_pct": -1.1502908031659784,
+        "sector_etf": null,
+        "sector_etf_pct": null
+      },
+      "implied_move": {
+        "pct": 7.1,
+        "expiry": "2026-07-31",
+        "method": "ATM straddle",
+        "notes": []
+      },
+      "post_earnings_moves": [
+        {
+          "event_date": "2026-04-28",
+          "move_pct": -3.9726503195301968,
+          "window_label": "earnings-day close vs prior close"
+        }
+      ],
+      "beat_rates": {
+        "eps": {
+          "beats": null,
+          "total": null,
+          "source": "yfinance"
+        },
+        "revenue": {
+          "beats": 11,
+          "total": 20,
+          "source": "fmp"
+        }
+      },
+      "na_fields": [
+        {
+          "field": "qtd.sector_etf",
+          "reason": "no mapped ETF for sector 'Industrials'"
+        },
+        {
+          "field": "beat_rates.eps",
+          "reason": "no yfinance surprise history"
+        },
+        {
+          "field": "consensus.eps.range",
+          "reason": "estimate range not available on FMP Starter plan"
+        }
+      ]
+    },
+    {
+      "ticker": "V",
+      "company_name": "Visa Inc",
+      "tier": 1,
+      "event_date": "2026-07-28",
+      "event_hour": "amc",
+      "call_datetime_utc": null,
+      "last_price": 351.6000061035156,
+      "day_change_pct": -0.514970079528588,
+      "consensus": {
+        "eps": {
+          "mean": 3.288,
+          "count": null,
+          "low": null,
+          "high": null
+        },
+        "revenue": {
+          "mean": 11604075277.0,
+          "count": null,
+          "low": null,
+          "high": null
+        }
+      },
+      "qtd": {
+        "since": "2026-06-30",
+        "ticker_pct": 2.480401602046116,
+        "spx_pct": -1.1502908031659784,
+        "sector_etf": null,
+        "sector_etf_pct": null
+      },
+      "implied_move": {
+        "pct": 4.0,
+        "expiry": "2026-07-31",
+        "method": "ATM straddle",
+        "notes": []
+      },
+      "post_earnings_moves": [
+        {
+          "event_date": "2026-04-28",
+          "move_pct": 8.26382856375617,
+          "window_label": "next-day close vs earnings-day close"
+        }
+      ],
+      "beat_rates": {
+        "eps": {
+          "beats": null,
+          "total": null,
+          "source": "yfinance"
+        },
+        "revenue": {
+          "beats": 18,
+          "total": 20,
+          "source": "fmp"
+        }
+      },
+      "na_fields": [
+        {
+          "field": "qtd.sector_etf",
+          "reason": "no mapped ETF for sector 'Financials'"
+        },
+        {
+          "field": "beat_rates.eps",
+          "reason": "no yfinance surprise history"
+        },
+        {
+          "field": "consensus.eps.range",
+          "reason": "estimate range not available on FMP Starter plan"
+        }
+      ]
+    },
+    {
+      "ticker": "VLTO",
+      "company_name": "Veralto Corp",
+      "tier": 1,
+      "event_date": "2026-07-28",
+      "event_hour": "amc",
+      "call_datetime_utc": "2026-07-29T11:30:00+00:00",
+      "last_price": 91.5,
+      "day_change_pct": 0.38398076605815934,
+      "consensus": {
+        "eps": {
+          "mean": 1.0234,
+          "count": null,
+          "low": null,
+          "high": null
+        },
+        "revenue": {
+          "mean": 1482339337.0,
+          "count": null,
+          "low": null,
+          "high": null
+        }
+      },
+      "qtd": {
+        "since": "2026-06-30",
+        "ticker_pct": 3.179972581325792,
+        "spx_pct": -1.1502908031659784,
+        "sector_etf": null,
+        "sector_etf_pct": null
+      },
+      "implied_move": {
+        "pct": 8.5,
+        "expiry": "2026-08-21",
+        "method": "ATM straddle",
+        "notes": [
+          "wide market",
+          "(includes 23 extra days of time value)"
+        ]
+      },
+      "post_earnings_moves": [
+        {
+          "event_date": "2026-04-28",
+          "move_pct": 4.521037113522793,
+          "window_label": "next-day close vs earnings-day close"
+        }
+      ],
+      "beat_rates": {
+        "eps": {
+          "beats": null,
+          "total": null,
+          "source": "yfinance"
+        },
+        "revenue": {
+          "beats": 9,
+          "total": 11,
+          "source": "fmp"
+        }
+      },
+      "na_fields": [
+        {
+          "field": "qtd.sector_etf",
+          "reason": "no mapped ETF for sector 'Industrials'"
+        },
+        {
+          "field": "beat_rates.eps",
+          "reason": "no yfinance surprise history"
+        },
+        {
+          "field": "consensus.eps.range",
+          "reason": "estimate range not available on FMP Starter plan"
+        }
+      ]
+    }
+  ]
 }
