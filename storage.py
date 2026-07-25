@@ -872,17 +872,63 @@ def open_question(
     first_seen_iso: str,
     channel_id: str | None = None,
 ) -> None:
-    """Mark an event as having an open Slack question."""
+    """Mark an event as having an open Slack question.
+
+    Idempotent on re-alert. Two fields are deliberately NOT clobbered:
+
+    - `question_first_seen` is kept once set, so a recurring question reports
+      its true age instead of resetting to "just detected" every run.
+    - `slack_last_reply_ts` is only cleared when the thread actually changes.
+      Re-posting into the same thread must not replay replies already
+      consumed by `--check-replies`.
+
+    (Both were unconditional overwrites until 2026-07-25; combined with the
+    unseen lane's missing `question_state` filter they let an answered
+    question resurrect itself nightly — see `test_unseen_questions.py`.)
+    """
     conn.execute(
         "UPDATE events SET slack_thread_ts = ?, slack_question_kind = ?, "
         "slack_channel_id = ?, "
-        "slack_last_reply_ts = NULL, question_state = 'open', "
-        "question_snooze_until = NULL, question_first_seen = ?, "
+        "slack_last_reply_ts = CASE WHEN slack_thread_ts IS ? "
+        "THEN slack_last_reply_ts ELSE NULL END, "
+        "question_state = 'open', "
+        "question_snooze_until = NULL, "
+        "question_first_seen = COALESCE(question_first_seen, ?), "
         "updated_at = datetime('now') "
         "WHERE ticker = ? AND event_date = ?",
-        (thread_ts, kind, channel_id, first_seen_iso, ticker.upper(), event_date),
+        (thread_ts, kind, channel_id, thread_ts, first_seen_iso,
+         ticker.upper(), event_date),
     )
     conn.commit()
+
+
+def get_question_snapshot(
+    conn: sqlite3.Connection, ticker: str, event_date: str
+) -> dict | None:
+    """Current question fields for one event, or None when the row is absent.
+
+    Read before posting an alert so the caller can (a) decide whether the
+    operator has already answered and (b) render the card's true age.
+    """
+    cur = conn.execute(
+        "SELECT question_state, question_snooze_until, question_first_seen, "
+        "slack_thread_ts, slack_channel_id, slack_question_kind, "
+        "slack_last_reply_ts "
+        "FROM events WHERE ticker = ? AND event_date = ?",
+        (ticker.upper(), event_date),
+    )
+    r = cur.fetchone()
+    if r is None:
+        return None
+    return {
+        "question_state": r[0],
+        "question_snooze_until": r[1],
+        "question_first_seen": r[2],
+        "slack_thread_ts": r[3],
+        "slack_channel_id": r[4],
+        "slack_question_kind": r[5],
+        "slack_last_reply_ts": r[6],
+    }
 
 
 def update_question_state(
@@ -975,6 +1021,12 @@ def kv_set(conn: sqlite3.Connection, key: str, value: str) -> None:
         "value = excluded.value, updated_at = excluded.updated_at",
         (key, value),
     )
+    conn.commit()
+
+
+def kv_delete(conn: sqlite3.Connection, key: str) -> None:
+    """Remove a key. No-op when absent."""
+    conn.execute("DELETE FROM kv_store WHERE key = ?", (key,))
     conn.commit()
 
 

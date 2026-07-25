@@ -50,11 +50,13 @@ from storage import (
     list_locked_events,
     is_ticker_date_locked,
     open_question,
+    get_question_snapshot,
     update_question_state,
     advance_reply_watermark,
     list_open_questions,
     kv_get,
     kv_set,
+    kv_delete,
 )
 from finnhub_client import get_client as get_finnhub_client, fetch_earnings, FinnhubError
 from fmp_client import fetch_fmp_earnings, merge_earnings
@@ -1400,6 +1402,13 @@ def run(
                         "WHERE ticker = ? AND event_date = ?",
                         (ticker, event_date),
                     )
+                    # The escalation anchor is scoped to ONE streak. Leaving it
+                    # behind would make the next streak's alerts compare against
+                    # the old streak's high-water mark and stay silent until it
+                    # was exceeded (Codex R3 P1, 2026-07-25).
+                    kv_delete(
+                        conn, _unseen_escalation_key(ticker, event_date)
+                    )
                 continue
             new_count = (prev_count or 0) + 1
             conn.execute(
@@ -1407,14 +1416,41 @@ def run(
                 "WHERE ticker = ? AND event_date = ?",
                 (new_count, ticker, event_date),
             )
-            if new_count >= 2:
-                persistent_unseen.append(UnseenRow(
-                    ticker=ticker,
-                    company_name=company_name or "",
-                    event_date=event_date,
-                    tier=tier_val,
-                    miss_count=new_count,
-                ))
+            if new_count < 2:
+                continue
+            # The counter above is unconditional telemetry. Whether to ALERT
+            # is a separate decision that has to respect what the operator
+            # already told us in the thread — before 2026-07-25 it didn't,
+            # so `ignore`/`snooze`/`wait`/`lock` were silent no-ops here and
+            # INMD re-alerted for 8 straight runs after being locked.
+            q = get_question_snapshot(conn, ticker, event_date)
+            suppressed = _unseen_alert_suppressed(q, today)
+            if suppressed:
+                logger.info(
+                    f"B2: {ticker} {event_date} still unseen "
+                    f"(run {new_count}) — not alerting: {suppressed}"
+                )
+                continue
+            if _live_unseen_thread(q):
+                last_esc = kv_get(
+                    conn, _unseen_escalation_key(ticker, event_date)
+                )
+                last_esc = int(last_esc) if last_esc else None
+                if not _unseen_escalation_due(new_count, last_esc):
+                    logger.info(
+                        f"B2: {ticker} {event_date} still unseen "
+                        f"(run {new_count}) — question already open, last "
+                        f"escalated at {last_esc}, next at "
+                        f"{(last_esc or 1) * 2}"
+                    )
+                    continue
+            persistent_unseen.append(UnseenRow(
+                ticker=ticker,
+                company_name=company_name or "",
+                event_date=event_date,
+                tier=tier_val,
+                miss_count=new_count,
+            ))
         conn.commit()
 
         if persistent_unseen:
@@ -1435,12 +1471,42 @@ def run(
                         text=build_unseen_summary_fallback(persistent_unseen),
                     )
                     for u in persistent_unseen:
+                        prior = get_question_snapshot(
+                            conn, u.ticker, u.event_date
+                        )
+                        live = _live_unseen_thread(prior)
+                        # Only an unseen question's own age is meaningful here;
+                        # inheriting an xcheck question's first_seen would
+                        # mis-date the card.
+                        first_seen = (
+                            prior.get("question_first_seen")
+                            if prior and prior.get("slack_question_kind") == "unseen"
+                            else None
+                        ) or today.isoformat()
+                        live_thread, target_channel = (
+                            live if live else (None, unseen_channel)
+                        )
                         ts = slack_post_message(
                             SLACK_BOT_TOKEN,
-                            unseen_channel,
-                            blocks=build_unseen_thread_blocks(u, today),
+                            target_channel,
+                            blocks=build_unseen_thread_blocks(
+                                u, today, first_seen_iso=first_seen
+                            ),
                             text=build_unseen_thread_fallback(u),
+                            thread_ts=live_thread,
                         )
+                        if live_thread:
+                            # Escalation inside the question the operator can
+                            # already see and reply to. Re-opening it would
+                            # only reset its age and drop the reply watermark.
+                            # Record the DELIVERED count so a failed post stays
+                            # due next run rather than skipping to 2x.
+                            kv_set(
+                                conn,
+                                _unseen_escalation_key(u.ticker, u.event_date),
+                                str(u.miss_count),
+                            )
+                            continue
                         open_question(
                             conn,
                             u.ticker,
@@ -4037,6 +4103,88 @@ def _ack_in_thread(thread_ts: str, text: str, channel_id: str | None = None) -> 
         )
     except SlackAPIError as exc:
         logger.error(f"Ack post failed: {exc}")
+
+
+# --- B2 re-alert policy ------------------------------------------------------
+# States that mean the operator has ALREADY answered this question. Re-posting
+# would contradict the ack we gave them (`ignore` promises "won't re-alert for
+# this event") and would mint a fresh thread, orphaning the reply they left in
+# the old one. See test_unseen_questions.py.
+_ANSWERED_QUESTION_STATES = frozenset({"dismissed", "resolved", "monitoring"})
+
+# An UNANSWERED question still deserves visibility, but not a new thread every
+# morning. Escalate on a doubling backoff instead — the operator sees it come
+# back at 2, 4, 8, 16 ... missed runs, in the SAME thread they can reply to.
+_UNSEEN_FIRST_ALERT = 2
+
+
+def _unseen_escalation_key(ticker: str, event_date: str) -> str:
+    return f"unseen_escalated:{ticker}:{event_date}"
+
+
+def _unseen_alert_suppressed(q: dict | None, today: date) -> str | None:
+    """Reason this unseen alert must not fire, or None to let it through.
+
+    Only an UNSEEN question can suppress an unseen alert. `question_state` and
+    `slack_thread_ts` live on the event row and are shared by all three
+    question kinds, so gating on state alone would let a resolved cross-check
+    question silence a genuine, unrelated missing-from-Finnhub condition
+    (Codex R1 P1, 2026-07-25) — the same silent-miss class this guard exists
+    to remove.
+    """
+    if not q or q.get("slack_question_kind") != "unseen":
+        return None
+    state = q.get("question_state")
+    if state in _ANSWERED_QUESTION_STATES:
+        return f"question already {state}"
+    if state == "snoozed":
+        until = q.get("question_snooze_until")
+        if until and until > today.isoformat():
+            return f"snoozed until {until}"
+    return None
+
+
+def _unseen_escalation_due(miss_count: int, last_escalated: int | None) -> bool:
+    """True when an already-open unseen question should re-surface.
+
+    Anchored to the last SUCCESSFUL post, not to the raw counter. Testing
+    exact membership of a doubling set (`miss_count in {2,4,8,...}`) silently
+    lost alerts: the counter is committed before the Slack post, so a post
+    that FAILED at count 4 left the next run at count 5 — not a member — and
+    nothing surfaced until 8 (Codex R2 P1, 2026-07-25). Comparing against the
+    last delivered count makes a missed delivery still due on the next run.
+    """
+    if miss_count < _UNSEEN_FIRST_ALERT:
+        return False
+    if not last_escalated:
+        return True
+    return miss_count >= last_escalated * 2
+
+
+def _live_unseen_thread(q: dict | None) -> tuple[str, str] | None:
+    """`(thread_ts, channel_id)` to escalate into, or None to open fresh.
+
+    Must be an OPEN thread of kind `unseen`. Posting the unseen card into an
+    xcheck/urgent thread would leave `--check-replies` parsing replies with
+    the wrong grammar, so unseen-only commands (`reported`) would be rejected
+    (Codex R1 P1).
+
+    The channel comes from the THREAD, not from current config: a `thread_ts`
+    is only valid in the channel it was created in, so escalating into the
+    live `unseen_channel` after a channel change would raise
+    `thread_not_found` and red the daily run (Codex R2 P1). A row with no
+    recorded channel (legacy) is treated as having no live thread — opening a
+    fresh question is strictly safer than guessing.
+    """
+    if not q or q.get("slack_question_kind") != "unseen":
+        return None
+    if q.get("question_state") != "open":
+        return None
+    ts = q.get("slack_thread_ts")
+    channel = q.get("slack_channel_id")
+    if not ts or not channel:
+        return None
+    return ts, channel
 
 
 def _apply_action(
