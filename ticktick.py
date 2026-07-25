@@ -191,13 +191,6 @@ def find_or_create_list(token: str, list_name: str) -> str | None:
 # ---------------------------------------------------------------------------
 
 
-# Suffix marking a date the company has NOT announced (Finnhub cadence
-# projection / aggregator guess). Mirrors the calendar-title convention
-# (CLAUDE.md "Confirmed/estimated flag") so an estimated date can never look
-# authoritative in TickTick — the ENSG 2Q26 failure class.
-EST_SUFFIX = " (est.)"
-
-
 def build_task_title(
     ticker: str,
     event_date: str,
@@ -206,13 +199,20 @@ def build_task_title(
 ) -> str:
     """Build the TickTick task title. e.g. 'UNH Q1 2026 Earnings (Apr 21 BMO)'.
 
-    `confirmed=False` appends the ' (est.)' marker (same convention as the
-    calendar titles): the date is a projection, not company-announced. Default
-    True keeps the mark-reported path unchanged — a reported date is real.
+    JP 2026-07-24: "I don't want ANY date in TickTick until the date is
+    confirmed. Estimated dates are worse than nothing." `confirmed=False`
+    therefore returns a DATELESS title ('UNH Q1 2026 Earnings') — no date
+    parenthetical, no timing, no marker; the absence of a date IS the signal.
+    `event_date` is still required: it derives the reporting-quarter label.
+    Default True keeps the mark-reported path unchanged — a reported date is
+    real.
     """
     quarter = date_to_quarter(event_date)
     # Format quarter for display: "2025Q4" -> "Q4 2025"
     q_label = f"Q{quarter[-1]} {quarter[:4]}"
+
+    if not confirmed:
+        return f"{ticker} {q_label} Earnings"
 
     from datetime import date as date_type
     dt = date_type.fromisoformat(event_date)
@@ -224,8 +224,7 @@ def build_task_title(
     elif hour == "amc":
         timing = " AMC"
 
-    suffix = "" if confirmed else EST_SUFFIX
-    return f"{ticker} {q_label} Earnings ({date_str}{timing}){suffix}"
+    return f"{ticker} {q_label} Earnings ({date_str}{timing})"
 
 
 def build_task_content(
@@ -472,12 +471,16 @@ def _gather_quarter_tasks_full(
 def _task_date_stale(task: dict, event_date: str) -> bool:
     """True if the task's startDate OR dueDate (date part) differs from
     event_date. Both matter: TickTick snaps dueDate back to startDate, so a
-    task whose dueDate looks right but startDate is stale will silently revert."""
-    for field in ("startDate", "dueDate"):
-        v = (task.get(field) or "")[:10]
-        if v and v != event_date:
-            return True
-    return False
+    task whose dueDate looks right but startDate is stale will silently revert.
+
+    An UNDATED task (neither field set) is also stale: this is only called for
+    confirmed rows, and the confirmation transition must SET the date on a task
+    that was deliberately kept undated while unconfirmed (JP 2026-07-24 rule)."""
+    vals = [(task.get(field) or "")[:10] for field in ("startDate", "dueDate")]
+    present = [v for v in vals if v]
+    if not present:
+        return True  # undated task, confirmed row -> date needs to be set
+    return any(v != event_date for v in present)
 
 
 def get_all_earnings_lists(token: str) -> list[dict]:
@@ -549,21 +552,20 @@ def create_task(
     list_id: str,
     title: str,
     content: str,
-    due_date: str,
+    due_date: str | None,
     tags: list[str] | None = None,
 ) -> str | None:
     """
     Create a task in TickTick. Returns the task ID on success, None on failure.
 
     Args:
-        due_date: YYYY-MM-DD format earnings date
+        due_date: YYYY-MM-DD format earnings date, or None to create the task
+              UNDATED (JP 2026-07-24: no date in TickTick until the date is
+              company-confirmed/locked — probe-verified that omitting the date
+              fields on create yields an undated task).
         tags: optional workspace tags to attach (e.g. the coverage sector,
               "Healthcare Services" / "MedTech"). Case is preserved by the API.
     """
-    # TickTick expects ISO 8601 with timezone. Set startDate == dueDate so a
-    # later date correction (which must move BOTH) has a start to move.
-    due_datetime = f"{due_date}T09:00:00.000+0000"
-
     payload = {
         "title": title,
         "content": content,
@@ -572,10 +574,14 @@ def create_task(
         # the body there so it renders either way.
         "items": [{"title": t, "status": 0} for t in SUBTASK_TITLES],
         "desc": content,
-        "startDate": due_datetime,
-        "dueDate": due_datetime,
         "projectId": list_id,
     }
+    if due_date:
+        # TickTick expects ISO 8601 with timezone. Set startDate == dueDate so
+        # a later date correction (which must move BOTH) has a start to move.
+        due_datetime = f"{due_date}T09:00:00.000+0000"
+        payload["startDate"] = due_datetime
+        payload["dueDate"] = due_datetime
     if tags:
         payload["tags"] = tags
 
@@ -676,6 +682,7 @@ def update_task_content(
     new_tags: list[str] | None = None,
     allow_completed: bool = False,
     ensure_subtasks: bool = False,
+    clear_date: bool = False,
 ) -> bool:
     """
     Update a task's title / content / date in place. Returns success.
@@ -718,6 +725,13 @@ def update_task_content(
         iso = _due_iso(new_date)
         task["startDate"] = iso
         task["dueDate"] = iso
+    elif clear_date:
+        # Remove the task's dates (JP 2026-07-24: unconfirmed = undated).
+        # Probe-verified: OMITTING the fields does NOT clear them (per-field
+        # partial-update semantics) — explicit nulls DO, and leave content /
+        # items / tags untouched.
+        task["startDate"] = None
+        task["dueDate"] = None
     if new_tags is not None:
         task["tags"] = new_tags
     if ensure_subtasks:
@@ -962,8 +976,9 @@ def sync_ticktick_tasks(
             event_date = event["event_date"]
             hour = event.get("event_hour") or event.get("hour")
             # Confirmed = company-announced (date_confirmed / a bmo-amc-dmh hour)
-            # or operator-locked. Anything else is a cadence projection and the
-            # title must say so (' (est.)') from birth.
+            # or operator-locked. Anything else is a cadence projection: the
+            # task is created UNDATED with a dateless title (JP 2026-07-24 —
+            # no date in TickTick until confirmed).
             confirmed = bool(
                 event.get("date_confirmed") or event.get("date_locked")
             ) or (hour or "").lower() in ("bmo", "amc", "dmh")
@@ -1016,7 +1031,8 @@ def sync_ticktick_tasks(
             tag = sector_tag(event.get("sector"))
             try:
                 task_id = create_task(
-                    token, list_id, title, content, event_date,
+                    token, list_id, title, content,
+                    event_date if confirmed else None,
                     tags=[tag] if tag else None,
                 )
             except TickTickTokenExpired:
@@ -1107,7 +1123,7 @@ def reconcile_ticktick_tasks(
         "title_fixed": 0,
         "marked_reported": 0,
         "tag_added": 0,
-        "est_marked": 0,
+        "date_cleared": 0,
         "items_added": 0,
         "pointer_backfilled": 0,
         "skipped_done": 0,
@@ -1311,24 +1327,38 @@ def reconcile_ticktick_tasks(
             continue
 
         title = task.get("title", "") or ""
+        # Sector tag to ensure (merged in without clobbering the user's tags).
+        want_tag = sector_tag(sector_by_ticker.get(ticker))
+        merged_tags = _merge_tags(task.get("tags"), want_tag) if want_tag else None
+        # Standard review sub-items to ensure (appended in the same write).
+        items_missing = _merge_subtasks(task.get("items")) is not None
 
-        # Stale row: its projected date can't be trusted, so NO date/title/body
-        # push — but an unconfirmed date sitting in TickTick unmarked is exactly
-        # how ENSG 2Q26 looked authoritative while wrong. Append the ' (est.)'
-        # marker to the live title (title-only; the task's own date is left
-        # untouched), ensure the standard sub-items, and move on. Idempotent:
-        # no write when already marked and complete.
-        if stale_row:
-            stats["skipped_stale"] += 1
-            needs_est = (not date_confirmed and "[REPORTED]" not in title
-                         and EST_SUFFIX not in title)
-            items_missing = _merge_subtasks(task.get("items")) is not None
-            if needs_est or items_missing:
-                if needs_est:
+        # JP 2026-07-24: "I don't want ANY date in TickTick until the date is
+        # confirmed. Estimated dates are worse than nothing." An UNCONFIRMED row
+        # (not company-announced, not operator-locked, not reported) must
+        # project as an UNDATED task with a dateless title — the absence of a
+        # date IS the signal. Freshness-independent: stale or fresh, an
+        # unconfirmed row never carries a date, and stripping a date pushes
+        # nothing untrusted (a date is only ever REMOVED here).
+        if not (reported or date_confirmed or date_locked):
+            expected_title = build_task_title(
+                ticker, event_date, event_hour, confirmed=False
+            )
+            title_stale = title != expected_title
+            date_present = bool(task.get("startDate") or task.get("dueDate"))
+            if date_present or title_stale or merged_tags is not None or items_missing:
+                if date_present:
                     logger.info(
-                        f"  {prefix}est-annotate (stale row, date not pushed): "
-                        f"{ticker} (list='{pname}')"
+                        f"  {prefix}clear date (unconfirmed): {ticker} "
+                        f"(list='{pname}')"
                     )
+                elif title_stale:
+                    logger.info(
+                        f"  {prefix}fix title: {ticker} -> {expected_title!r} "
+                        f"(list='{pname}')"
+                    )
+                if merged_tags is not None:
+                    logger.info(f"  {prefix}add tag {want_tag!r}: {ticker} (list='{pname}')")
                 if items_missing:
                     logger.info(
                         f"  {prefix}add review sub-items: {ticker} (list='{pname}')"
@@ -1337,8 +1367,10 @@ def reconcile_ticktick_tasks(
                     try:
                         ok = update_task_content(
                             token, pid, task_id,
-                            new_title=title + EST_SUFFIX if needs_est else None,
+                            new_title=expected_title if title_stale else None,
+                            new_tags=merged_tags,
                             ensure_subtasks=True,
+                            clear_date=True,
                         )
                     except TickTickTokenExpired:
                         logger.error("TickTick access token expired mid-reconcile — stopping")
@@ -1346,27 +1378,57 @@ def reconcile_ticktick_tasks(
                         break
                     except Exception as exc:
                         logger.warning(
-                            f"  TickTick est-annotate failed for {ticker}: {exc}")
+                            f"  TickTick undated-strip failed for {ticker}: {exc}")
                         stats["errors"] += 1
                         continue
                     if not ok:
                         stats["errors"] += 1
                         continue
-                if needs_est:
-                    stats["est_marked"] += 1
+                if date_present:
+                    stats["date_cleared"] += 1
+                elif title_stale:
+                    stats["title_fixed"] += 1
+                if merged_tags is not None:
+                    stats["tag_added"] += 1
                 if items_missing:
                     stats["items_added"] += 1
             continue
 
-        # Sector tag to ensure (merged in without clobbering the user's tags).
-        want_tag = sector_tag(sector_by_ticker.get(ticker))
-        merged_tags = _merge_tags(task.get("tags"), want_tag) if want_tag else None
+        # CONFIRMED rows only from here. A stale confirmed row's date push can't
+        # be trusted (the row stopped syncing) — skip date/title work but still
+        # ensure the review sub-items (append-only, date-independent).
+        if stale_row:
+            stats["skipped_stale"] += 1
+            if items_missing:
+                logger.info(
+                    f"  {prefix}add review sub-items: {ticker} (list='{pname}')"
+                )
+                if not dry_run:
+                    try:
+                        ok = update_task_content(
+                            token, pid, task_id, ensure_subtasks=True,
+                        )
+                    except TickTickTokenExpired:
+                        logger.error("TickTick access token expired mid-reconcile — stopping")
+                        stats["errors"] += 1
+                        break
+                    except Exception as exc:
+                        logger.warning(
+                            f"  TickTick sub-items add failed for {ticker}: {exc}")
+                        stats["errors"] += 1
+                        continue
+                    if not ok:
+                        stats["errors"] += 1
+                        continue
+                stats["items_added"] += 1
+            continue
+
         # Date repair is independent of reported/title state and checks BOTH
         # date fields (dueDate alone would miss a stale startDate that then drags
-        # dueDate back).
+        # dueDate back). An undated task also counts as stale here — the
+        # confirmation transition must set the date that was withheld while
+        # unconfirmed.
         date_stale = _task_date_stale(task, event_date)
-        # Standard review sub-items to ensure (appended in the same write).
-        items_missing = _merge_subtasks(task.get("items")) is not None
         try:
             if reported and "[REPORTED]" not in title:
                 # Transition to reported in ONE write: title + date + actuals body
@@ -1396,14 +1458,12 @@ def reconcile_ticktick_tasks(
                 if items_missing:
                     stats["items_added"] += 1
             else:
-                # Desired title. Confirmed = company-announced or operator-locked
-                # (reported rows are real dates, never est-marked). A title whose
-                # est-marker state drifted (estimate got confirmed, or an
-                # unmarked estimate — the ENSG class) is repaired even when the
-                # date is right.
+                # Desired title (this branch is confirmed-rows-only, so it is
+                # always the dated form). A title whose shape drifted — e.g. a
+                # leftover dateless/est-legacy title after the date confirmed —
+                # is repaired even when the date fields are right.
                 expected_title = build_task_title(
-                    ticker, event_date, event_hour,
-                    confirmed=bool(reported or date_confirmed or date_locked),
+                    ticker, event_date, event_hour, confirmed=True,
                 )
                 if reported and "[REPORTED]" in title:
                     expected_title = "[REPORTED] " + expected_title
@@ -1459,12 +1519,12 @@ def reconcile_ticktick_tasks(
 
     logger.info(
         "TickTick reconcile%s: checked=%d date_fixed=%d title_fixed=%d "
-        "marked_reported=%d tag_added=%d est_marked=%d items_added=%d "
+        "marked_reported=%d tag_added=%d date_cleared=%d items_added=%d "
         "backfilled=%d skipped_done=%d skipped_phantom=%d skipped_stale=%d "
         "skipped_ambiguous=%d no_task=%d errors=%d"
         % (" [dry-run]" if dry_run else "", stats["checked"], stats["date_fixed"],
            stats["title_fixed"], stats["marked_reported"], stats["tag_added"],
-           stats["est_marked"], stats["items_added"], stats["pointer_backfilled"],
+           stats["date_cleared"], stats["items_added"], stats["pointer_backfilled"],
            stats["skipped_done"], stats["skipped_phantom"], stats["skipped_stale"],
            stats["skipped_ambiguous"], stats["no_task"], stats["errors"])
     )

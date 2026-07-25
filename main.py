@@ -1491,8 +1491,8 @@ def run(
                 "tier": row[5],
                 "company_name": row[6],
                 "ticktick_task_id": row[7],
-                # Confirmation state drives the ' (est.)' title marker so an
-                # unannounced (projected) date never looks authoritative.
+                # Confirmation state decides whether the task gets a date at
+                # all (JP 2026-07-24: no date in TickTick until confirmed).
                 "date_confirmed": row[8],
                 "date_locked": row[9],
                 "position": position,

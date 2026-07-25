@@ -218,8 +218,9 @@ jobs:
           GOOGLE_CREDENTIALS_PATH: credentials.json
         run: python main.py --check-replies
 
-      # Reconcile TickTick tasks against DB truth: fix stale dates + titles
-      # (incl. the ' (est.)' unconfirmed-date marker), mark reported names
+      # Reconcile TickTick tasks against DB truth: fix stale dates + titles on
+      # confirmed rows, strip dates from unconfirmed rows (JP 2026-07-24: no
+      # date in TickTick until company-confirmed/locked), mark reported names
       # [REPORTED], backfill lost task pointers. The create-only sync above
       # never edits an existing task, so a name whose projected date was wrong
       # (or whose pointer was lost on a date move) drifts and its task sits

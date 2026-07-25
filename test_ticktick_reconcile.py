@@ -654,11 +654,15 @@ def test_reconcile_refuses_stale_db(monkeypatch):
     assert called["projects"] is False, "should abort before touching the API"
 
 
-def test_build_task_title_est_marker():
-    """An unconfirmed (estimated) date must carry the same ' (est.)' suffix the
-    calendar titles use — a wrong estimate must never look authoritative."""
+def test_build_task_title_unconfirmed_has_no_date():
+    """JP 2026-07-24: 'I don't want ANY date in TickTick until the date is
+    confirmed. Estimated dates are worse than nothing.' An unconfirmed row's
+    title carries NO date parenthetical — the absence of a date IS the signal."""
     assert ticktick.build_task_title("ENSG", "2026-07-30", None, confirmed=False) \
-        == "ENSG Q2 2026 Earnings (Jul 30) (est.)"
+        == "ENSG Q2 2026 Earnings"
+    # Even a projected hour doesn't leak into an unconfirmed title.
+    assert ticktick.build_task_title("ENSG", "2026-07-30", "amc", confirmed=False) \
+        == "ENSG Q2 2026 Earnings"
     assert ticktick.build_task_title("ENSG", "2026-07-30", "amc", confirmed=True) \
         == "ENSG Q2 2026 Earnings (Jul 30 AMC)"
     # Default stays confirmed (mark_task_reported path — a reported date is real).
@@ -666,9 +670,28 @@ def test_build_task_title_est_marker():
         == "ENSG Q2 2026 Earnings (Jul 30 AMC)"
 
 
-def test_reconcile_est_marker_applied_on_date_fix(monkeypatch):
-    """A fresh UNCONFIRMED row whose task date drifted gets the date fix AND the
-    ' (est.)' title marker in the same single write."""
+def test_update_task_clear_date_nulls_both_and_preserves_items(monkeypatch):
+    """Date clearing must send explicit nulls for BOTH fields (probe-verified:
+    omitting the keys does NOT clear — partial-update semantics; nulls do) and
+    must not disturb content or checklist items."""
+    tasks = {"L1": [{
+        "id": "T1", "title": "t", "content": "body",
+        "startDate": "2026-08-12T09:00:00.000+0000",
+        "dueDate": "2026-08-12T09:00:00.000+0000", "status": 0,
+        "items": _std_items(),
+    }]}
+    posts = _stub_api(monkeypatch, tasks)
+    ok = ticktick.update_task_content("tok", "L1", "T1", clear_date=True)
+    assert ok is True
+    body = posts[0]["body"]
+    assert body["startDate"] is None and body["dueDate"] is None
+    assert body["content"] == "body"
+    assert [i["title"] for i in body["items"]] == ["Earnings call", "Press release", "10-Q"]
+
+
+def test_reconcile_strips_date_from_unconfirmed_task(monkeypatch):
+    """A fresh UNCONFIRMED row whose task carries a date gets the date CLEARED
+    and the title rewritten dateless — one write."""
     monkeypatch.setenv("TICKTICK_ACCESS_TOKEN", "tok")
     conn = init_db(":memory:")
     # hour '' -> date_confirmed=0 (cadence estimate).
@@ -680,6 +703,36 @@ def test_reconcile_est_marker_applied_on_date_fix(monkeypatch):
         "id": "T_ABC", "title": "ABC Q2 2026 Earnings (Aug 12)", "content": "b",
         "startDate": "2026-08-12T09:00:00.000+0000",
         "dueDate": "2026-08-12T09:00:00.000+0000", "status": 0,
+        "items": _std_items(),
+    }]}
+    posts = _stub_api(monkeypatch, tasks)
+    monkeypatch.setattr(ticktick, "_list_all_projects", lambda token: [project])
+
+    stats = ticktick.reconcile_ticktick_tasks(
+        conn, date(2026, 7, 22), max_db_staleness_days=10_000)
+
+    assert stats["date_cleared"] == 1
+    assert stats["date_fixed"] == 0
+    assert len(posts) == 1
+    body = posts[0]["body"]
+    assert body["title"] == "ABC Q2 2026 Earnings"
+    assert body["startDate"] is None and body["dueDate"] is None
+    assert body["content"] == "b"  # body untouched
+
+
+def test_reconcile_sets_date_when_confirmed(monkeypatch):
+    """The confirmation transition: an UNDATED task whose row becomes
+    date_confirmed gets BOTH dates set and the dated title — the undated state
+    must not wedge (an undated task must count as date-stale)."""
+    monkeypatch.setenv("TICKTICK_ACCESS_TOKEN", "tok")
+    conn = init_db(":memory:")
+    upsert_event(conn, "ABC", "2026-08-05", "amc", None,
+                 quarter=date_to_quarter("2026-08-05"),
+                 reported=False, tier=2, company_name="ABC Inc")
+    project = {"id": "P_HC", "name": "2Q26 Earnings - HC Svcs & MedTech"}
+    tasks = {"P_HC": [{
+        "id": "T_ABC", "title": "ABC Q2 2026 Earnings", "content": "b",
+        "status": 0, "items": _std_items(),   # no startDate/dueDate at all
     }]}
     posts = _stub_api(monkeypatch, tasks)
     monkeypatch.setattr(ticktick, "_list_all_projects", lambda token: [project])
@@ -690,41 +743,14 @@ def test_reconcile_est_marker_applied_on_date_fix(monkeypatch):
     assert stats["date_fixed"] == 1
     assert len(posts) == 1
     body = posts[0]["body"]
-    assert body["title"] == "ABC Q2 2026 Earnings (Aug 05) (est.)"
+    assert body["title"] == "ABC Q2 2026 Earnings (Aug 05 AMC)"
+    assert body["startDate"] == "2026-08-05T09:00:00.000+0000"
     assert body["dueDate"] == "2026-08-05T09:00:00.000+0000"
 
 
-def test_reconcile_drops_est_marker_when_date_confirmed(monkeypatch):
-    """When the company confirms (hour set -> date_confirmed=1) at the SAME date,
-    the stale ' (est.)' marker must be removed even though the date is right."""
-    monkeypatch.setenv("TICKTICK_ACCESS_TOKEN", "tok")
-    conn = init_db(":memory:")
-    upsert_event(conn, "ABC", "2026-08-05", "amc", None,
-                 quarter=date_to_quarter("2026-08-05"),
-                 reported=False, tier=2, company_name="ABC Inc")
-    project = {"id": "P_HC", "name": "2Q26 Earnings - HC Svcs & MedTech"}
-    tasks = {"P_HC": [{
-        "id": "T_ABC", "title": "ABC Q2 2026 Earnings (Aug 05) (est.)", "content": "b",
-        "startDate": "2026-08-05T09:00:00.000+0000",
-        "dueDate": "2026-08-05T09:00:00.000+0000", "status": 0,
-    }]}
-    posts = _stub_api(monkeypatch, tasks)
-    monkeypatch.setattr(ticktick, "_list_all_projects", lambda token: [project])
-
-    stats = ticktick.reconcile_ticktick_tasks(
-        conn, date(2026, 7, 22), max_db_staleness_days=10_000)
-
-    assert stats["title_fixed"] == 1
-    assert stats["date_fixed"] == 0
-    assert len(posts) == 1
-    body = posts[0]["body"]
-    assert body["title"] == "ABC Q2 2026 Earnings (Aug 05 AMC)"
-    # Date untouched.
-    assert body["startDate"] == "2026-08-05T09:00:00.000+0000"
-
-
-def test_reconcile_title_converged_writes_nothing(monkeypatch):
-    """Idempotence: est-marked title + matching date + unconfirmed row -> no write."""
+def test_reconcile_unconfirmed_undated_converged_writes_nothing(monkeypatch):
+    """Idempotence: dateless title + no dates + items present + unconfirmed row
+    -> no write."""
     monkeypatch.setenv("TICKTICK_ACCESS_TOKEN", "tok")
     conn = init_db(":memory:")
     upsert_event(conn, "ABC", "2026-08-05", "", None,
@@ -732,10 +758,8 @@ def test_reconcile_title_converged_writes_nothing(monkeypatch):
                  reported=False, tier=2, company_name="ABC Inc")
     project = {"id": "P_HC", "name": "2Q26 Earnings - HC Svcs & MedTech"}
     tasks = {"P_HC": [{
-        "id": "T_ABC", "title": "ABC Q2 2026 Earnings (Aug 05) (est.)", "content": "b",
-        "startDate": "2026-08-05T09:00:00.000+0000",
-        "dueDate": "2026-08-05T09:00:00.000+0000", "status": 0,
-        "items": _std_items(),
+        "id": "T_ABC", "title": "ABC Q2 2026 Earnings", "content": "b",
+        "status": 0, "items": _std_items(),
     }]}
     posts = _stub_api(monkeypatch, tasks)
     monkeypatch.setattr(ticktick, "_list_all_projects", lambda token: [project])
@@ -743,15 +767,16 @@ def test_reconcile_title_converged_writes_nothing(monkeypatch):
     stats = ticktick.reconcile_ticktick_tasks(
         conn, date(2026, 7, 22), max_db_staleness_days=10_000)
 
-    assert stats["date_fixed"] == 0 and stats["title_fixed"] == 0
+    assert stats["date_cleared"] == 0 and stats["title_fixed"] == 0
     assert posts == []
 
 
-def test_reconcile_stale_row_gets_est_annotation_without_date_push(monkeypatch):
+def test_reconcile_stale_unconfirmed_task_still_stripped(monkeypatch):
     """The ENSG 2Q26 failure class: an unconfirmed row whose sync stopped (row
-    stale > threshold) is date-SKIPPED by the staleness guard — but its task must
-    still be annotated ' (est.)' (title-only append, live date left alone) so the
-    untrusted date can't look authoritative in TickTick."""
+    stale > threshold). JP's rule is freshness-independent — no date until
+    confirmed — so the task is stripped of its date and gets the dateless title
+    even though the row is stale (nothing untrusted is pushed; a date is only
+    ever REMOVED here)."""
     monkeypatch.setenv("TICKTICK_ACCESS_TOKEN", "tok")
     conn = init_db(":memory:")
     upsert_event(conn, "ENSG", "2026-07-23", "", None,
@@ -769,31 +794,32 @@ def test_reconcile_stale_row_gets_est_annotation_without_date_push(monkeypatch):
         "P_CORE": [{"id": "T_ENSG", "title": "ENSG Q2 2026 Earnings (Jul 22)",
                     "content": "checklist body",
                     "startDate": "2026-07-22T09:00:00.000+0000",
-                    "dueDate": "2026-07-22T09:00:00.000+0000", "status": 0}],
+                    "dueDate": "2026-07-22T09:00:00.000+0000", "status": 0,
+                    "items": _std_items()}],
         "P_HC": [{"id": "T_XYZ", "title": "XYZ Q2 2026 Earnings (Jul 28 BMO)",
                   "content": "b", "startDate": "2026-07-28T09:00:00.000+0000",
-                  "dueDate": "2026-07-28T09:00:00.000+0000", "status": 0}],
+                  "dueDate": "2026-07-28T09:00:00.000+0000", "status": 0,
+                  "items": _std_items()}],
     }
     posts = _stub_api(monkeypatch, tasks)
     monkeypatch.setattr(ticktick, "_list_all_projects", lambda token: [p_core, p_hc])
 
     stats = ticktick.reconcile_ticktick_tasks(conn, date(2026, 7, 24))  # default staleness
 
-    assert stats["skipped_stale"] == 1
-    assert stats["est_marked"] == 1
+    assert stats["date_cleared"] == 1
+    assert stats["skipped_stale"] == 0  # unconfirmed rows use the undated path
     ensg_posts = [p for p in posts if p["url"].endswith("T_ENSG")]
     assert len(ensg_posts) == 1
     body = ensg_posts[0]["body"]
-    # Title-only annotation: live (stale) date NOT pushed, DB date NOT pushed.
-    assert body["title"] == "ENSG Q2 2026 Earnings (Jul 22) (est.)"
-    assert body["startDate"] == "2026-07-22T09:00:00.000+0000"
-    assert body["dueDate"] == "2026-07-22T09:00:00.000+0000"
+    assert body["title"] == "ENSG Q2 2026 Earnings"
+    assert body["startDate"] is None and body["dueDate"] is None
     assert body["content"] == "checklist body"
+    # Fresh confirmed sibling untouched (already converged).
+    assert [p for p in posts if p["url"].endswith("T_XYZ")] == []
 
 
-def test_reconcile_stale_row_est_annotation_is_idempotent(monkeypatch):
-    """Second pass over an already-annotated stale row must not write again or
-    stack ' (est.) (est.)'."""
+def test_reconcile_stale_undated_task_is_idempotent(monkeypatch):
+    """Second pass over an already-undated unconfirmed stale row: no write."""
     monkeypatch.setenv("TICKTICK_ACCESS_TOKEN", "tok")
     conn = init_db(":memory:")
     upsert_event(conn, "ENSG", "2026-07-23", "", None,
@@ -807,10 +833,8 @@ def test_reconcile_stale_row_est_annotation_is_idempotent(monkeypatch):
     conn.commit()
     p_core = {"id": "P_CORE", "name": "2Q26 Earnings - Core Watchlist - Positions/Researching"}
     tasks = {"P_CORE": [
-        {"id": "T_ENSG", "title": "ENSG Q2 2026 Earnings (Jul 22) (est.)",
-         "content": "b", "startDate": "2026-07-22T09:00:00.000+0000",
-         "dueDate": "2026-07-22T09:00:00.000+0000", "status": 0,
-         "items": _std_items()},
+        {"id": "T_ENSG", "title": "ENSG Q2 2026 Earnings",
+         "content": "b", "status": 0, "items": _std_items()},  # undated already
         {"id": "T_XYZ", "title": "XYZ Q2 2026 Earnings (Jul 28 BMO)",
          "content": "b", "startDate": "2026-07-28T09:00:00.000+0000",
          "dueDate": "2026-07-28T09:00:00.000+0000", "status": 0,
@@ -821,14 +845,13 @@ def test_reconcile_stale_row_est_annotation_is_idempotent(monkeypatch):
 
     stats = ticktick.reconcile_ticktick_tasks(conn, date(2026, 7, 24))
 
-    assert stats["skipped_stale"] == 1
-    assert stats["est_marked"] == 0
-    assert [p for p in posts if p["url"].endswith("T_ENSG")] == []
+    assert stats["date_cleared"] == 0
+    assert posts == []
 
 
-def test_sync_creates_unconfirmed_task_with_est_title(monkeypatch):
-    """Task creation must carry the est-marker for unconfirmed dates and omit it
-    for company-confirmed ones — the guard starts at birth, not just reconcile."""
+def test_sync_creates_unconfirmed_task_undated(monkeypatch):
+    """Task creation: unconfirmed events are born UNDATED with a dateless title;
+    company-confirmed ones get the date — JP's rule starts at birth."""
     monkeypatch.setenv("TICKTICK_ACCESS_TOKEN", "tok")
     conn = init_db(":memory:")
     upsert_event(conn, "ABC", "2026-08-05", "", None,
@@ -840,7 +863,7 @@ def test_sync_creates_unconfirmed_task_with_est_title(monkeypatch):
     created = []
 
     def fake_create(token, list_id, title, content, due_date, tags=None):
-        created.append(title)
+        created.append((title, due_date))
         return f"TID{len(created)}"
 
     monkeypatch.setattr(ticktick, "create_task", fake_create)
@@ -859,13 +882,30 @@ def test_sync_creates_unconfirmed_task_with_est_title(monkeypatch):
     stats = ticktick.sync_ticktick_tasks(conn, events)
 
     assert stats["created"] == 2
-    assert created[0] == "ABC Q2 2026 Earnings (Aug 05) (est.)"
-    assert created[1] == "DEF Q2 2026 Earnings (Aug 06 AMC)"
+    assert created[0] == ("ABC Q2 2026 Earnings", None)
+    assert created[1] == ("DEF Q2 2026 Earnings (Aug 06 AMC)", "2026-08-06")
 
 
-def test_sync_locked_event_title_has_no_est_marker(monkeypatch):
-    """A date_locked row is operator-verified truth — no est-marker even though
-    Finnhub's hour (and so date_confirmed) may be empty."""
+def test_create_task_undated_omits_date_fields(monkeypatch):
+    """create_task(due_date=None) must omit startDate/dueDate entirely
+    (probe-verified: an itemized undated create works by omission)."""
+    posts = []
+
+    def fake_post(url, headers=None, json=None, timeout=None):
+        posts.append(json)
+        return _Resp(200, {"id": "NEW"})
+
+    monkeypatch.setattr(ticktick.requests, "post", fake_post)
+    tid = ticktick.create_task("tok", "L1", "ABC Q2 2026 Earnings", "body", None)
+    assert tid == "NEW"
+    body = posts[0]
+    assert "startDate" not in body and "dueDate" not in body
+    assert [i["title"] for i in body["items"]] == ["Earnings call", "Press release", "10-Q"]
+
+
+def test_sync_locked_event_gets_date(monkeypatch):
+    """A date_locked row is operator-verified truth — dated title + due date
+    even though Finnhub's hour (and so date_confirmed) may be empty."""
     monkeypatch.setenv("TICKTICK_ACCESS_TOKEN", "tok")
     conn = init_db(":memory:")
     upsert_event(conn, "ABC", "2026-08-05", "", None,
@@ -874,7 +914,7 @@ def test_sync_locked_event_title_has_no_est_marker(monkeypatch):
     created = []
     monkeypatch.setattr(ticktick, "create_task",
                         lambda token, list_id, title, content, due_date, tags=None:
-                        created.append(title) or "TID1")
+                        created.append((title, due_date)) or "TID1")
     monkeypatch.setattr(ticktick, "_list_all_projects",
                         lambda token: [{"id": "P_HC", "name": "2Q26 Earnings - HC Svcs & MedTech"}])
     monkeypatch.setattr(ticktick, "list_tasks_in_project", lambda token, pid: [])
@@ -887,7 +927,7 @@ def test_sync_locked_event_title_has_no_est_marker(monkeypatch):
     stats = ticktick.sync_ticktick_tasks(conn, events)
 
     assert stats["created"] == 1
-    assert created == ["ABC Q2 2026 Earnings (Aug 05)"]
+    assert created == [("ABC Q2 2026 Earnings (Aug 05)", "2026-08-05")]
 
 
 def test_merge_subtasks_appends_only_missing():
@@ -1006,10 +1046,10 @@ def test_mark_reported_ensures_subtasks_and_mirrors_desc(monkeypatch):
     assert body["title"].startswith("[REPORTED]")
 
 
-def test_reconcile_stale_row_write_includes_subtasks(monkeypatch):
-    """The stale-row est-annotation write also carries the sub-items upgrade
-    (one write), and an annotated-but-itemless stale task still gets a write
-    for the items alone."""
+def test_reconcile_undated_strip_carries_subtasks_and_removes_est_legacy(monkeypatch):
+    """The undated-strip write also carries the sub-items upgrade (one write),
+    and a legacy ' (est.)'-titled task loses both its date and the marker —
+    the dateless title replaces everything."""
     monkeypatch.setenv("TICKTICK_ACCESS_TOKEN", "tok")
     conn = init_db(":memory:")
     upsert_event(conn, "ENSG", "2026-07-23", "", None,
@@ -1023,7 +1063,7 @@ def test_reconcile_stale_row_write_includes_subtasks(monkeypatch):
     conn.commit()
     p_core = {"id": "P_CORE", "name": "2Q26 Earnings - Core Watchlist - Positions/Researching"}
     tasks = {"P_CORE": [
-        # Already est-annotated but has no items -> items-only write.
+        # Legacy est-annotated, dated, no items -> single write fixes all three.
         {"id": "T_ENSG", "title": "ENSG Q2 2026 Earnings (Jul 22) (est.)",
          "content": "b", "startDate": "2026-07-22T09:00:00.000+0000",
          "dueDate": "2026-07-22T09:00:00.000+0000", "status": 0},
@@ -1037,14 +1077,13 @@ def test_reconcile_stale_row_write_includes_subtasks(monkeypatch):
 
     stats = ticktick.reconcile_ticktick_tasks(conn, date(2026, 7, 24))
 
-    assert stats["skipped_stale"] == 1
-    assert stats["est_marked"] == 0        # already annotated
-    assert stats["items_added"] == 1       # but items were missing
+    assert stats["date_cleared"] == 1
+    assert stats["items_added"] == 1
     ensg_posts = [p for p in posts if p["url"].endswith("T_ENSG")]
     assert len(ensg_posts) == 1
     body = ensg_posts[0]["body"]
-    assert body["title"] == "ENSG Q2 2026 Earnings (Jul 22) (est.)"  # unchanged
-    assert body["startDate"] == "2026-07-22T09:00:00.000+0000"       # not pushed
+    assert body["title"] == "ENSG Q2 2026 Earnings"   # date + (est.) both gone
+    assert body["startDate"] is None and body["dueDate"] is None
     assert [i["title"] for i in body["items"]] == ["Earnings call", "Press release", "10-Q"]
 
 
