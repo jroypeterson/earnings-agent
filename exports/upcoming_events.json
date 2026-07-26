@@ -1,33 +1,15 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-07-25T12:09:58Z",
+  "generated_at": "2026-07-26T12:15:59Z",
   "window": {
-    "start": "2026-07-23",
-    "end": "2026-08-08"
+    "start": "2026-07-24",
+    "end": "2026-08-09"
   },
   "counts": {
-    "events": 493
+    "events": 491
   },
   "events": [
-    {
-      "ticker": "ARGX",
-      "event_date": "2026-07-23",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "argenx SE - ADR"
-    },
-    {
-      "ticker": "ENSG",
-      "event_date": "2026-07-23",
-      "event_hour": "",
-      "tier": 1,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Ensign Group Inc"
-    },
     {
       "ticker": "AZN",
       "event_date": "2026-07-27",
@@ -72,6 +54,15 @@
       "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "LakeShore Biopharma Co., Ltd"
+    },
+    {
+      "ticker": "PETS",
+      "event_date": "2026-07-27",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "PetMed Express, Inc."
     },
     {
       "ticker": "UHS",
@@ -3987,15 +3978,6 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Puma Biotechnology Inc"
-    },
-    {
-      "ticker": "PETS",
-      "event_date": "2026-08-06",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "PetMed Express, Inc."
     },
     {
       "ticker": "PGNY",

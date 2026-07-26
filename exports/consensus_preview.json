@@ -1,33 +1,33 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-07-25T12:09:58Z",
+  "generated_at": "2026-07-26T12:15:58Z",
   "window": {
-    "start": "2026-07-25",
-    "end": "2026-07-28"
+    "start": "2026-07-26",
+    "end": "2026-07-29"
   },
   "counts": {
-    "previews": 4
+    "previews": 7
   },
   "previews": [
     {
-      "ticker": "SPGI",
-      "company_name": "S&P Global Inc",
+      "ticker": "BSX",
+      "company_name": "Boston Scientific Corp",
       "tier": 1,
-      "event_date": "2026-07-28",
+      "event_date": "2026-07-29",
       "event_hour": "bmo",
-      "call_datetime_utc": "2026-07-28T12:30:00+00:00",
-      "last_price": 420.0,
-      "day_change_pct": -2.1115922272284284,
+      "call_datetime_utc": "2026-07-29T20:00:00+00:00",
+      "last_price": 44.25,
+      "day_change_pct": 1.5373982120117267,
       "consensus": {
         "eps": {
-          "mean": 5.0513,
+          "mean": 0.8403,
           "count": null,
           "low": null,
           "high": null
         },
         "revenue": {
-          "mean": 4164377460.0,
+          "mean": 5454875478.0,
           "count": null,
           "low": null,
           "high": null
@@ -35,23 +35,21 @@
       },
       "qtd": {
         "since": "2026-06-30",
-        "ticker_pct": 9.00653402711746,
-        "spx_pct": -1.1502908031659784,
-        "sector_etf": null,
-        "sector_etf_pct": null
+        "ticker_pct": 3.678537215553454,
+        "spx_pct": -1.0498582763659903,
+        "sector_etf": "IHI",
+        "sector_etf_pct": 1.6595824678335167
       },
       "implied_move": {
-        "pct": 6.2,
+        "pct": 9.3,
         "expiry": "2026-07-31",
         "method": "ATM straddle",
-        "notes": [
-          "wide market"
-        ]
+        "notes": []
       },
       "post_earnings_moves": [
         {
-          "event_date": "2026-04-28",
-          "move_pct": -0.8576949846614107,
+          "event_date": "2026-04-22",
+          "move_pct": 8.988579045147697,
           "window_label": "earnings-day close vs prior close"
         }
       ],
@@ -62,7 +60,216 @@
           "source": "yfinance"
         },
         "revenue": {
-          "beats": 17,
+          "beats": 18,
+          "total": 20,
+          "source": "fmp"
+        }
+      },
+      "na_fields": [
+        {
+          "field": "beat_rates.eps",
+          "reason": "no yfinance surprise history"
+        },
+        {
+          "field": "consensus.eps.range",
+          "reason": "estimate range not available on FMP Starter plan"
+        }
+      ]
+    },
+    {
+      "ticker": "CP",
+      "company_name": "Canadian Pacific Kansas City Ltd",
+      "tier": 1,
+      "event_date": "2026-07-29",
+      "event_hour": "amc",
+      "call_datetime_utc": null,
+      "last_price": 92.36000061035156,
+      "day_change_pct": 0.04332854815811523,
+      "consensus": {
+        "eps": {
+          "mean": 0.91,
+          "count": null,
+          "low": null,
+          "high": null
+        },
+        "revenue": {
+          "mean": 2897769000.0,
+          "count": null,
+          "low": null,
+          "high": null
+        }
+      },
+      "qtd": {
+        "since": "2026-06-30",
+        "ticker_pct": 6.589727621374948,
+        "spx_pct": -1.0498582763659903,
+        "sector_etf": null,
+        "sector_etf_pct": null
+      },
+      "implied_move": {
+        "pct": 5.0,
+        "expiry": "2026-08-21",
+        "method": "ATM straddle",
+        "notes": [
+          "wide market",
+          "(includes 22 extra days of time value)"
+        ]
+      },
+      "post_earnings_moves": [],
+      "beat_rates": {
+        "eps": {
+          "beats": null,
+          "total": null,
+          "source": "yfinance"
+        },
+        "revenue": {
+          "beats": 8,
+          "total": 20,
+          "source": "fmp"
+        }
+      },
+      "na_fields": [
+        {
+          "field": "qtd.sector_etf",
+          "reason": "no mapped ETF for sector 'Industrials'"
+        },
+        {
+          "field": "post_earnings_moves",
+          "reason": "no computable prior reactions"
+        },
+        {
+          "field": "beat_rates.eps",
+          "reason": "no yfinance surprise history"
+        },
+        {
+          "field": "consensus.eps.range",
+          "reason": "estimate range not available on FMP Starter plan"
+        }
+      ]
+    },
+    {
+      "ticker": "FICO",
+      "company_name": "Fair Isaac Corp",
+      "tier": 1,
+      "event_date": "2026-07-29",
+      "event_hour": "amc",
+      "call_datetime_utc": "2026-07-29T21:00:00+00:00",
+      "last_price": 1237.3699951171875,
+      "day_change_pct": 2.5850036250995334,
+      "consensus": {
+        "eps": {
+          "mean": 11.9037,
+          "count": null,
+          "low": null,
+          "high": null
+        },
+        "revenue": {
+          "mean": 689122383.0,
+          "count": null,
+          "low": null,
+          "high": null
+        }
+      },
+      "qtd": {
+        "since": "2026-06-30",
+        "ticker_pct": 3.564670046031535,
+        "spx_pct": -1.0498582763659903,
+        "sector_etf": null,
+        "sector_etf_pct": null
+      },
+      "implied_move": {
+        "pct": 13.0,
+        "expiry": "2026-08-21",
+        "method": "ATM straddle",
+        "notes": [
+          "(includes 22 extra days of time value)"
+        ]
+      },
+      "post_earnings_moves": [
+        {
+          "event_date": "2026-04-28",
+          "move_pct": 3.27263199297996,
+          "window_label": "next-day close vs earnings-day close"
+        }
+      ],
+      "beat_rates": {
+        "eps": {
+          "beats": null,
+          "total": null,
+          "source": "yfinance"
+        },
+        "revenue": {
+          "beats": 16,
+          "total": 20,
+          "source": "fmp"
+        }
+      },
+      "na_fields": [
+        {
+          "field": "qtd.sector_etf",
+          "reason": "no mapped ETF for sector 'Tech'"
+        },
+        {
+          "field": "beat_rates.eps",
+          "reason": "no yfinance surprise history"
+        },
+        {
+          "field": "consensus.eps.range",
+          "reason": "estimate range not available on FMP Starter plan"
+        }
+      ]
+    },
+    {
+      "ticker": "HOOD",
+      "company_name": "Robinhood Markets Inc",
+      "tier": 1,
+      "event_date": "2026-07-29",
+      "event_hour": "amc",
+      "call_datetime_utc": "2026-07-29T21:00:00+00:00",
+      "last_price": 94.91000366210938,
+      "day_change_pct": -6.566251278513153,
+      "consensus": {
+        "eps": {
+          "mean": 0.4217,
+          "count": null,
+          "low": null,
+          "high": null
+        },
+        "revenue": {
+          "mean": 1229952995.0,
+          "count": null,
+          "low": null,
+          "high": null
+        }
+      },
+      "qtd": {
+        "since": "2026-06-30",
+        "ticker_pct": -5.355001179254255,
+        "spx_pct": -1.0498582763659903,
+        "sector_etf": null,
+        "sector_etf_pct": null
+      },
+      "implied_move": {
+        "pct": 11.5,
+        "expiry": "2026-07-31",
+        "method": "ATM straddle",
+        "notes": []
+      },
+      "post_earnings_moves": [
+        {
+          "event_date": "2026-04-28",
+          "move_pct": -13.244794427929737,
+          "window_label": "next-day close vs earnings-day close"
+        }
+      ],
+      "beat_rates": {
+        "eps": {
+          "beats": null,
+          "total": null,
+          "source": "yfinance"
+        },
+        "revenue": {
+          "beats": 11,
           "total": 20,
           "source": "fmp"
         }
@@ -83,93 +290,23 @@
       ]
     },
     {
-      "ticker": "UPS",
-      "company_name": "United Parcel Service Inc",
+      "ticker": "MSFT",
+      "company_name": "Microsoft Corporation",
       "tier": 1,
-      "event_date": "2026-07-28",
-      "event_hour": "bmo",
-      "call_datetime_utc": null,
-      "last_price": 114.0999984741211,
-      "day_change_pct": -1.5020700265685243,
-      "consensus": {
-        "eps": {
-          "mean": 1.6653,
-          "count": null,
-          "low": null,
-          "high": null
-        },
-        "revenue": {
-          "mean": 21861848596.0,
-          "count": null,
-          "low": null,
-          "high": null
-        }
-      },
-      "qtd": {
-        "since": "2026-06-30",
-        "ticker_pct": 6.139533464298692,
-        "spx_pct": -1.1502908031659784,
-        "sector_etf": null,
-        "sector_etf_pct": null
-      },
-      "implied_move": {
-        "pct": 7.1,
-        "expiry": "2026-07-31",
-        "method": "ATM straddle",
-        "notes": []
-      },
-      "post_earnings_moves": [
-        {
-          "event_date": "2026-04-28",
-          "move_pct": -3.9726503195301968,
-          "window_label": "earnings-day close vs prior close"
-        }
-      ],
-      "beat_rates": {
-        "eps": {
-          "beats": null,
-          "total": null,
-          "source": "yfinance"
-        },
-        "revenue": {
-          "beats": 11,
-          "total": 20,
-          "source": "fmp"
-        }
-      },
-      "na_fields": [
-        {
-          "field": "qtd.sector_etf",
-          "reason": "no mapped ETF for sector 'Industrials'"
-        },
-        {
-          "field": "beat_rates.eps",
-          "reason": "no yfinance surprise history"
-        },
-        {
-          "field": "consensus.eps.range",
-          "reason": "estimate range not available on FMP Starter plan"
-        }
-      ]
-    },
-    {
-      "ticker": "V",
-      "company_name": "Visa Inc",
-      "tier": 1,
-      "event_date": "2026-07-28",
+      "event_date": "2026-07-29",
       "event_hour": "amc",
-      "call_datetime_utc": null,
-      "last_price": 351.6000061035156,
-      "day_change_pct": -0.514970079528588,
+      "call_datetime_utc": "2026-07-29T21:30:00+00:00",
+      "last_price": 381.70001220703125,
+      "day_change_pct": 0.03145490827331268,
       "consensus": {
         "eps": {
-          "mean": 3.288,
+          "mean": 4.3265,
           "count": null,
           "low": null,
           "high": null
         },
         "revenue": {
-          "mean": 11604075277.0,
+          "mean": 89370759268.0,
           "count": null,
           "low": null,
           "high": null
@@ -177,21 +314,21 @@
       },
       "qtd": {
         "since": "2026-06-30",
-        "ticker_pct": 2.480401602046116,
-        "spx_pct": -1.1502908031659784,
+        "ticker_pct": 2.3269592646525,
+        "spx_pct": -1.0498582763659903,
         "sector_etf": null,
         "sector_etf_pct": null
       },
       "implied_move": {
-        "pct": 4.0,
+        "pct": 7.2,
         "expiry": "2026-07-31",
         "method": "ATM straddle",
         "notes": []
       },
       "post_earnings_moves": [
         {
-          "event_date": "2026-04-28",
-          "move_pct": 8.26382856375617,
+          "event_date": "2026-04-29",
+          "move_pct": -3.9296919836194384,
           "window_label": "next-day close vs earnings-day close"
         }
       ],
@@ -210,7 +347,7 @@
       "na_fields": [
         {
           "field": "qtd.sector_etf",
-          "reason": "no mapped ETF for sector 'Financials'"
+          "reason": "no mapped ETF for sector 'Tech'"
         },
         {
           "field": "beat_rates.eps",
@@ -223,23 +360,23 @@
       ]
     },
     {
-      "ticker": "VLTO",
-      "company_name": "Veralto Corp",
+      "ticker": "OPCH",
+      "company_name": "Option Care Health Inc",
       "tier": 1,
-      "event_date": "2026-07-28",
-      "event_hour": "amc",
-      "call_datetime_utc": "2026-07-29T11:30:00+00:00",
-      "last_price": 91.5,
-      "day_change_pct": 0.38398076605815934,
+      "event_date": "2026-07-29",
+      "event_hour": "bmo",
+      "call_datetime_utc": "2026-07-29T12:30:00+00:00",
+      "last_price": 21.65999984741211,
+      "day_change_pct": 2.7514227979374937,
       "consensus": {
         "eps": {
-          "mean": 1.0234,
+          "mean": 0.4358,
           "count": null,
           "low": null,
           "high": null
         },
         "revenue": {
-          "mean": 1482339337.0,
+          "mean": 1447160394.0,
           "count": null,
           "low": null,
           "high": null
@@ -247,13 +384,13 @@
       },
       "qtd": {
         "since": "2026-06-30",
-        "ticker_pct": 3.179972581325792,
-        "spx_pct": -1.1502908031659784,
-        "sector_etf": null,
-        "sector_etf_pct": null
+        "ticker_pct": 3.2904175329094962,
+        "spx_pct": -1.0498582763659903,
+        "sector_etf": "XLV",
+        "sector_etf_pct": 2.464391511320221
       },
       "implied_move": {
-        "pct": 8.5,
+        "pct": 13.4,
         "expiry": "2026-08-21",
         "method": "ATM straddle",
         "notes": [
@@ -263,8 +400,77 @@
       },
       "post_earnings_moves": [
         {
-          "event_date": "2026-04-28",
-          "move_pct": 4.521037113522793,
+          "event_date": "2026-04-30",
+          "move_pct": -24.339414630676767,
+          "window_label": "earnings-day close vs prior close"
+        }
+      ],
+      "beat_rates": {
+        "eps": {
+          "beats": null,
+          "total": null,
+          "source": "yfinance"
+        },
+        "revenue": {
+          "beats": 17,
+          "total": 20,
+          "source": "fmp"
+        }
+      },
+      "na_fields": [
+        {
+          "field": "beat_rates.eps",
+          "reason": "no yfinance surprise history"
+        },
+        {
+          "field": "consensus.eps.range",
+          "reason": "estimate range not available on FMP Starter plan"
+        }
+      ]
+    },
+    {
+      "ticker": "WAY",
+      "company_name": "Waystar Holding Corp",
+      "tier": 1,
+      "event_date": "2026-07-29",
+      "event_hour": "amc",
+      "call_datetime_utc": "2026-07-29T20:30:00+00:00",
+      "last_price": 22.510000228881836,
+      "day_change_pct": 4.309547305207159,
+      "consensus": {
+        "eps": {
+          "mean": 0.4004,
+          "count": null,
+          "low": null,
+          "high": null
+        },
+        "revenue": {
+          "mean": 319364262.0,
+          "count": null,
+          "low": null,
+          "high": null
+        }
+      },
+      "qtd": {
+        "since": "2026-06-30",
+        "ticker_pct": 9.644420243611055,
+        "spx_pct": -1.0498582763659903,
+        "sector_etf": "XLV",
+        "sector_etf_pct": 2.464391511320221
+      },
+      "implied_move": {
+        "pct": 15.3,
+        "expiry": "2026-08-21",
+        "method": "ATM straddle",
+        "notes": [
+          "wide market",
+          "(includes 22 extra days of time value)"
+        ]
+      },
+      "post_earnings_moves": [
+        {
+          "event_date": "2026-04-29",
+          "move_pct": -15.413535366862313,
           "window_label": "next-day close vs earnings-day close"
         }
       ],
@@ -275,16 +481,12 @@
           "source": "yfinance"
         },
         "revenue": {
-          "beats": 9,
-          "total": 11,
+          "beats": 6,
+          "total": 8,
           "source": "fmp"
         }
       },
       "na_fields": [
-        {
-          "field": "qtd.sector_etf",
-          "reason": "no mapped ETF for sector 'Industrials'"
-        },
         {
           "field": "beat_rates.eps",
           "reason": "no yfinance surprise history"
