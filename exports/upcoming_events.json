@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-07-27T13:46:28Z",
+  "generated_at": "2026-07-27T20:48:49Z",
   "window": {
     "start": "2026-07-25",
     "end": "2026-08-10"
   },
   "counts": {
-    "events": 565
+    "events": 566
   },
   "events": [
     {
@@ -2099,6 +2099,15 @@
       "company_name": "Pediatrix Medical Group Inc"
     },
     {
+      "ticker": "MNKD",
+      "event_date": "2026-08-04",
+      "event_hour": "amc",
+      "tier": 3,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "MannKind Corp"
+    },
+    {
       "ticker": "MRK",
       "event_date": "2026-08-04",
       "event_hour": "",
@@ -2151,6 +2160,15 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Pfizer Inc"
+    },
+    {
+      "ticker": "PNTG",
+      "event_date": "2026-08-04",
+      "event_hour": "",
+      "tier": 1,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Pennant Group Inc"
     },
     {
       "ticker": "PRCT",
@@ -2223,6 +2241,15 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Smith & Nephew PLC"
+    },
+    {
+      "ticker": "SPCX",
+      "event_date": "2026-08-04",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Space Exploration Technologies Corp."
     },
     {
       "ticker": "SPOT",
@@ -4124,15 +4151,6 @@
       "company_name": "Soleno Therapeutics Inc"
     },
     {
-      "ticker": "SPCX",
-      "event_date": "2026-08-06",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Space Exploration Technologies Corp."
-    },
-    {
       "ticker": "SPT",
       "event_date": "2026-08-06",
       "event_hour": "",
@@ -4851,15 +4869,6 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Pliant Therapeutics Inc"
-    },
-    {
-      "ticker": "PNTG",
-      "event_date": "2026-08-10",
-      "event_hour": "",
-      "tier": 1,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Pennant Group Inc"
     },
     {
       "ticker": "PRAX",
