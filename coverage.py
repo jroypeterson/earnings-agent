@@ -173,7 +173,7 @@ def _read_position_lists(exports_path: Path) -> dict[str, dict[str, dict]]:
         if not watchlist_path.exists():
             logger.warning(f"Neither position files nor legacy watchlist found at {exports_path}")
             return lists
-        with open(watchlist_path, newline="", encoding="utf-8") as f:
+        with open(watchlist_path, newline="", encoding="utf-8-sig") as f:
             for row in csv.DictReader(f):
                 if row.get("Core", "").strip().upper() == "Y":
                     ticker = row.get("Ticker", "").strip().upper()
@@ -209,7 +209,10 @@ def _read_universe_tickers(exports_path: Path) -> set[str]:
         return set()
 
     tickers = set()
-    with open(universe_path, newline="", encoding="utf-8") as f:
+    # utf-8-sig, not utf-8. A BOM on CM's export makes the first field
+    # "﻿Ticker", so a plain read returns zero tickers and silently collapses
+    # Tier 2/3 -- which is exactly what happened between 2026-07-25 and 07-27.
+    with open(universe_path, newline="", encoding="utf-8-sig") as f:
         for row in csv.DictReader(f):
             ticker = row.get("Ticker", "").strip().upper()
             if ticker:
