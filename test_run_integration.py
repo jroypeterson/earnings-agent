@@ -657,3 +657,69 @@ def test_check_replies_no_raise_on_partial_fetch_failure(monkeypatch, tmp_path):
 
     # One failure of two attempts -> must complete without raising.
     main.run_check_replies(dry_run=True)
+
+
+def test_run_refuses_to_sync_when_coverage_collapses(monkeypatch, tmp_path):
+    """2026-07-26 regression, at the run() level.
+
+    Coverage Manager published universe.csv with a UTF-8 BOM; the reader
+    returned zero universe tickers and the entire Tier 2 slice fell out of
+    coverage. run() sailed on, posted a routine-looking "Removed (197)" diff,
+    re-baselined its snapshot onto the damage, and stopped tracking those
+    names for two days.
+
+    run() must now HARD STOP: SystemExit(1) before any calendar write, and
+    before the snapshot is re-baselined -- warn-and-proceed is not acceptable
+    for a whole-tier disappearance.
+    """
+    import json
+
+    db_path = str(tmp_path / "ea.db")
+    prior = {f"T2_{i:04d}": {"tier": 2, "position": "", "name": ""} for i in range(199)}
+    prior["KEEP"] = {"tier": 1, "position": "Portfolio", "name": "Keep"}
+    conn = storage.init_db(db_path)
+    storage.kv_set(conn, main.COVERAGE_SNAPSHOT_KEY, json.dumps(prior, sort_keys=True))
+    conn.close()
+
+    monkeypatch.delenv("COVERAGE_ALLOW_MASS_REMOVAL", raising=False)
+    with pytest.raises(SystemExit) as exc:
+        _run_env(
+            monkeypatch, tmp_path,
+            coverage=[_tkr("KEEP", tier=1)],       # the 199 Tier 2 names are gone
+            events=[_ev("KEEP", "2026-06-03", eps_act=1.0, rev_act=1e9)],
+        )
+    assert exc.value.code == 1
+
+    # Nothing was written and the last-good baseline survives, so the guard is
+    # still armed on the next run.
+    conn = sqlite3.connect(db_path)
+    try:
+        kept = conn.execute(
+            "SELECT value FROM kv_store WHERE key = ?", (main.COVERAGE_SNAPSHOT_KEY,)
+        ).fetchone()[0]
+        assert json.loads(kept) == prior
+        assert conn.execute("SELECT COUNT(*) FROM events").fetchone()[0] == 0
+    finally:
+        conn.close()
+
+
+def test_run_proceeds_on_a_normal_coverage_edit(monkeypatch, tmp_path):
+    """Counterpart: a couple of retirements must not block the daily sync."""
+    import json
+
+    db_path = str(tmp_path / "ea.db")
+    prior = {f"T2_{i:04d}": {"tier": 2, "position": "", "name": ""} for i in range(199)}
+    prior["KEEP"] = {"tier": 1, "position": "Portfolio", "name": "Keep"}
+    conn = storage.init_db(db_path)
+    storage.kv_set(conn, main.COVERAGE_SNAPSHOT_KEY, json.dumps(prior, sort_keys=True))
+    conn.close()
+
+    survivors = [_tkr("KEEP", tier=1)] + [
+        _tkr(f"T2_{i:04d}", tier=2) for i in range(196)      # 3 retired
+    ]
+    db, rec = _run_env(
+        monkeypatch, tmp_path,
+        coverage=survivors,
+        events=[_ev("KEEP", "2026-06-03", eps_act=1.0, rev_act=1e9)],
+    )
+    assert _row(db, "KEEP", "2026-06-03") is not None

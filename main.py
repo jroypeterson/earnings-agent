@@ -9,6 +9,7 @@ Usage:
     python main.py --cleanup --dry-run # Preview which duplicates would be deleted
 """
 
+import os
 import re
 import sys
 import time
@@ -35,6 +36,11 @@ from coverage import (
     compute_coverage_freshness,
     CoverageHealth,
     COVERAGE_STALENESS_DAYS,
+    detect_coverage_collapse,
+    TierCollapse,
+    COVERAGE_COLLAPSE_MIN_LOST,
+    COVERAGE_COLLAPSE_MAX_TIER_LOSS,
+    COVERAGE_COLLAPSE_OVERRIDE_ENV,
 )
 from storage import (
     init_db,
@@ -511,6 +517,120 @@ def _alert_coverage_stale_if_needed(conn, health: CoverageHealth) -> None:
         logger.error(f"Coverage staleness Slack post failed: {exc}")
 
 
+COVERAGE_SNAPSHOT_KEY = "coverage_snapshot"
+
+
+def _coverage_snapshot_map(coverage) -> dict[str, dict]:
+    """The {ticker: {tier, position, name}} shape persisted in kv_store."""
+    return {
+        t.ticker: {
+            "tier": t.tier,
+            "position": t.position or "",
+            "name": t.company_name or "",
+        }
+        for t in coverage
+    }
+
+
+def _load_coverage_snapshot(conn) -> dict[str, dict] | None:
+    """Prior snapshot from kv_store, or None when absent/unparseable."""
+    import json as _json
+
+    raw = kv_get(conn, COVERAGE_SNAPSHOT_KEY)
+    if not raw:
+        return None
+    try:
+        prior = _json.loads(raw)
+    except (ValueError, TypeError):
+        return None
+    return prior if isinstance(prior, dict) else None
+
+
+def _post_coverage_collapse_alert(collapses: list[TierCollapse]) -> None:
+    """Best-effort Slack error for a refused run. Never raises."""
+    webhook = SLACK_WEBHOOK_STATUS or SLACK_WEBHOOK_EARNINGS
+    if not webhook:
+        logger.error("No Slack webhook configured; coverage-collapse alert not posted")
+        return
+
+    lines = [
+        ":rotating_light: *Coverage collapse - daily sync REFUSED*",
+        "The Coverage Manager load lost an implausible share of a tier since the "
+        "last run. This is a broken exports read, not a universe edit, so the sync "
+        "aborted BEFORE writing the calendar, TickTick, or the coverage snapshot.",
+        "",
+    ]
+    for c in collapses:
+        lines.append(f"  - {c.describe()}")
+        sample = (c.removed or c.demoted)[:12]
+        if sample:
+            shown = ", ".join(f"`{t}`" for t in sample)
+            more = f" ... +{len(c.removed) + len(c.demoted) - len(sample)} more" \
+                if (len(c.removed) + len(c.demoted)) > len(sample) else ""
+            lines.append(f"    {shown}{more}")
+    lines.append("")
+    lines.append(
+        f"_Threshold: >{COVERAGE_COLLAPSE_MAX_TIER_LOSS:.0%} of a tier AND "
+        f">={COVERAGE_COLLAPSE_MIN_LOST} names. Check Coverage Manager's "
+        f"`exports/` (encoding, truncation, half-written publish). If the edit is "
+        f"real, re-run once with `{COVERAGE_COLLAPSE_OVERRIDE_ENV}=1`._"
+    )
+    text = "\n".join(lines)
+
+    try:
+        import urllib.request
+        import json as _json
+        req = urllib.request.Request(
+            webhook,
+            data=_json.dumps({"text": text}).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+        )
+        urlopen_with_retry(req, timeout=10, label="Coverage collapse alert").read()
+    except Exception as exc:
+        logger.error(f"Coverage collapse Slack post failed: {exc}")
+
+
+def _assert_coverage_not_collapsed(conn, coverage) -> None:
+    """Abort the run when coverage lost an implausible share of a tier.
+
+    This is a HARD STOP, not warn-and-proceed. A collapsed load makes the
+    agent silently stop tracking whole tiers -- no calendar events, no
+    TickTick tasks, no results detection for the missing names -- while every
+    other signal still reports success. The 2026-07-26 BOM incident published
+    a routine-looking "Removed (197)" diff and ran green for two days.
+
+    Runs BEFORE `_alert_coverage_changes_if_needed`, which overwrites the
+    snapshot: exiting here preserves the last-good baseline so the guard is
+    still armed on the next run rather than re-baselining onto the damage.
+    Applies in --dry-run too, because the snapshot write is not gated on it.
+    """
+    prior = _load_coverage_snapshot(conn)
+    if prior is None:
+        logger.info("No prior coverage snapshot; collapse guard has no baseline (skipped)")
+        return
+
+    collapses = detect_coverage_collapse(prior, _coverage_snapshot_map(coverage))
+    if not collapses:
+        return
+
+    summary = "; ".join(c.describe() for c in collapses)
+    if os.getenv(COVERAGE_COLLAPSE_OVERRIDE_ENV, "").strip().lower() in ("1", "true", "yes"):
+        logger.warning(
+            f"Coverage collapse detected but {COVERAGE_COLLAPSE_OVERRIDE_ENV} is set "
+            f"-- proceeding on operator override: {summary}"
+        )
+        return
+
+    logger.error(f"Coverage collapse -- refusing to sync: {summary}")
+    for c in collapses:
+        if c.removed:
+            logger.error(f"  Tier {c.tier} removed: {', '.join(c.removed[:40])}")
+        if c.demoted:
+            logger.error(f"  Tier {c.tier} demoted: {', '.join(c.demoted[:40])}")
+    _post_coverage_collapse_alert(collapses)
+    raise SystemExit(1)
+
+
 def _alert_coverage_changes_if_needed(conn, coverage) -> None:
     """Compare current coverage to the prior snapshot in kv_store, post a
     Tier 1/2 diff to #status-reports, and persist the new snapshot.
@@ -524,29 +644,15 @@ def _alert_coverage_changes_if_needed(conn, coverage) -> None:
     """
     import json as _json
 
-    KEY = "coverage_snapshot"
+    KEY = COVERAGE_SNAPSHOT_KEY
 
-    current = {
-        t.ticker: {
-            "tier": t.tier,
-            "position": t.position or "",
-            "name": t.company_name or "",
-        }
-        for t in coverage
-    }
+    current = _coverage_snapshot_map(coverage)
     current_json = _json.dumps(current, sort_keys=True)
 
-    prior_raw = kv_get(conn, KEY)
-    if not prior_raw:
+    prior = _load_coverage_snapshot(conn)
+    if prior is None:
         kv_set(conn, KEY, current_json)
         logger.info(f"Coverage snapshot seeded ({len(current)} tickers); no diff alert")
-        return
-
-    try:
-        prior = _json.loads(prior_raw)
-    except (ValueError, TypeError):
-        logger.warning("Prior coverage snapshot unparseable; reseeding")
-        kv_set(conn, KEY, current_json)
         return
 
     if prior == current:
@@ -745,6 +851,9 @@ def run(
 
     conn = init_db()
     _alert_coverage_stale_if_needed(conn, compute_coverage_freshness())
+    # HARD STOP before any Calendar/TickTick/DB write and before the snapshot
+    # is re-baselined. See _assert_coverage_not_collapsed.
+    _assert_coverage_not_collapsed(conn, coverage)
     _alert_coverage_changes_if_needed(conn, coverage)
 
     cal_service = None

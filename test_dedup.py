@@ -11,6 +11,8 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch, call
 from pathlib import Path
 
+import pytest
+
 import earnings_agent as ea
 from storage import init_db as init_db_new, find_event_by_ticker_quarter, date_to_quarter
 from calendar_sync import find_calendar_event as find_cal_new, CalendarError
@@ -839,6 +841,174 @@ def test_coverage_freshness_missing(tmp_path, monkeypatch):
     assert h.stale
     assert h.source == "missing"
     assert h.age_days is None
+
+
+# ── Coverage collapse (mass-removal) guard ────────────────────────────────
+
+
+def _snap(counts, *, prefix="T"):
+    """Build a {ticker: {...}} snapshot: counts = {tier: n_tickers}."""
+    snap = {}
+    for tier, n in counts.items():
+        for i in range(n):
+            snap[f"{prefix}{tier}_{i:04d}"] = {"tier": tier, "position": "", "name": ""}
+    return snap
+
+
+def test_coverage_collapse_reproduces_the_2026_07_26_incident():
+    """The reference incident: CM shipped universe.csv with a UTF-8 BOM
+    (CM commit 4640968, 2026-07-25 22:06 ET), `_read_universe_tickers`
+    returned an empty set, and every Tier 2/3 name not in a position list
+    vanished. Reproduced locally against the live exports: 197 of 199 Tier 2
+    and 817 of 853 Tier 3 gone; Tier 1 untouched (it comes from the position
+    JSON files, which have no BOM). The guard must trip on T2 and T3 and
+    stay quiet on T1.
+    """
+    from coverage import detect_coverage_collapse
+
+    prior = _snap({1: 47, 2: 199, 3: 853})
+    # Survivors: all of T1, 2 of T2, 36 of T3 -- the position-list tickers.
+    current = {
+        t: v for t, v in prior.items()
+        if v["tier"] == 1
+        or (v["tier"] == 2 and t in list(prior)[:0] + [f"T2_{i:04d}" for i in range(2)])
+        or (v["tier"] == 3 and t in [f"T3_{i:04d}" for i in range(36)])
+    }
+
+    collapses = detect_coverage_collapse(prior, current)
+    tiers = {c.tier: c for c in collapses}
+    assert set(tiers) == {2, 3}, "Tier 1 survived the BOM and must not trip"
+    assert tiers[2].lost_count == 197
+    assert tiers[3].lost_count == 817
+    assert tiers[2].fraction > 0.98
+    # Worst tier first, and the removed names are enumerable for the alert.
+    assert collapses[0].tier == 2
+    assert "T2_0100" in collapses[0].removed
+
+
+def test_coverage_collapse_ignores_an_ordinary_universe_edit():
+    """A real weekly prune retires a handful of acquired/delisted names.
+    Below the 25-name floor, so no trip regardless of tier size."""
+    from coverage import detect_coverage_collapse
+
+    prior = _snap({1: 47, 2: 199, 3: 853})
+    dropped = [f"T2_{i:04d}" for i in range(9)] + [f"T3_{i:04d}" for i in range(12)]
+    current = {t: v for t, v in prior.items() if t not in dropped}
+    assert detect_coverage_collapse(prior, current) == []
+
+
+def test_coverage_collapse_ignores_a_big_but_proportionally_small_prune():
+    """30 Tier 3 retirements out of 853 is 3.5% -- loud in absolute terms,
+    routine in proportion. Both thresholds must be crossed to trip."""
+    from coverage import detect_coverage_collapse
+
+    prior = _snap({1: 47, 2: 199, 3: 853})
+    dropped = [f"T3_{i:04d}" for i in range(30)]
+    current = {t: v for t, v in prior.items() if t not in dropped}
+    assert detect_coverage_collapse(prior, current) == []
+
+
+def test_coverage_collapse_catches_mass_demotion_not_just_removal():
+    """The same defect class one file over: a broken universe_metadata.json
+    blanks every sector, so Tier 2 names stay in coverage but fall to Tier 3.
+    Nothing is 'removed', yet the Tier 2 slice loses its Calendar + TickTick
+    treatment exactly as if it had been. Must trip."""
+    from coverage import detect_coverage_collapse
+
+    prior = _snap({1: 47, 2: 199, 3: 853})
+    current = {
+        t: ({**v, "tier": 3} if v["tier"] == 2 else v) for t, v in prior.items()
+    }
+    collapses = detect_coverage_collapse(prior, current)
+    assert [c.tier for c in collapses] == [2]
+    assert collapses[0].lost_count == 199
+    assert collapses[0].removed == [] and len(collapses[0].demoted) == 199
+
+
+def test_coverage_collapse_promotion_is_not_a_loss():
+    """T2 -> T1 is an upgrade. Numerically lower tier == more attention."""
+    from coverage import detect_coverage_collapse
+
+    prior = _snap({1: 47, 2: 199})
+    promoted = [f"T2_{i:04d}" for i in range(60)]
+    current = {
+        t: ({**v, "tier": 1} if t in promoted else v) for t, v in prior.items()
+    }
+    assert detect_coverage_collapse(prior, current) == []
+
+
+def _cov_objs(snapshot):
+    from coverage import TickerInfo
+    return [
+        TickerInfo(ticker=t, tier=v["tier"], company_name="", sector="", subsector="")
+        for t, v in snapshot.items()
+    ]
+
+
+def test_assert_coverage_not_collapsed_exits_and_preserves_the_baseline(tmp_path, monkeypatch):
+    """The guard must exit non-zero AND leave the last-good snapshot in place.
+    Re-baselining onto the damage would disarm the guard for the next run and
+    turn the recovery into a second 197-name diff (which is what happened)."""
+    import json
+    import main as m
+    from storage import init_db as _init, kv_get, kv_set
+
+    monkeypatch.setattr(m, "SLACK_WEBHOOK_STATUS", None)
+    monkeypatch.setattr(m, "SLACK_WEBHOOK_EARNINGS", None)
+    monkeypatch.delenv("COVERAGE_ALLOW_MASS_REMOVAL", raising=False)
+
+    conn = _init(tmp_path / "guard.db")
+    prior = _snap({1: 47, 2: 199, 3: 853})
+    baseline = json.dumps(prior, sort_keys=True)
+    kv_set(conn, m.COVERAGE_SNAPSHOT_KEY, baseline)
+
+    survivors = {t: v for t, v in prior.items() if v["tier"] == 1}
+    with pytest.raises(SystemExit) as exc:
+        m._assert_coverage_not_collapsed(conn, _cov_objs(survivors))
+    assert exc.value.code == 1
+    assert kv_get(conn, m.COVERAGE_SNAPSHOT_KEY) == baseline
+
+
+def test_assert_coverage_not_collapsed_passes_on_a_healthy_load(tmp_path, monkeypatch):
+    import json
+    import main as m
+    from storage import init_db as _init, kv_set
+
+    monkeypatch.setattr(m, "SLACK_WEBHOOK_STATUS", None)
+    monkeypatch.setattr(m, "SLACK_WEBHOOK_EARNINGS", None)
+    conn = _init(tmp_path / "guard_ok.db")
+    prior = _snap({1: 47, 2: 199, 3: 853})
+    kv_set(conn, m.COVERAGE_SNAPSHOT_KEY, json.dumps(prior, sort_keys=True))
+    m._assert_coverage_not_collapsed(conn, _cov_objs(prior))  # no raise
+
+
+def test_assert_coverage_not_collapsed_skips_without_a_baseline(tmp_path, monkeypatch):
+    """First run (or a lost DB artifact) has nothing to compare against.
+    No baseline means no opinion -- it must not block the seeding run."""
+    import main as m
+    from storage import init_db as _init
+
+    monkeypatch.setattr(m, "SLACK_WEBHOOK_STATUS", None)
+    monkeypatch.setattr(m, "SLACK_WEBHOOK_EARNINGS", None)
+    conn = _init(tmp_path / "guard_fresh.db")
+    m._assert_coverage_not_collapsed(conn, _cov_objs(_snap({1: 3})))  # no raise
+
+
+def test_assert_coverage_not_collapsed_operator_override(tmp_path, monkeypatch):
+    """A genuinely huge intentional prune is unblockable by explicit env var
+    -- an operator decision, never a CI default."""
+    import json
+    import main as m
+    from storage import init_db as _init, kv_set
+
+    monkeypatch.setattr(m, "SLACK_WEBHOOK_STATUS", None)
+    monkeypatch.setattr(m, "SLACK_WEBHOOK_EARNINGS", None)
+    monkeypatch.setenv("COVERAGE_ALLOW_MASS_REMOVAL", "1")
+
+    conn = _init(tmp_path / "guard_override.db")
+    prior = _snap({2: 199})
+    kv_set(conn, m.COVERAGE_SNAPSHOT_KEY, json.dumps(prior, sort_keys=True))
+    m._assert_coverage_not_collapsed(conn, _cov_objs({}))  # no raise
 
 
 def test_reported_row_survives_same_quarter_phantom_upsert():

@@ -49,6 +49,114 @@ logger = logging.getLogger("earnings_agent")
 COVERAGE_STALENESS_DAYS = 10
 
 
+# --- Mass-removal (collapse) guard -----------------------------------------
+# A tier does not lose a fifth of its names in one overnight run. When it
+# does, the cause is a broken read of Coverage Manager's exports, not a
+# universe edit -- 2026-07-26 is the reference incident: a UTF-8 BOM on CM's
+# universe.csv (CM commit 4640968) made `csv.DictReader`'s first field
+# a BOM-prefixed "Ticker", so `_read_universe_tickers` returned an EMPTY
+# set. Tier 1 survived (derived from the position *JSON* files), but every Tier 2/3
+# name not in a position list vanished: 197 Tier 2 + 817 Tier 3 gone, posted
+# to #status-reports as a routine "Removed (197)" diff, and re-added two days
+# later once CM republished BOM-free (3fc306b) -- a 197-name flip-flop during
+# which the agent silently stopped tracking the entire Tier 2 slice.
+#
+# BOTH conditions must trip: a percentage alone would fire on a small tier
+# losing a handful of names; a count alone would fire on a legitimately large
+# universe pruning of Tier 3. Set the floor above any plausible manual edit.
+COVERAGE_COLLAPSE_MIN_LOST = 25
+COVERAGE_COLLAPSE_MAX_TIER_LOSS = 0.20
+
+# Escape hatch for a genuinely large, intentional universe edit. Explicit
+# operator action -- never set this in CI as a way to quiet the guard.
+COVERAGE_COLLAPSE_OVERRIDE_ENV = "COVERAGE_ALLOW_MASS_REMOVAL"
+
+
+@dataclass
+class TierCollapse:
+    """One tier that lost an implausible share of its names since the prior run."""
+    tier: int
+    prior_count: int
+    lost_count: int
+    removed: list[str]      # gone from coverage entirely
+    demoted: list[str]      # still present but at a lower-priority (higher) tier
+
+    @property
+    def fraction(self) -> float:
+        return self.lost_count / self.prior_count if self.prior_count else 0.0
+
+    def describe(self) -> str:
+        parts = [
+            f"Tier {self.tier}: {self.lost_count} of {self.prior_count} names lost "
+            f"({self.fraction * 100:.0f}%)"
+        ]
+        if self.removed:
+            parts.append(f"removed={len(self.removed)}")
+        if self.demoted:
+            parts.append(f"demoted={len(self.demoted)}")
+        return " | ".join(parts)
+
+
+def detect_coverage_collapse(
+    prior: dict[str, dict],
+    current: dict[str, dict],
+    *,
+    min_lost: int = COVERAGE_COLLAPSE_MIN_LOST,
+    max_tier_loss: float = COVERAGE_COLLAPSE_MAX_TIER_LOSS,
+) -> list[TierCollapse]:
+    """Pure comparison of two coverage snapshots -- no I/O, no Slack, no exit.
+
+    `prior` and `current` are {ticker: {"tier": int, ...}} maps (the shape
+    persisted in `kv_store.coverage_snapshot`).
+
+    A ticker counts as LOST from tier N if it was tier N before and is now
+    either absent entirely or at a numerically higher (lower-priority) tier.
+    A tier-wide metadata failure demotes rather than removes -- e.g. a broken
+    universe_metadata.json blanks every sector and collapses Tier 2 into
+    Tier 3 -- so both shapes are the same defect and both are caught here.
+
+    Returns one TierCollapse per tripping tier, worst first. Empty list = OK.
+    """
+    prior_by_tier: dict[int, list[str]] = {}
+    for ticker, info in prior.items():
+        try:
+            tier = int(info.get("tier", 3))
+        except (TypeError, ValueError):
+            tier = 3
+        prior_by_tier.setdefault(tier, []).append(ticker)
+
+    collapses: list[TierCollapse] = []
+    for tier, tickers in prior_by_tier.items():
+        removed: list[str] = []
+        demoted: list[str] = []
+        for ticker in tickers:
+            now = current.get(ticker)
+            if now is None:
+                removed.append(ticker)
+                continue
+            try:
+                new_tier = int(now.get("tier", 3))
+            except (TypeError, ValueError):
+                new_tier = 3
+            if new_tier > tier:
+                demoted.append(ticker)
+        lost = len(removed) + len(demoted)
+        if lost < min_lost:
+            continue
+        if lost / len(tickers) <= max_tier_loss:
+            continue
+        collapses.append(TierCollapse(
+            tier=tier,
+            prior_count=len(tickers),
+            lost_count=lost,
+            removed=sorted(removed),
+            demoted=sorted(demoted),
+        ))
+
+    collapses.sort(key=lambda c: (-c.fraction, c.tier))
+    return collapses
+
+
 @dataclass
 class TickerInfo:
     ticker: str
