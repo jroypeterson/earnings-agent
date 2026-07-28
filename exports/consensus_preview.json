@@ -1,13 +1,87 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-07-27T20:48:49Z",
+  "generated_at": "2026-07-28T13:04:31Z",
   "window": {
-    "start": "2026-07-27",
-    "end": "2026-07-30"
+    "start": "2026-07-28",
+    "end": "2026-07-31"
   },
   "counts": {
-    "previews": 0
+    "previews": 1
   },
-  "previews": []
+  "previews": [
+    {
+      "ticker": "LIN",
+      "company_name": "Linde plc",
+      "tier": 1,
+      "event_date": "2026-07-31",
+      "event_hour": "bmo",
+      "call_datetime_utc": "2026-07-31T13:00:00+00:00",
+      "last_price": 507.0199890136719,
+      "day_change_pct": -1.0267900332602742,
+      "consensus": {
+        "eps": {
+          "mean": 4.5257,
+          "count": null,
+          "low": null,
+          "high": null
+        },
+        "revenue": {
+          "mean": 9077776727.0,
+          "count": null,
+          "low": null,
+          "high": null
+        }
+      },
+      "qtd": {
+        "since": "2026-06-30",
+        "ticker_pct": -2.2969925948386045,
+        "spx_pct": -1.0284280936454848,
+        "sector_etf": null,
+        "sector_etf_pct": null
+      },
+      "implied_move": {
+        "pct": 6.1,
+        "expiry": "2026-08-21",
+        "method": "ATM straddle",
+        "notes": [
+          "stale quote",
+          "(includes 21 extra days of time value)"
+        ]
+      },
+      "post_earnings_moves": [
+        {
+          "event_date": "2026-05-01",
+          "move_pct": 1.3529109338827747,
+          "window_label": "earnings-day close vs prior close"
+        }
+      ],
+      "beat_rates": {
+        "eps": {
+          "beats": null,
+          "total": null,
+          "source": "yfinance"
+        },
+        "revenue": {
+          "beats": 9,
+          "total": 20,
+          "source": "fmp"
+        }
+      },
+      "na_fields": [
+        {
+          "field": "qtd.sector_etf",
+          "reason": "no mapped ETF for sector 'Materials'"
+        },
+        {
+          "field": "beat_rates.eps",
+          "reason": "no yfinance surprise history"
+        },
+        {
+          "field": "consensus.eps.range",
+          "reason": "estimate range not available on FMP Starter plan"
+        }
+      ]
+    }
+  ]
 }
