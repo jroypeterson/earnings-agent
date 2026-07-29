@@ -237,7 +237,9 @@ def build_task_content(
     company_name: str | None = None,
     tier: int = 3,
 ) -> str:
-    """Build the TickTick task body with consensus estimates and a review checklist."""
+    """Build the TickTick task body: consensus estimates, results, and (Tier 1
+    only) the model/thesis follow-ups. The review checklist proper is NOT here --
+    it is the task's TickTick `items` array (SUBTASK_TITLES), so it is tickable."""
     lines = []
 
     if company_name:
@@ -260,15 +262,15 @@ def build_task_content(
         lines.append(f"Consensus: {' | '.join(est_parts)}")
         lines.append("")
 
-    # Review checklist
-    lines.append("**Review checklist:**")
-    lines.append("- [ ] Read transcript")
-    lines.append("- [ ] Review company documents / IR materials")
-    lines.append("- [ ] Read sell-side take")
+    # The review checklist itself lives in the task's TickTick `items` array
+    # (SUBTASK_TITLES) so every line is actually tickable — JP 2026-07-28. Only
+    # the Tier 1 follow-ups stay in the body, under their own header, because
+    # they are tier-specific and the items array is uniform across companies.
     if tier == 1:
+        lines.append("**Tier 1 follow-ups:**")
         lines.append("- [ ] Update model if relevant")
         lines.append("- [ ] Update thesis / investment view")
-    lines.append("")
+        lines.append("")
 
     # Results section (populated post-earnings via update)
     if eps_actual is not None or revenue_actual is not None:
@@ -569,9 +571,9 @@ def create_task(
     payload = {
         "title": title,
         "content": content,
-        # The three standard review sub-items (JP's earnings process). Items
-        # make the task CHECKLIST-kind, whose visible note is `desc` — mirror
-        # the body there so it renders either way.
+        # JP's review checklist (SUBTASK_TITLES) — the same items for every
+        # company. Items make the task CHECKLIST-kind, whose visible note is
+        # `desc`, so mirror the body there and it renders either way.
         "items": [{"title": t, "status": 0} for t in SUBTASK_TITLES],
         "desc": content,
         "projectId": list_id,
@@ -630,27 +632,85 @@ def _due_iso(event_date: str) -> str:
     return f"{event_date}T09:00:00.000+0000"
 
 
-# The three review artifacts JP's earnings process covers (2026-07-24 request):
-# every managed earnings task carries these as TickTick checklist sub-items
-# (the Open API `items` array — verified live: items round-trip on create, a
-# TEXT task upgrades to CHECKLIST via the full-object POST with `content`
+# JP's earnings review checklist, carried as TickTick checklist sub-items (the
+# Open API `items` array — verified live 2026-07-24: items round-trip on create,
+# a TEXT task upgrades to CHECKLIST via the full-object POST with `content`
 # preserved, and appending items leaves existing items' ticked status alone).
-SUBTASK_TITLES = ("Earnings call", "Press release", "10-Q")
+#
+# ONE checklist, the SAME for every company (JP 2026-07-28): "Why does review
+# checklist not include all 6 items? Lets have it include all of those things.
+# Read transcript is the same thing as 'earnings call' so get rid of 'earnings
+# call'. Move Press release up and also 10-Q. into the review checklist for all
+# companies." Until then the card carried two half-checklists — three real
+# sub-items (Earnings call / Press release / 10-Q) plus three more that were
+# only markdown text inside the body, so they weren't tickable. JP's "6 items"
+# is the six checkboxes visible on that card; the Earnings-call dedup he asks
+# for in the same breath collapses them to these five.
+#
+# Order is JP's: Press release first, 10-Q next ("Move Press release up and
+# also 10-Q"), then the rest. It is also exactly what an existing task
+# converges to under the retire-then-append merge below, so no task needs its
+# items resequenced.
+SUBTASK_TITLES = (
+    "Press release",
+    "10-Q",
+    "Read transcript",
+    "Review company documents / IR materials",
+    "Read sell-side take",
+)
+
+# Sub-items to drop on sight. "Earnings call" is the same artifact as "Read
+# transcript" (JP 2026-07-28). Retiring is the one exception to append-only,
+# so a ticked one hands its tick to its replacement rather than losing it.
+RETIRED_SUBTASK_TITLES: dict[str, str | None] = {
+    "earnings call": "Read transcript",
+}
 
 
 def _merge_subtasks(existing: list[dict] | None) -> list[dict] | None:
     """
-    Return `existing` checklist items plus any of the three standard sub-items
-    that are missing (case-insensitive title match), or None when nothing needs
-    adding. Existing item dicts pass through UNTOUCHED — their ids and ticked
-    statuses are preserved; we only ever append.
+    Reconcile a task's checklist items to SUBTASK_TITLES. Returns the new items
+    list, or None when the task is already correct (no write).
+
+    Surviving item dicts pass through UNTOUCHED — ids and ticked statuses are
+    preserved — and missing titles are appended. The one mutation is
+    RETIRED_SUBTASK_TITLES: a retired item is dropped, and if it was ticked its
+    status is carried onto its replacement so no completed work disappears.
+    Matching is case-insensitive throughout.
     """
     existing = list(existing or [])
-    have = {(i.get("title") or "").strip().lower() for i in existing}
-    to_add = [t for t in SUBTASK_TITLES if t.lower() not in have]
-    if not to_add:
-        return None
-    return existing + [{"title": t, "status": 0} for t in to_add]
+    changed = False
+
+    kept: list[dict] = []
+    inherited_ticks: set[str] = set()
+    for item in existing:
+        title = (item.get("title") or "").strip().lower()
+        if title in RETIRED_SUBTASK_TITLES:
+            successor = RETIRED_SUBTASK_TITLES[title]
+            if successor and item.get("status"):
+                inherited_ticks.add(successor.lower())
+            changed = True
+            continue
+        kept.append(item)
+
+    have = {(i.get("title") or "").strip().lower() for i in kept}
+    merged = list(kept)
+    for title in SUBTASK_TITLES:
+        if title.lower() not in have:
+            merged.append({
+                "title": title,
+                "status": 1 if title.lower() in inherited_ticks else 0,
+            })
+            changed = True
+
+    # A successor that already existed unticked inherits the retired tick.
+    for item in merged:
+        title = (item.get("title") or "").strip().lower()
+        if title in inherited_ticks and not item.get("status"):
+            item["status"] = 1
+            changed = True
+
+    return merged if changed else None
 
 
 # Coverage sectors we surface as TickTick tags (JP's request). Restricted to the
@@ -735,8 +795,9 @@ def update_task_content(
     if new_tags is not None:
         task["tags"] = new_tags
     if ensure_subtasks:
-        # Append any missing standard review sub-items; never touches existing
-        # items (ids / ticked statuses pass through unchanged).
+        # Reconcile the review checklist to SUBTASK_TITLES: append what is
+        # missing, retire "Earnings call" (carrying its tick to "Read
+        # transcript"). Surviving items pass through with ids/status intact.
         merged = _merge_subtasks(task.get("items"))
         if merged is not None:
             task["items"] = merged

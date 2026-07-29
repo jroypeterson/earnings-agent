@@ -13,12 +13,14 @@ import ticktick
 from storage import init_db, upsert_event, find_existing_event, date_to_quarter
 
 
-# A converged task carries the three standard review sub-items (JP's earnings
-# process); fixtures asserting "no write needed" must include them.
+# A converged task carries JP's full review checklist (ticktick.SUBTASK_TITLES);
+# fixtures asserting "no write needed" must include every item.
 def _std_items():
-    return [{"title": "Earnings call", "status": 0},
-            {"title": "Press release", "status": 0},
-            {"title": "10-Q", "status": 0}]
+    return [{"title": t, "status": 0} for t in ticktick.SUBTASK_TITLES]
+
+
+STD_TITLES = ["Press release", "10-Q", "Read transcript",
+              "Review company documents / IR materials", "Read sell-side take"]
 
 
 class _Resp:
@@ -686,7 +688,7 @@ def test_update_task_clear_date_nulls_both_and_preserves_items(monkeypatch):
     body = posts[0]["body"]
     assert body["startDate"] is None and body["dueDate"] is None
     assert body["content"] == "body"
-    assert [i["title"] for i in body["items"]] == ["Earnings call", "Press release", "10-Q"]
+    assert [i["title"] for i in body["items"]] == STD_TITLES
 
 
 def test_reconcile_strips_date_from_unconfirmed_task(monkeypatch):
@@ -900,7 +902,7 @@ def test_create_task_undated_omits_date_fields(monkeypatch):
     assert tid == "NEW"
     body = posts[0]
     assert "startDate" not in body and "dueDate" not in body
-    assert [i["title"] for i in body["items"]] == ["Earnings call", "Press release", "10-Q"]
+    assert [i["title"] for i in body["items"]] == STD_TITLES
 
 
 def test_sync_locked_event_gets_date(monkeypatch):
@@ -931,24 +933,62 @@ def test_sync_locked_event_gets_date(monkeypatch):
 
 
 def test_merge_subtasks_appends_only_missing():
-    """_merge_subtasks: appends only the missing standard sub-items (case-
-    insensitive), preserves existing item dicts (ids / ticked status) untouched,
-    and returns None when nothing needs adding."""
-    # Empty -> all three.
+    """_merge_subtasks: appends only what is missing (case-insensitive),
+    preserves surviving item dicts (ids / ticked status) untouched, and
+    returns None when nothing needs writing."""
+    # Empty -> the whole checklist, in JP's order.
     merged = ticktick._merge_subtasks(None)
-    assert [i["title"] for i in merged] == ["Earnings call", "Press release", "10-Q"]
-    # Partial, ticked, case-insensitive -> append the other two, keep the tick.
-    existing = [{"id": "i1", "title": "earnings CALL", "status": 1}]
+    assert [i["title"] for i in merged] == STD_TITLES
+    # Partial + a user's own item -> append the rest, touch nothing else.
+    existing = [{"id": "i1", "title": "press RELEASE", "status": 1},
+                {"id": "u1", "title": "My own note", "status": 0}]
     merged = ticktick._merge_subtasks(existing)
-    assert merged[0] == {"id": "i1", "title": "earnings CALL", "status": 1}
-    assert [i["title"] for i in merged[1:]] == ["Press release", "10-Q"]
+    assert merged[0] == {"id": "i1", "title": "press RELEASE", "status": 1}
+    assert merged[1] == {"id": "u1", "title": "My own note", "status": 0}
+    assert [i["title"] for i in merged[2:]] == [
+        "10-Q", "Read transcript",
+        "Review company documents / IR materials", "Read sell-side take"]
     # Complete (plus a user's own item) -> None, nothing to write.
     full = _std_items() + [{"title": "My own note", "status": 0}]
     assert ticktick._merge_subtasks(full) is None
 
 
+def test_merge_subtasks_retires_earnings_call_and_inherits_its_tick():
+    """JP 2026-07-28: "Read transcript is the same thing as 'earnings call'
+    so get rid of 'earnings call'." Retiring is the one exception to
+    append-only, so a TICKED "Earnings call" must hand its tick to "Read
+    transcript" rather than quietly losing the operator's recorded work."""
+    legacy = [{"id": "a", "title": "Earnings call", "status": 1},
+              {"id": "b", "title": "Press release", "status": 0},
+              {"id": "c", "title": "10-Q", "status": 0}]
+    merged = ticktick._merge_subtasks(legacy)
+    assert [i["title"] for i in merged] == STD_TITLES
+    assert all("earnings call" not in (i["title"] or "").lower() for i in merged)
+    # Untouched survivors keep their ids; the tick moved to the successor.
+    assert merged[0] == {"id": "b", "title": "Press release", "status": 0}
+    assert merged[1] == {"id": "c", "title": "10-Q", "status": 0}
+    by_title = {i["title"]: i for i in merged}
+    assert by_title["Read transcript"]["status"] == 1
+
+    # An UNticked "Earnings call" is simply dropped -- no phantom tick.
+    merged = ticktick._merge_subtasks(
+        [{"id": "a", "title": "EARNINGS CALL", "status": 0}])
+    assert [i["title"] for i in merged] == STD_TITLES
+    assert all(i["status"] == 0 for i in merged)
+
+
+def test_merge_subtasks_carries_tick_to_an_existing_read_transcript():
+    """Successor already present and unticked -> it inherits, in place."""
+    merged = ticktick._merge_subtasks(
+        [{"id": "a", "title": "Earnings call", "status": 1},
+         {"id": "t", "title": "Read transcript", "status": 0}])
+    by_title = {i["title"]: i for i in merged}
+    assert by_title["Read transcript"] == {"id": "t", "title": "Read transcript",
+                                           "status": 1}
+
+
 def test_create_task_includes_subtasks_and_desc(monkeypatch):
-    """New earnings tasks are born with the three review sub-items; body is
+    """New earnings tasks are born with JP's full review checklist; body is
     mirrored into `desc` (a CHECKLIST-kind task renders desc, not content)."""
     posts = []
 
@@ -961,14 +1001,14 @@ def test_create_task_includes_subtasks_and_desc(monkeypatch):
                                "body text", "2026-08-05")
     assert tid == "NEW"
     body = posts[0]
-    assert [i["title"] for i in body["items"]] == ["Earnings call", "Press release", "10-Q"]
+    assert [i["title"] for i in body["items"]] == STD_TITLES
     assert body["desc"] == "body text"
     assert body["content"] == "body text"
 
 
 def test_reconcile_adds_subtasks_to_converged_task_single_write(monkeypatch):
     """An existing task that is otherwise fully converged (right date, right
-    title, right tags) still gets upgraded with the three sub-items — in ONE
+    title, right tags) still gets upgraded with the review checklist — in ONE
     write, body untouched, desc mirrored from content."""
     monkeypatch.setenv("TICKTICK_ACCESS_TOKEN", "tok")
     conn = init_db(":memory:")
@@ -991,7 +1031,7 @@ def test_reconcile_adds_subtasks_to_converged_task_single_write(monkeypatch):
     assert stats["date_fixed"] == 0 and stats["title_fixed"] == 0
     assert len(posts) == 1
     body = posts[0]["body"]
-    assert [i["title"] for i in body["items"]] == ["Earnings call", "Press release", "10-Q"]
+    assert [i["title"] for i in body["items"]] == STD_TITLES
     assert body["content"] == "consensus body"      # body untouched
     assert body["desc"] == "consensus body"         # visible on CHECKLIST kind
     assert body["startDate"] == "2026-08-05T09:00:00.000+0000"  # date untouched
@@ -999,7 +1039,8 @@ def test_reconcile_adds_subtasks_to_converged_task_single_write(monkeypatch):
 
 def test_reconcile_subtasks_preserve_user_items_and_ticks(monkeypatch):
     """Upgrading a task that already has SOME items (one ticked, plus a user's
-    own) must append only the missing standard items and leave the rest alone."""
+    own) must append only what is missing and leave the rest alone -- except
+    the retired "Earnings call", whose tick moves to "Read transcript"."""
     monkeypatch.setenv("TICKTICK_ACCESS_TOKEN", "tok")
     conn = init_db(":memory:")
     upsert_event(conn, "ABC", "2026-08-05", "bmo", None,
@@ -1021,14 +1062,15 @@ def test_reconcile_subtasks_preserve_user_items_and_ticks(monkeypatch):
 
     assert stats["items_added"] == 1
     body = posts[0]["body"]
-    assert body["items"][0] == {"id": "u1", "title": "Earnings call", "status": 1}
-    assert body["items"][1] == {"id": "u2", "title": "My own follow-up", "status": 0}
-    assert [i["title"] for i in body["items"][2:]] == ["Press release", "10-Q"]
+    assert body["items"][0] == {"id": "u2", "title": "My own follow-up", "status": 0}
+    assert [i["title"] for i in body["items"][1:]] == STD_TITLES
+    by_title = {i["title"]: i for i in body["items"]}
+    assert by_title["Read transcript"]["status"] == 1   # inherited the tick
 
 
 def test_mark_reported_ensures_subtasks_and_mirrors_desc(monkeypatch):
-    """The mark-reported rewrite also ensures the sub-items and mirrors the new
-    actuals body into desc so it stays visible on a CHECKLIST-kind task."""
+    """The mark-reported rewrite also ensures the review checklist and mirrors
+    the new actuals body into desc so it stays visible on a CHECKLIST task."""
     tasks = {"L1": [{
         "id": "T1", "title": "UNH Q2 2026 Earnings (Jul 27 BMO)", "content": "old",
         "startDate": "2026-07-27T09:00:00.000+0000",
@@ -1041,7 +1083,7 @@ def test_mark_reported_ensures_subtasks_and_mirrors_desc(monkeypatch):
         revenue_estimate=111e9, revenue_actual=112e9, list_id="L1")
     assert ok is True
     body = posts[0]["body"]
-    assert [i["title"] for i in body["items"]] == ["Earnings call", "Press release", "10-Q"]
+    assert [i["title"] for i in body["items"]] == STD_TITLES
     assert body["desc"] == body["content"]          # actuals visible either way
     assert body["title"].startswith("[REPORTED]")
 
@@ -1084,7 +1126,7 @@ def test_reconcile_undated_strip_carries_subtasks_and_removes_est_legacy(monkeyp
     body = ensg_posts[0]["body"]
     assert body["title"] == "ENSG Q2 2026 Earnings"   # date + (est.) both gone
     assert body["startDate"] is None and body["dueDate"] is None
-    assert [i["title"] for i in body["items"]] == ["Earnings call", "Press release", "10-Q"]
+    assert [i["title"] for i in body["items"]] == STD_TITLES
 
 
 def test_reconcile_dry_run_writes_nothing(monkeypatch):

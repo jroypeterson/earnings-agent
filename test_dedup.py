@@ -458,7 +458,9 @@ def test_ticktick_task_title():
 # ── Test 11: TickTick task content has checklist ──────────────────────
 
 def test_ticktick_task_content():
-    """Test task content includes estimates and review checklist."""
+    """Task body carries estimates + the Tier 1 follow-ups. The review
+    checklist itself is NOT in the body any more (JP 2026-07-28) -- it is the
+    task's tickable TickTick `items` array, ticktick.SUBTASK_TITLES."""
     from ticktick import build_task_content
 
     content = build_task_content(
@@ -472,14 +474,28 @@ def test_ticktick_task_content():
     assert "UnitedHealth Group" in content
     assert "EPS $7.14" in content
     assert "Rev $109.20B" in content
-    assert "Read transcript" in content
     assert "Update model" in content  # Tier 1 only
+    # The review-checklist lines moved OUT of the body into `items`; leaving a
+    # markdown copy behind is the duplicate-checklist bug JP reported.
+    assert "Read transcript" not in content
+    assert "Review checklist" not in content
 
     content_t2 = build_task_content(
         ticker="BSX", hour="amc", tier=2,
     )
     assert "Update model" not in content_t2  # Tier 2 doesn't get this
-    assert "Read transcript" in content_t2
+    assert "Read transcript" not in content_t2
+
+    # JP 2026-07-28: all of it, tickable, same for every company, no
+    # "Earnings call" (it is the same artifact as "Read transcript").
+    from ticktick import SUBTASK_TITLES
+    assert SUBTASK_TITLES == (
+        "Press release",
+        "10-Q",
+        "Read transcript",
+        "Review company documents / IR materials",
+        "Read sell-side take",
+    )
 
     print("PASS: TickTick task content has checklist and estimates")
 
