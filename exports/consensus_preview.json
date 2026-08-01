@@ -1,13 +1,290 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-07-31T20:41:00Z",
+  "generated_at": "2026-08-01T12:14:05Z",
   "window": {
-    "start": "2026-07-31",
-    "end": "2026-08-03"
+    "start": "2026-08-01",
+    "end": "2026-08-04"
   },
   "counts": {
-    "previews": 0
+    "previews": 4
   },
-  "previews": []
+  "previews": [
+    {
+      "ticker": "FMS",
+      "company_name": "Fresenius Medical Care AG",
+      "tier": 1,
+      "event_date": "2026-08-04",
+      "event_hour": "amc",
+      "call_datetime_utc": null,
+      "last_price": 25.65999984741211,
+      "day_change_pct": -0.15564558108895798,
+      "consensus": {
+        "eps": {
+          "mean": 0.621,
+          "count": null,
+          "low": null,
+          "high": null
+        },
+        "revenue": {
+          "mean": 5553820000.0,
+          "count": null,
+          "low": null,
+          "high": null
+        }
+      },
+      "qtd": {
+        "since": "2026-06-30",
+        "ticker_pct": 13.48960263036951,
+        "spx_pct": 0.0348179170058553,
+        "sector_etf": "XLV",
+        "sector_etf_pct": 2.4517832471079375
+      },
+      "implied_move": {
+        "pct": null,
+        "expiry": "2026-08-21",
+        "method": "ATM straddle",
+        "notes": [
+          "n/a (nearest common strike 22.5 is >5% from spot 25.66)"
+        ]
+      },
+      "post_earnings_moves": [],
+      "beat_rates": {
+        "eps": {
+          "beats": null,
+          "total": null,
+          "source": "yfinance"
+        },
+        "revenue": {
+          "beats": 13,
+          "total": 20,
+          "source": "fmp"
+        }
+      },
+      "na_fields": [
+        {
+          "field": "implied_move",
+          "reason": "n/a (nearest common strike 22.5 is >5% from spot 25.66)"
+        },
+        {
+          "field": "post_earnings_moves",
+          "reason": "no computable prior reactions"
+        },
+        {
+          "field": "beat_rates.eps",
+          "reason": "no yfinance surprise history"
+        },
+        {
+          "field": "consensus.eps.range",
+          "reason": "estimate range not available on FMP Starter plan"
+        }
+      ]
+    },
+    {
+      "ticker": "IDXX",
+      "company_name": "IDEXX Laboratories Inc",
+      "tier": 1,
+      "event_date": "2026-08-04",
+      "event_hour": "bmo",
+      "call_datetime_utc": "2026-08-04T20:00:00+00:00",
+      "last_price": 559.0700073242188,
+      "day_change_pct": 0.048321320176914574,
+      "consensus": {
+        "eps": {
+          "mean": 4.0248,
+          "count": null,
+          "low": null,
+          "high": null
+        },
+        "revenue": {
+          "mean": 1224035394.0,
+          "count": null,
+          "low": null,
+          "high": null
+        }
+      },
+      "qtd": {
+        "since": "2026-06-30",
+        "ticker_pct": 6.198238114787692,
+        "spx_pct": 0.0348179170058553,
+        "sector_etf": "XLV",
+        "sector_etf_pct": 2.4517832471079375
+      },
+      "implied_move": {
+        "pct": 9.9,
+        "expiry": "2026-08-21",
+        "method": "ATM straddle",
+        "notes": [
+          "(includes 17 extra days of time value)"
+        ]
+      },
+      "post_earnings_moves": [
+        {
+          "event_date": "2026-05-05",
+          "move_pct": -0.026641642165677194,
+          "window_label": "earnings-day close vs prior close"
+        }
+      ],
+      "beat_rates": {
+        "eps": {
+          "beats": null,
+          "total": null,
+          "source": "yfinance"
+        },
+        "revenue": {
+          "beats": 14,
+          "total": 20,
+          "source": "fmp"
+        }
+      },
+      "na_fields": [
+        {
+          "field": "beat_rates.eps",
+          "reason": "no yfinance surprise history"
+        },
+        {
+          "field": "consensus.eps.range",
+          "reason": "estimate range not available on FMP Starter plan"
+        }
+      ]
+    },
+    {
+      "ticker": "PACS",
+      "company_name": "PACS Group Inc",
+      "tier": 1,
+      "event_date": "2026-08-04",
+      "event_hour": "amc",
+      "call_datetime_utc": "2026-08-05T15:30:00+00:00",
+      "last_price": 46.0099983215332,
+      "day_change_pct": -2.0855571864826747,
+      "consensus": {
+        "eps": {
+          "mean": 0.5474,
+          "count": null,
+          "low": null,
+          "high": null
+        },
+        "revenue": {
+          "mean": 1443163320.0,
+          "count": null,
+          "low": null,
+          "high": null
+        }
+      },
+      "qtd": {
+        "since": "2026-06-30",
+        "ticker_pct": 7.9033747188628904,
+        "spx_pct": 0.0348179170058553,
+        "sector_etf": "XLV",
+        "sector_etf_pct": 2.4517832471079375
+      },
+      "implied_move": {
+        "pct": 16.8,
+        "expiry": "2026-08-21",
+        "method": "ATM straddle",
+        "notes": [
+          "(includes 16 extra days of time value)"
+        ]
+      },
+      "post_earnings_moves": [
+        {
+          "event_date": "2026-05-11",
+          "move_pct": 28.55799000609096,
+          "window_label": "next-day close vs earnings-day close"
+        }
+      ],
+      "beat_rates": {
+        "eps": {
+          "beats": null,
+          "total": null,
+          "source": "yfinance"
+        },
+        "revenue": {
+          "beats": 7,
+          "total": 9,
+          "source": "fmp"
+        }
+      },
+      "na_fields": [
+        {
+          "field": "beat_rates.eps",
+          "reason": "no yfinance surprise history"
+        },
+        {
+          "field": "consensus.eps.range",
+          "reason": "estimate range not available on FMP Starter plan"
+        }
+      ]
+    },
+    {
+      "ticker": "SPOT",
+      "company_name": "Spotify Technology SA",
+      "tier": 1,
+      "event_date": "2026-08-04",
+      "event_hour": "bmo",
+      "call_datetime_utc": "2026-08-04T20:00:00+00:00",
+      "last_price": 499.94000244140625,
+      "day_change_pct": -4.337839602300372,
+      "consensus": {
+        "eps": {
+          "mean": 2.7887,
+          "count": null,
+          "low": null,
+          "high": null
+        },
+        "revenue": {
+          "mean": 4890326872.0,
+          "count": null,
+          "low": null,
+          "high": null
+        }
+      },
+      "qtd": {
+        "since": "2026-06-30",
+        "ticker_pct": 8.888549457579018,
+        "spx_pct": 0.0348179170058553,
+        "sector_etf": null,
+        "sector_etf_pct": null
+      },
+      "implied_move": {
+        "pct": 9.1,
+        "expiry": "2026-08-07",
+        "method": "ATM straddle",
+        "notes": []
+      },
+      "post_earnings_moves": [
+        {
+          "event_date": "2026-04-28",
+          "move_pct": -12.42789605238619,
+          "window_label": "earnings-day close vs prior close"
+        }
+      ],
+      "beat_rates": {
+        "eps": {
+          "beats": null,
+          "total": null,
+          "source": "yfinance"
+        },
+        "revenue": {
+          "beats": 13,
+          "total": 20,
+          "source": "fmp"
+        }
+      },
+      "na_fields": [
+        {
+          "field": "qtd.sector_etf",
+          "reason": "no mapped ETF for sector 'Tech'"
+        },
+        {
+          "field": "beat_rates.eps",
+          "reason": "no yfinance surprise history"
+        },
+        {
+          "field": "consensus.eps.range",
+          "reason": "estimate range not available on FMP Starter plan"
+        }
+      ]
+    }
+  ]
 }
