@@ -1,105 +1,15 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-08-01T12:14:06Z",
+  "generated_at": "2026-08-02T12:15:31Z",
   "window": {
-    "start": "2026-07-30",
-    "end": "2026-08-15"
+    "start": "2026-07-31",
+    "end": "2026-08-16"
   },
   "counts": {
-    "events": 577
+    "events": 567
   },
   "events": [
-    {
-      "ticker": "ABUS",
-      "event_date": "2026-07-30",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Arbutus Biopharma Corp"
-    },
-    {
-      "ticker": "ACIU",
-      "event_date": "2026-07-30",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "AC Immune SA"
-    },
-    {
-      "ticker": "AUPH",
-      "event_date": "2026-07-30",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Aurinia Pharmaceuticals Inc"
-    },
-    {
-      "ticker": "BBIO",
-      "event_date": "2026-07-30",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "BridgeBio Pharma Inc"
-    },
-    {
-      "ticker": "INCR",
-      "event_date": "2026-07-30",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "InterCure Ltd"
-    },
-    {
-      "ticker": "KURA",
-      "event_date": "2026-07-30",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Kura Oncology Inc"
-    },
-    {
-      "ticker": "PRQR",
-      "event_date": "2026-07-30",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "ProQR Therapeutics NV"
-    },
-    {
-      "ticker": "TARA",
-      "event_date": "2026-07-30",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Protara Therapeutics Inc"
-    },
-    {
-      "ticker": "UPLD",
-      "event_date": "2026-07-30",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Upland Software Inc"
-    },
-    {
-      "ticker": "VYGR",
-      "event_date": "2026-07-30",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Voyager Therapeutics Inc"
-    },
     {
       "ticker": "IMA",
       "event_date": "2026-07-31",
