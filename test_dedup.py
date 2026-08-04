@@ -82,6 +82,19 @@ def make_in_memory_db():
             last_xcheck_yf_dates TEXT,
             date_confirmed  INTEGER NOT NULL DEFAULT 0,
             announcement_url TEXT,
+            -- v9/v10 question columns. These were MISSING here until 2026-08-03:
+            -- the fixture's docstring promises it mirrors init_db's fresh schema, but
+            -- it silently drifted three schema versions ago and nothing caught it --
+            -- test_fresh_db_schema_matches_migration_path compares init_db's CREATE
+            -- against _MIGRATIONS, not this hand-rolled copy. Prefer
+            -- init_db(":memory:") in new tests, which cannot drift.
+            slack_thread_ts TEXT,
+            slack_question_kind TEXT,
+            slack_last_reply_ts TEXT,
+            question_state  TEXT,
+            question_snooze_until TEXT,
+            question_first_seen TEXT,
+            slack_channel_id TEXT,
             event_hour_yf   TEXT,
             call_datetime_utc TEXT,
             call_source     TEXT,

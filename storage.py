@@ -563,6 +563,9 @@ def upsert_event(
         # row's pointer. gcal_id is deliberately NOT carried — calendar ids are
         # date-move-sensitive and the calendar has its own create-first mover.
         carried_task_id = None
+        # 7 nullable question columns + unseen_run_count, which is a counter and must
+        # default to 0 rather than NULL (the B2 loop does arithmetic on it).
+        carried_q: tuple = (None,) * 7 + (0,)
         if quarter:
             row = conn.execute(
                 "SELECT ticktick_task_id FROM events "
@@ -573,6 +576,34 @@ def upsert_event(
             ).fetchone()
             if row:
                 carried_task_id = row[0]
+            # Carry the QUESTION / ALERT state across the same-quarter date move too.
+            #
+            # This is the same rescue as `ticktick_task_id` above, for the same reason,
+            # and its absence is what produced the 2026-08-01 DH report and the HCAT
+            # one: all of this state is keyed on (ticker, event_date), so when a vendor
+            # moves the date the DELETE below destroys it and the replacement row is
+            # born with everything NULL. The next run therefore sees no open question,
+            # no thread, no first-seen and a zeroed miss counter -- and posts a BRAND
+            # NEW card reading "Status: New - just detected" for a conversation the
+            # operator has already had. DH went raised -> reconciled -> re-raised in
+            # 24h while Finnhub flapped Aug 12 -> Aug 5 -> Aug 12; each flap was a
+            # fresh row. The question is about a TICKER'S QUARTER, not about one
+            # candidate date, so its state has to survive the date changing.
+            #
+            # `date_locked` is deliberately NOT carried: a lock pins one specific date,
+            # and the DELETE already refuses to touch locked rows.
+            qrow = conn.execute(
+                "SELECT question_state, question_snooze_until, question_first_seen, "
+                "slack_thread_ts, slack_channel_id, slack_question_kind, "
+                "slack_last_reply_ts, unseen_run_count FROM events "
+                "WHERE ticker = ? AND quarter = ? AND event_date != ? "
+                "AND reported = 0 AND date_locked = 0 "
+                "AND (question_state IS NOT NULL OR unseen_run_count > 0) "
+                "ORDER BY updated_at DESC LIMIT 1",
+                (ticker, quarter, event_date),
+            ).fetchone()
+            if qrow:
+                carried_q = tuple(qrow)
             # Spare date_locked rows too, not just reported ones: a lock is an
             # operator override pinning the date, so a same-quarter provider
             # insert must NOT delete it (and must NOT carry its pointer to the
@@ -591,15 +622,20 @@ def upsert_event(
                                 gcal_id, quarter,
                                 eps_estimate, eps_actual, rev_estimate, rev_actual,
                                 reported, tier, company_name, source_fingerprint,
-                                date_confirmed, ticktick_task_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                date_confirmed, ticktick_task_id,
+                                question_state, question_snooze_until,
+                                question_first_seen, slack_thread_ts,
+                                slack_channel_id, slack_question_kind,
+                                slack_last_reply_ts, unseen_run_count)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                    ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (ticker, event_date, event_hour, event_hour_yf,
              call_datetime_utc, call_source,
              gcal_id, quarter,
              eps_estimate, eps_actual, rev_estimate, rev_actual,
              int(reported), tier, company_name, source_fingerprint,
-             date_confirmed, carried_task_id),
+             date_confirmed, carried_task_id, *carried_q),
         )
 
     conn.commit()

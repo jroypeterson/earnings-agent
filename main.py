@@ -1492,8 +1492,12 @@ def run(
             for e in earnings
         }
         horizon_iso = (today + timedelta(days=30)).isoformat()
+        # date_locked / date_confirmed / announcement_url ride along because the
+        # ALERT decision depends on them (see _unseen_alert_suppressed). The counter
+        # below deliberately does NOT — it stays unconditional telemetry.
         cur = conn.execute(
-            "SELECT ticker, event_date, company_name, tier, unseen_run_count "
+            "SELECT ticker, event_date, company_name, tier, unseen_run_count, "
+            "date_locked, date_confirmed, announcement_url "
             "FROM events "
             "WHERE tier <= 2 AND event_date >= ? AND event_date <= ? "
             "AND reported = 0",
@@ -1501,7 +1505,8 @@ def run(
         )
         persistent_unseen: list[UnseenRow] = []
         for row in cur.fetchall():
-            ticker, event_date, company_name, tier_val, prev_count = row
+            (ticker, event_date, company_name, tier_val, prev_count,
+             row_locked, row_confirmed, row_announcement) = row
             if ticker not in coverage_map:
                 continue
             if (ticker, event_date) in seen_pairs:
@@ -1533,7 +1538,12 @@ def run(
             # so `ignore`/`snooze`/`wait`/`lock` were silent no-ops here and
             # INMD re-alerted for 8 straight runs after being locked.
             q = get_question_snapshot(conn, ticker, event_date)
-            suppressed = _unseen_alert_suppressed(q, today)
+            suppressed = _unseen_alert_suppressed(
+                q, today,
+                date_locked=row_locked,
+                date_confirmed=row_confirmed,
+                announcement_url=row_announcement,
+            )
             if suppressed:
                 logger.info(
                     f"B2: {ticker} {event_date} still unseen "
@@ -4231,16 +4241,49 @@ def _unseen_escalation_key(ticker: str, event_date: str) -> str:
     return f"unseen_escalated:{ticker}:{event_date}"
 
 
-def _unseen_alert_suppressed(q: dict | None, today: date) -> str | None:
+def _unseen_alert_suppressed(
+    q: dict | None,
+    today: date,
+    *,
+    date_locked: int | None = 0,
+    date_confirmed: int | None = 0,
+    announcement_url: str | None = None,
+) -> str | None:
     """Reason this unseen alert must not fire, or None to let it through.
 
-    Only an UNSEEN question can suppress an unseen alert. `question_state` and
-    `slack_thread_ts` live on the event row and are shared by all three
-    question kinds, so gating on state alone would let a resolved cross-check
-    question silence a genuine, unrelated missing-from-Finnhub condition
-    (Codex R1 P1, 2026-07-25) — the same silent-miss class this guard exists
-    to remove.
+    TWO independent lanes can answer "we already know when this reports", and until
+    2026-08-03 only one of them was consulted.
+
+    **Lane 1 — the DB's own date truth.** The 2026-07-25 fix taught this guard to read
+    `question_state`, which closes the loop when the operator replies IN SLACK. But a
+    date can be settled without any Slack reply ever existing: `--lock TICKER:DATE` from
+    the CLI, a corroborated EDGAR 8-K 2.02 auto-correction, an IR RSS/email
+    announcement, or the web resolver. None of those touch `question_state`, so the
+    alert kept firing with `Status: New` against a date the system had already pinned.
+    `HCAT` did exactly this the day after its 2026-08-06 lock — the alert body quoted
+    the very date the lock had set.
+
+    * `date_locked` suppresses outright. D2 makes daily sync and reconcile SKIP a locked
+      event by design, so "Finnhub stopped returning it" is the expected consequence of
+      the lock, not news.
+    * `date_confirmed` suppresses **only with an `announcement_url`**, and the
+      distinction is load-bearing. With a URL the confirmation came from the COMPANY
+      (IR feed, IR email, high-confidence web resolver) — tiers 2-4 of the documented
+      source hierarchy, all of which outrank Finnhub at tier 5, so Finnhub's silence
+      says nothing. Without one, `date_confirmed` was derived from Finnhub's own `hour`
+      field; Finnhub confirming a date and THEN dropping the event is a genuine anomaly
+      and must still be surfaced.
+
+    **Lane 2 — an answered Slack question.** Only an UNSEEN question may suppress an
+    unseen alert: `question_state` and `slack_thread_ts` live on the event row and are
+    shared by all three question kinds, so gating on state alone would let a resolved
+    cross-check question silence a real, unrelated missing-from-Finnhub condition
+    (Codex R1 P1, 2026-07-25).
     """
+    if date_locked:
+        return "date is locked (sync and reconcile skip locked events by design)"
+    if date_confirmed and announcement_url:
+        return "date confirmed by the company itself (announcement on file)"
     if not q or q.get("slack_question_kind") != "unseen":
         return None
     state = q.get("question_state")
