@@ -18,6 +18,13 @@ on:
   schedule:
     - cron: "9 14,17,20 * * 1-5"
   workflow_dispatch:
+    inputs:
+      lock:
+        description: >-
+          Optional operator date lock, "TICKER:YYYY-MM-DD" (comma-separate several).
+          Applied BEFORE reconcile so the locked date is what reconcile then respects.
+        required: false
+        type: string
 
 # Shares the earnings-db artifact with daily_earnings_check and
 # post_earnings_check. Serialize so two DB writers never race.
@@ -115,6 +122,25 @@ jobs:
 
       - name: Write Google credentials
         run: echo '${{ secrets.GOOGLE_CREDENTIALS_JSON }}' > credentials.json
+
+      # Operator date lock, applied BEFORE reconcile so the lock is what reconcile
+      # then respects rather than something it immediately overwrites.
+      #
+      # Why this input exists: `--lock` was CLI-only, and the DB is a CI ARTIFACT — so a
+      # local lock writes to a throwaway copy and never reaches the live database. The one
+      # working path was a human typing `lock <date>` in the Slack thread, because
+      # `run_check_replies` skips bot replies by design (`if reply.is_bot: continue`, which
+      # correctly stops the bot parsing its own acks as commands). That left every date
+      # correction blocked on JP being at a keyboard, and four such rows opened in the week
+      # to 2026-08-05 alone (#142 #176 #230 #254).
+      - name: Apply operator lock
+        if: ${{ inputs.lock != '' }}
+        env:
+          GOOGLE_CALENDAR_ID: ${{ secrets.GOOGLE_CALENDAR_ID }}
+          GOOGLE_CREDENTIALS_PATH: credentials.json
+          SLACK_WEBHOOK_EARNINGS: ${{ secrets.SLACK_WEBHOOK_EARNINGS }}
+          SLACK_WEBHOOK_STATUS: ${{ secrets.SLACK_WEBHOOK_STATUS }}
+        run: python main.py --lock "${{ inputs.lock }}"
 
       - name: Run reconcile
         env:
