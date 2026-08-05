@@ -233,3 +233,36 @@ JP 2026-07-19: "a GitHub page that has all of the confirmed earnings on it, incl
 - **History depth is bounded by the DB's rolling window**, not by the page — the page shows everything the DB knows, which is roughly the trailing few months.
 
 
+
+## IR distribution-list coverage (`ir_coverage.py`, 2026-08-04 — board #246)
+
+```
+python ir_coverage.py --days 365      # tally + readable/ir_coverage_<date>.md
+```
+
+The **measurement** half of the CAPTCHA-blocked auto-subscribe idea (#131), and the cheap
+half — the readonly Gmail token already exists here and the join target is CM's core list.
+Live: 259 messages over 365 days, **all attributed**, **8 of 256 core names** receiving IR
+mail, 248 signup candidates.
+
+**Attribution needs TWO keys, and the obvious one is nearly useless alone.** Sender *domain*
+matched **1 of 259** messages, because 223 arrive from IR-PLATFORM domains — Q4 106,
+gcs-web 87, Equisolve 30, Investis 31 — which name no issuer. Matching on those would have
+credited Q4 Inc with covering forty companies, so they are in `BULK_SENDERS`.
+
+The issuer **is** named, in the From *display name* (`"The Ensign Group, Inc."
+<no-reply@q4inc.com>`). That is the second key, matched by **exact equality after
+suffix-stripping — never containment**. Containment is the mistake this fleet already paid
+for: a subset name-check let `Siemens AG` match `Siemens Healthineers`, screening the parent
+conglomerate as the subsidiary. A test asserts those two do *not* match.
+
+Too-tight matching loses names just as silently, and did: `BSX` arrives as *"Boston
+Scientific Corporation **Alerting Service**"*. Mail-PRODUCT phrases (`_MAIL_PRODUCT`) are
+stripped too — safe in a way containment is not, because no company's legal name ends in
+"Alerting Service". That recovered BSX, 7 → 8.
+
+**Two claims it refuses to make:** receiving mail proves you are *on* a list; **not**
+receiving it does not prove you are off one — a company may simply have sent nothing in the
+window, so those are separate buckets and never merged. And a Gmail failure renders as
+`INCONCLUSIVE`, not zero coverage: silence-because-unreadable read as
+silence-because-unsubscribed would send JP re-subscribing to everything.
