@@ -68,6 +68,42 @@ CURATED_UNVERIFIED: dict[str, str] = {
     "STMN.SW": "https://www.straumann.com/group/en/home/investors.html",
 }
 
+# The DIRECT signup page, which is what JP actually needs when doing these by hand --
+# the IR landing page still costs a hunt on every name. `resources/investor-email-alerts`
+# is the Q4/gcs-web convention, found live on EHC during the 2026-08-05 signup spike;
+# the rest are the common variants. A hit must LOOK like a signup page (the final URL
+# mentions email/alert) so a site that 200s everything cannot pass its homepage off as
+# a subscribe form.
+_SIGNUP_PATHS = (
+    "resources/investor-email-alerts/default.aspx",
+    "resources/email-alerts/default.aspx",
+    "shareholder-services/email-alerts/default.aspx",
+    "resources/email-alerts",
+    "investors/email-alerts",
+    "email-alerts",
+    "investor-email-alerts",
+)
+
+
+def resolve_signup(ir_url: str) -> str | None:
+    """Direct email-alerts signup page for an IR site, or None if not found."""
+    if not ir_url:
+        return None
+    m = re.match(r"(https?://[^/]+)", ir_url)
+    if not m:
+        return None
+    base = m.group(1)
+    for path in _SIGNUP_PATHS:
+        try:
+            r = requests.get(f"{base}/{path}", headers=_UA, timeout=12, allow_redirects=True)
+        except requests.RequestException:
+            continue
+        low = (r.url or "").lower()
+        if r.status_code == 200 and ("email" in low or "alert" in low):
+            return r.url
+    return None
+
+
 # Ordered by how often they are the real IR page; first verified hit wins.
 _PATHS = ("/investors", "/investor-relations", "/en/investors", "/investors/overview",
           "/company/investors", "/en/investor-relations", "/investor")

@@ -5,1602 +5,1869 @@
       "how": "probed",
       "name": "SCHOTT Pharma AG & Co. KGaA",
       "scope": "core",
+      "signup_url": null,
       "url": "https://www.schott-pharma.com/investor-relations"
     },
     "4543.T": {
       "how": "unverified",
       "name": "Terumo Corporation",
       "scope": "core",
+      "signup_url": null,
       "url": "https://www.terumo.com/investors"
     },
     "6869.T": {
       "how": "homepage",
       "name": "Sysmex Corporation",
       "scope": "core",
+      "signup_url": null,
       "url": "https://www.sysmex.co.jp/"
     },
     "7701.T": {
       "how": "homepage",
       "name": "Shimadzu Corporation",
       "scope": "core",
+      "signup_url": null,
       "url": "https://www.shimadzu.com/"
     },
     "7733.T": {
       "how": "homepage",
       "name": "Olympus Corporation",
       "scope": "core",
+      "signup_url": null,
       "url": "https://www.olympus.co.jp/"
     },
     "7741.T": {
       "how": "probed",
       "name": "Hoya Corporation",
       "scope": "core",
+      "signup_url": null,
       "url": "https://www.hoya.com/investor/"
     },
     "A": {
       "how": "probed",
       "name": "Agilent Technologies, Inc.",
       "scope": "core",
+      "signup_url": "https://www.investor.agilent.com/email-alerts/",
       "url": "https://www.investor.agilent.com/overview/default.aspx"
     },
     "AAPL": {
       "how": "probed",
       "name": "Apple Inc.",
       "scope": "portfolio",
+      "signup_url": null,
       "url": "https://investor.apple.com/investor-relations/default.aspx"
     },
     "ABT": {
       "how": "probed",
       "name": "Abbott Laboratories",
       "scope": "core",
+      "signup_url": null,
       "url": "https://www.abbott.com/en-us/investors"
     },
     "ACH": {
       "how": "probed",
       "name": "Accendra Health (fma Owens and Minor)",
       "scope": "core",
+      "signup_url": "https://investors.accendrahealth.com/resources/investor-email-alerts/default.aspx",
       "url": "https://investors.accendrahealth.com/home/default.aspx"
     },
     "ACHC": {
       "how": "probed",
       "name": "Acadia Healthcare Company Inc",
       "scope": "core",
+      "signup_url": null,
       "url": "https://www.acadiahealthcare.com/investors"
     },
     "ACVA": {
       "how": "probed",
       "name": "ACV Auctions Inc",
       "scope": "core",
+      "signup_url": null,
       "url": "https://investors.acvauto.com/"
     },
     "ADI": {
       "how": "probed",
       "name": "Analog Devices Inc",
       "scope": "portfolio",
+      "signup_url": null,
       "url": "https://investor.analog.com/"
     },
     "ADPT": {
       "how": "probed",
       "name": "Adaptive Biotechnologies Corporation",
       "scope": "core",
+      "signup_url": "https://investors.adaptivebiotech.com/resources/email-alerts",
       "url": "https://investors.adaptivebiotech.com"
     },
     "ADSK": {
       "how": "probed",
       "name": "Autodesk Inc",
       "scope": "portfolio",
+      "signup_url": null,
       "url": "https://investors.autodesk.com/"
     },
     "ADUS": {
       "how": "homepage",
       "name": "Addus Homecare Corporation",
       "scope": "core",
+      "signup_url": null,
       "url": "https://addus.com/"
     },
     "AFRM": {
       "how": "probed",
       "name": "Affirm Holdings Inc",
       "scope": "portfolio",
+      "signup_url": null,
       "url": "https://investors.affirm.com/"
     },
     "AFX DE": {
       "how": "homepage",
       "name": "Carl Zeiss Meditec AG",
       "scope": "core",
+      "signup_url": null,
       "url": "https://www.zeiss.com/meditec-ag/de/investor-relations.html?vaURL=www.zeiss.de/meditec-ag/ir"
     },
     "AGL": {
       "how": "probed",
       "name": "Agilon Health Inc",
       "scope": "core",
+      "signup_url": "https://investors.agilonhealth.com/resources/investor-email-alerts/default.aspx",
       "url": "https://investors.agilonhealth.com/overview/default.aspx"
     },
     "AHCO": {
       "how": "probed",
       "name": "Adapthealth Corp",
       "scope": "core",
+      "signup_url": null,
       "url": "https://adapthealth.com/pages/investor-relations"
     },
     "ALC": {
       "how": "probed",
       "name": "Alcon Inc.",
       "scope": "core",
+      "signup_url": null,
       "url": "https://investor.alcon.com/home/default.aspx"
     },
     "ALGN": {
       "how": "probed",
       "name": "Align Technology, Inc.",
       "scope": "core",
+      "signup_url": "https://investor.aligntech.com/email-alerts",
       "url": "https://investor.aligntech.com/"
     },
     "ALHC": {
       "how": "probed",
       "name": "Alignment Healthcare Inc",
       "scope": "core",
+      "signup_url": "https://ir.alignmenthealth.com/resources/email-alerts",
       "url": "https://ir.alignmenthealth.com/"
     },
     "AMN": {
       "how": "probed",
       "name": "AMN Healthcare Services Inc",
       "scope": "core",
+      "signup_url": null,
       "url": "https://www.amnhealthcare.com/error/404/"
     },
     "AMP IM": {
       "how": "homepage",
       "name": "Amplifon S.p.A.",
       "scope": "core",
+      "signup_url": null,
       "url": "https://www.amplifon.com/international"
     },
     "AMWL": {
       "how": "homepage",
       "name": "American Well Corp",
       "scope": "core",
+      "signup_url": null,
       "url": "https://business.amwell.com/"
     },
     "AMZN": {
       "how": "probed",
       "name": "Amazon.com, Inc.",
       "scope": "portfolio",
+      "signup_url": null,
       "url": "https://ir.aboutamazon.com/overview/default.aspx"
     },
     "AORT": {
       "how": "probed",
       "name": "Artivion Inc",
       "scope": "core",
+      "signup_url": null,
       "url": "https://investors.artivion.com/"
     },
     "ARDT": {
       "how": "probed",
       "name": "Ardent Health Inc",
       "scope": "core",
+      "signup_url": "https://ir.ardenthealth.com/resources/investor-email-alerts/default.aspx",
       "url": "https://ir.ardenthealth.com/overview/default.aspx"
     },
     "ASX": {
       "how": "probed",
       "name": "ASE Technology Holding Co., Ltd.",
       "scope": "core",
+      "signup_url": null,
       "url": "https://www.aseglobal.com/investor-relations"
     },
     "ATEC": {
       "how": "homepage",
       "name": "Alphatec Holdings, Inc.",
       "scope": "core",
+      "signup_url": null,
       "url": "https://atecspine.com/"
     },
     "ATR": {
       "how": "probed",
       "name": "Aptargroup Inc",
       "scope": "core",
+      "signup_url": "https://www.aptar.com/resources/investor-email-alerts/default.aspx",
       "url": "https://www.aptar.com/investors"
     },
     "ATRC": {
       "how": "probed",
       "name": "AtriCure Inc",
       "scope": "core",
+      "signup_url": null,
       "url": "https://www.atricure.com/investors"
     },
     "AUNA": {
       "how": "homepage",
       "name": "Auna SA",
       "scope": "core",
+      "signup_url": null,
       "url": "https://www.aunainvestors.com/"
     },
     "AVAH": {
       "how": "probed",
       "name": "Aveanna Healthcare Holdings Inc",
       "scope": "core",
+      "signup_url": null,
       "url": "https://ir.aveanna.com/"
     },
     "AVTR": {
       "how": "probed",
       "name": "Avantor, Inc.",
       "scope": "core",
+      "signup_url": "https://www.vwr.com/resources/investor-email-alerts/default.aspx",
       "url": "https://www.vwr.com/investors"
     },
     "AZTA": {
       "how": "probed",
       "name": "Azenta, Inc.",
       "scope": "core",
+      "signup_url": "https://investors.azenta.com/investors/email-alerts",
       "url": "https://investors.azenta.com/"
     },
     "Ambush DC": {
       "how": "curated",
       "name": "Ambu A/S",
       "scope": "core",
+      "signup_url": null,
       "url": "https://www.ambu.com/corporate-info/investors/investors"
     },
     "BAX": {
       "how": "probed",
       "name": "Baxter International Inc.",
       "scope": "core",
+      "signup_url": "https://www.baxter.com/resources/investor-email-alerts/default.aspx",
       "url": "https://www.baxter.com/investors"
     },
     "BBNX": {
       "how": "probed",
       "name": "Beta Bionics, Inc.",
       "scope": "core",
+      "signup_url": null,
       "url": "https://investors.betabionics.com/"
     },
     "BDX": {
       "how": "probed",
       "name": "Becton Dickinson and Co",
       "scope": "core",
+      "signup_url": null,
       "url": "https://investors.bd.com/"
     },
     "BE": {
       "how": "probed",
       "name": "Bloom Energy Corporation",
       "scope": "portfolio",
+      "signup_url": null,
       "url": "https://investor.bloomenergy.com/overview/default.aspx"
     },
     "BFLY": {
       "how": "probed",
       "name": "Butterfly Network, Inc.",
       "scope": "core",
+      "signup_url": "https://ir.butterflynetwork.com/resources/investor-email-alerts/default.aspx",
       "url": "https://ir.butterflynetwork.com/overview/default.aspx"
     },
     "BIM": {
       "how": "curated",
       "name": "bioMerieux SA",
       "scope": "core",
+      "signup_url": "https://www.biomerieux.com/corp/en/errors/404.html?referer=/resources/investor-email-alerts/default.aspx",
       "url": "https://www.biomerieux.com/corp/en/investors.html"
     },
     "BIO": {
       "how": "probed",
       "name": "Bio-Rad Laboratories, Inc. Class A Common Stock",
       "scope": "core",
+      "signup_url": "https://investors.bio-rad.com/resources/investor-email-alerts/default.aspx",
       "url": "https://investors.bio-rad.com/overview/default.aspx"
     },
     "BLCO": {
       "how": "probed",
       "name": "Bausch + Lomb Corporation",
       "scope": "core",
+      "signup_url": null,
       "url": "https://www.bausch.com/investors/"
     },
     "BLLN": {
       "how": "probed",
       "name": "BillionToOne, Inc.",
       "scope": "core",
+      "signup_url": null,
       "url": "https://investors.billiontoone.com/"
     },
     "BRKR": {
       "how": "probed",
       "name": "Bruker Corp",
       "scope": "core",
+      "signup_url": null,
       "url": "https://ir.bruker.com/ir-home/default.aspx"
     },
     "BRO": {
       "how": "probed",
       "name": "Brown & Brown Inc.",
       "scope": "portfolio",
+      "signup_url": null,
       "url": "https://investor.bbrown.com/"
     },
     "BSX": {
       "how": "probed",
       "name": "Boston Scientific Corp",
       "scope": "portfolio",
+      "signup_url": "https://investors.bostonscientific.com/resources/email-alerts",
       "url": "https://investors.bostonscientific.com/"
     },
     "BTSG": {
       "how": "probed",
       "name": "Brightspring Health Services Inc",
       "scope": "core",
+      "signup_url": null,
       "url": "https://ir.brightspringhealth.com/"
     },
     "CAH": {
       "how": "probed",
       "name": "Cardinal Health Inc",
       "scope": "core",
+      "signup_url": "https://ir.cardinalhealth.com/resources/investor-email-alerts/default.aspx",
       "url": "https://ir.cardinalhealth.com/overview/default.aspx"
     },
     "CAT": {
       "how": "probed",
       "name": "Caterpillar Inc",
       "scope": "core",
+      "signup_url": "https://investors.caterpillar.com/resources/investor-email-alerts/default.aspx",
       "url": "https://investors.caterpillar.com/overview/default.aspx"
     },
     "CCRN": {
       "how": "homepage",
       "name": "Cross Country Healthcare, Inc.",
       "scope": "core",
+      "signup_url": null,
       "url": "https://www.crosscountry.com/"
     },
     "CERT": {
       "how": "probed",
       "name": "Certara, Inc.",
       "scope": "core",
+      "signup_url": null,
       "url": "https://ir.certara.com/"
     },
     "CHE": {
       "how": "homepage",
       "name": "Chemed Corp",
       "scope": "core",
+      "signup_url": "https://www.chemed.com/resources/email-alerts",
       "url": "https://www.chemed.com/"
     },
     "CI": {
       "how": "probed",
       "name": "Cigna Group",
       "scope": "portfolio",
+      "signup_url": "https://investors.thecignagroup.com/resources/email-alerts/default.aspx",
       "url": "https://investors.thecignagroup.com/overview/default.aspx"
     },
     "CIGI": {
       "how": "homepage",
       "name": "Colliers International Group Inc",
       "scope": "core",
+      "signup_url": null,
       "url": "https://www.colliers.com/en"
     },
     "CLOV": {
       "how": "probed",
       "name": "Clover Health Investments Corp",
       "scope": "core",
+      "signup_url": null,
       "url": "https://investors.cloverhealth.com/"
     },
     "CNC": {
       "how": "probed",
       "name": "Centene Corp",
       "scope": "core",
+      "signup_url": "https://investors.centene.com/email-alerts",
       "url": "https://investors.centene.com/"
     },
     "CNI": {
       "how": "probed",
       "name": "Canadian National Railway Co",
       "scope": "core",
+      "signup_url": null,
       "url": "https://www.cn.ca/investors"
     },
     "CNMD": {
       "how": "probed",
       "name": "CONMED Corporation",
       "scope": "core",
+      "signup_url": null,
       "url": "https://www.conmed.com/en/investor-relations"
     },
     "COH.AX": {
       "how": "homepage",
       "name": "Cochlear Limited",
       "scope": "core",
+      "signup_url": null,
       "url": "https://www.cochlear.com/us/en/home"
     },
     "COIN": {
       "how": "probed",
       "name": "Coinbase Global Inc",
       "scope": "core",
+      "signup_url": null,
       "url": "https://investor.coinbase.com/home/default.aspx"
     },
     "COLOB DC": {
       "how": "curated",
       "name": "Coloplast A/S",
       "scope": "core",
+      "signup_url": null,
       "url": "https://www.coloplast.com/investor-relations/"
     },
     "CON": {
       "how": "probed",
       "name": "Concentra Group Holdings Parent Inc",
       "scope": "core",
+      "signup_url": null,
       "url": "https://ir.concentra.com/"
     },
     "COO": {
       "how": "probed",
       "name": "The Cooper Companies, Inc.",
       "scope": "core",
+      "signup_url": "https://investor.coopercos.com/resources/email-alerts",
       "url": "https://investor.coopercos.com/"
     },
     "COR": {
       "how": "probed",
       "name": "Cencora Inc",
       "scope": "core",
+      "signup_url": "https://investor.cencora.com/resources/email-alerts/default.aspx",
       "url": "https://investor.cencora.com/overview/default.aspx"
     },
     "CP": {
       "how": "probed",
       "name": "Canadian Pacific Kansas City Ltd",
       "scope": "core",
+      "signup_url": null,
       "url": "https://investor.cpkcr.com/overview/default.aspx"
     },
     "CPRT": {
       "how": "probed",
       "name": "Copart Inc.",
       "scope": "portfolio",
+      "signup_url": "https://www.copart.com/resources/investor-email-alerts/default.aspx",
       "url": "https://www.copart.com/investors"
     },
     "CRL": {
       "how": "probed",
       "name": "Charles River Lbrtrs ntrntl Inc",
       "scope": "core",
+      "signup_url": null,
       "url": "https://ir.criver.com/"
     },
     "CROX": {
       "how": "probed",
       "name": "Crocs Inc",
       "scope": "core",
+      "signup_url": "https://investors.crocs.com/resources/email-alerts/default.aspx",
       "url": "https://investors.crocs.com/overview/default.aspx"
     },
     "CRWD": {
       "how": "probed",
       "name": "CrowdStrike Holdings, Inc.",
       "scope": "core",
+      "signup_url": "https://ir.crowdstrike.com/resources/email-alerts",
       "url": "https://ir.crowdstrike.com/"
     },
     "CSTL": {
       "how": "probed",
       "name": "Castle Biosciences, Inc.",
       "scope": "core",
+      "signup_url": "https://ir.castlebiosciences.com/news-events/email-alerts",
       "url": "https://ir.castlebiosciences.com/"
     },
     "CSU": {
       "how": "curated",
       "name": "Constellation Software Inc.",
       "scope": "core",
+      "signup_url": null,
       "url": "https://www.csisoftware.com/investor-relations/"
     },
     "CTEC LN": {
       "how": "unverified",
       "name": "ConvaTec Group PLC",
       "scope": "core",
+      "signup_url": null,
       "url": "https://www.convatecgroup.com/investors/"
     },
     "CVNA": {
       "how": "probed",
       "name": "Carvana Co",
       "scope": "core",
+      "signup_url": "https://investors.carvana.com/resources/email-alerts",
       "url": "https://investors.carvana.com/"
     },
     "CVS": {
       "how": "probed",
       "name": "CVS Health Corp",
       "scope": "core",
+      "signup_url": null,
       "url": "https://investors.cvshealth.com/overview/default.aspx"
     },
     "CVSG.L": {
       "how": "curated",
       "name": "CVS Group Plc",
       "scope": "core",
+      "signup_url": null,
       "url": "https://www.cvsukltd.co.uk/investor-centre/"
     },
     "CYH": {
       "how": "probed",
       "name": "Community Health Systems Inc",
       "scope": "core",
+      "signup_url": null,
       "url": "https://www.chs.net/404"
     },
     "DAE": {
       "how": "curated",
       "name": "Daetwyler Holding AG",
       "scope": "core",
+      "signup_url": null,
       "url": "https://datwyler.com/investors/"
     },
     "DBX": {
       "how": "probed",
       "name": "Dropbox, Inc.",
       "scope": "core",
+      "signup_url": null,
       "url": "https://investors.dropbox.com/"
     },
     "DCGO": {
       "how": "probed",
       "name": "DocGo Inc",
       "scope": "core",
+      "signup_url": "https://ir.docgo.com/email-alerts",
       "url": "https://ir.docgo.com/"
     },
     "DGX": {
       "how": "probed",
       "name": "Quest Diagnostics Inc",
       "scope": "core",
+      "signup_url": null,
       "url": "https://ir.questdiagnostics.com/overview/default.aspx"
     },
     "DH": {
       "how": "probed",
       "name": "Definitive Healthcare Corp",
       "scope": "core",
+      "signup_url": null,
       "url": "https://ir.definitivehc.com/"
     },
     "DHR": {
       "how": "probed",
       "name": "Danaher Corp",
       "scope": "core",
+      "signup_url": "https://investors.danaher.com/email-alerts",
       "url": "https://investors.danaher.com/"
     },
     "DIA.MI": {
       "how": "homepage",
       "name": "DiaSorin S.p.A.",
       "scope": "core",
+      "signup_url": null,
       "url": "https://int.diasorin.com/en"
     },
     "DOCS": {
       "how": "probed",
       "name": "Doximity, Inc.",
       "scope": "portfolio",
+      "signup_url": "https://investors.doximity.com/resources/investor-email-alerts/default.aspx",
       "url": "https://investors.doximity.com/overview/default.aspx"
     },
     "DVA": {
       "how": "probed",
       "name": "Davita Inc",
       "scope": "core",
+      "signup_url": null,
       "url": "https://investors.davita.com/"
     },
     "DXCM": {
       "how": "probed",
       "name": "DexCom, Inc.",
       "scope": "core",
+      "signup_url": "https://investors.dexcom.com/resources/investor-email-alerts/default.aspx",
       "url": "https://investors.dexcom.com/overview/default.aspx"
     },
     "EHC": {
       "how": "probed",
       "name": "Encompass Health Corp",
       "scope": "portfolio",
+      "signup_url": "https://investor.encompasshealth.com/resources/investor-email-alerts/default.aspx",
       "url": "https://investor.encompasshealth.com/overview/default.aspx"
     },
     "ELAN": {
       "how": "probed",
       "name": "Elanco Animal Health Incorporated",
       "scope": "core",
+      "signup_url": "https://www.elanco.com/email-alerts",
       "url": "https://www.elanco.com/investors"
     },
     "ELV": {
       "how": "probed",
       "name": "Elevance Health Inc",
       "scope": "core",
+      "signup_url": null,
       "url": "https://ir.elevancehealth.com/investors/default.aspx"
     },
     "ENOV": {
       "how": "probed",
       "name": "Enovis Corporation",
       "scope": "core",
+      "signup_url": "https://www.enovis.com/resources/investor-email-alerts/default.aspx",
       "url": "https://www.enovis.com/investors"
     },
     "ENSG": {
       "how": "probed",
       "name": "Ensign Group Inc",
       "scope": "portfolio",
+      "signup_url": "https://investor.ensigngroup.net/resources/investor-email-alerts/default.aspx",
       "url": "https://investor.ensigngroup.net/overview/default.aspx"
     },
     "ERF FP": {
       "how": "probed",
       "name": "Eurofins Scientific SE",
       "scope": "core",
+      "signup_url": null,
       "url": "https://www.eurofins.com:443/en/investors"
     },
     "ESTA": {
       "how": "probed",
       "name": "Establishment Labs Holdings Inc.",
       "scope": "core",
+      "signup_url": null,
       "url": "https://www.establishmentlabs.com/femtech-innovation/overview/"
     },
     "EVH": {
       "how": "probed",
       "name": "Evolent Health Inc",
       "scope": "core",
+      "signup_url": "https://ir.evolent.com/resources/investor-email-alerts/default.aspx",
       "url": "https://ir.evolent.com/"
     },
     "EW": {
       "how": "probed",
       "name": "Edwards Lifesciences Corp",
       "scope": "core",
+      "signup_url": "https://ir.edwards.com/resources/investor-email-alerts/default.aspx",
       "url": "https://ir.edwards.com/overview/default.aspx"
     },
     "FDX": {
       "how": "probed",
       "name": "FedEx Corp",
       "scope": "core",
+      "signup_url": null,
       "url": "https://investors.fedex.com/home/default.aspx"
     },
     "FER": {
       "how": "probed",
       "name": "Ferrovial SE",
       "scope": "core",
+      "signup_url": null,
       "url": "https://www.ferrovial.com/en/document/investors-presentation-2007/"
     },
     "FI": {
       "how": "probed",
       "name": "Fiserv Inc.",
       "scope": "portfolio",
+      "signup_url": "https://investors.fiserv.com/resources/email-alerts",
       "url": "https://investors.fiserv.com/"
     },
     "FICO": {
       "how": "probed",
       "name": "Fair Isaac Corp",
       "scope": "core",
+      "signup_url": "https://investors.fico.com/email-alerts",
       "url": "https://investors.fico.com/"
     },
     "FIVE": {
       "how": "probed",
       "name": "Five Below Inc",
       "scope": "portfolio",
+      "signup_url": null,
       "url": "https://investor.fivebelow.com/investors/default.aspx"
     },
     "FLGT": {
       "how": "probed",
       "name": "Fulgent Genetics, Inc.",
       "scope": "core",
+      "signup_url": null,
       "url": "https://ir.fulgentgenetics.com/"
     },
     "FMS": {
       "how": "probed",
       "name": "Fresenius Medical Care AG",
       "scope": "portfolio",
+      "signup_url": null,
       "url": "https://freseniusmedicalcare.com/en/investors/investors-overview/"
     },
     "FRE": {
       "how": "curated",
       "name": "Fresenius SE & Co KGaA",
       "scope": "core",
+      "signup_url": null,
       "url": "https://www.fresenius.com/investors"
     },
     "FTRE": {
       "how": "probed",
       "name": "Fortrea Holdings Inc",
       "scope": "core",
+      "signup_url": "https://investors.fortrea.com/resources/email-alerts",
       "url": "https://investors.fortrea.com/"
     },
     "GDRX": {
       "how": "probed",
       "name": "Goodrx Holdings Inc",
       "scope": "core",
+      "signup_url": "https://investors.goodrx.com/resources/email-alerts",
       "url": "https://investors.goodrx.com/"
     },
     "GEHC": {
       "how": "probed",
       "name": "GE HealthCare Technologies Inc.",
       "scope": "core",
+      "signup_url": "https://investor.gehealthcare.com/resources/email-alerts",
       "url": "https://investor.gehealthcare.com/"
     },
     "GETIB SS": {
       "how": "curated",
       "name": "Getinge AB",
       "scope": "core",
+      "signup_url": null,
       "url": "https://www.getinge.com/int/company/investors/overview/"
     },
     "GH": {
       "how": "probed",
       "name": "Guardant Health, Inc.",
       "scope": "core",
+      "signup_url": "https://investors.guardanthealth.com/resources/investor-email-alerts/default.aspx",
       "url": "https://investors.guardanthealth.com/overview/default.aspx"
     },
     "GKOS": {
       "how": "probed",
       "name": "Glaukos Corporation",
       "scope": "core",
+      "signup_url": "https://investors.glaukos.com/resources/investor-email-alerts/default.aspx",
       "url": "https://investors.glaukos.com/overview/default.aspx"
     },
     "GMED": {
       "how": "probed",
       "name": "Globus Medical Inc",
       "scope": "core",
+      "signup_url": null,
       "url": "https://www.investors.globusmedical.com/"
     },
     "GN DC": {
       "how": "probed",
       "name": "GN Store Nord A/S",
       "scope": "core",
+      "signup_url": null,
       "url": "https://www.gn.com/investor"
     },
     "GRAL": {
       "how": "probed",
       "name": "GRAIL, Inc.",
       "scope": "core",
+      "signup_url": null,
       "url": "https://investors.grail.com/"
     },
     "GXI": {
       "how": "curated",
       "name": "Gerresheimer AG",
       "scope": "core",
+      "signup_url": null,
       "url": "https://www.gerresheimer.com/en/investors"
     },
     "HAE": {
       "how": "homepage",
       "name": "Haemonetics Corporation",
       "scope": "core",
+      "signup_url": "https://www.haemonetics.com/resources/investor-email-alerts/default.aspx",
       "url": "https://www.haemonetics.com/"
     },
     "HAPV3.SA": {
       "how": "homepage",
       "name": "Hapvida Participacoes e Investimentos SA",
       "scope": "core",
+      "signup_url": null,
       "url": "https://ri.hapvida.com.br/"
     },
     "HCA": {
       "how": "probed",
       "name": "HCA Healthcare Inc",
       "scope": "core",
+      "signup_url": "https://investor.hcahealthcare.com/resources/investor-email-alerts/default.aspx",
       "url": "https://investor.hcahealthcare.com/overview/default.aspx"
     },
     "HCAT": {
       "how": "probed",
       "name": "Health Catalyst Inc",
       "scope": "core",
+      "signup_url": null,
       "url": "https://ir.healthcatalyst.com/"
     },
     "HCSG": {
       "how": "probed",
       "name": "Healthcare Services Group Inc",
       "scope": "core",
+      "signup_url": "https://investor.hcsgcorp.com/resources/investor-email-alerts/default.aspx",
       "url": "https://investor.hcsgcorp.com/overview/default.aspx"
     },
     "HIMS": {
       "how": "probed",
       "name": "Hims & Hers Health Inc",
       "scope": "core",
+      "signup_url": "https://investors.hims.com/resources/investor-email-alerts/default.aspx",
       "url": "https://investors.hims.com/overview/default.aspx"
     },
     "HNGE": {
       "how": "probed",
       "name": "Hinge Health Inc",
       "scope": "core",
+      "signup_url": "https://ir.hingehealth.com/resources/investor-email-alerts/default.aspx",
       "url": "https://ir.hingehealth.com/overview/default.aspx"
     },
     "HOOD": {
       "how": "probed",
       "name": "Robinhood Markets Inc",
       "scope": "core",
+      "signup_url": "https://robinhood.com/resources/investor-email-alerts/default.aspx",
       "url": "https://robinhood.com/investors"
     },
     "HSIC": {
       "how": "probed",
       "name": "Henry Schein, Inc.",
       "scope": "core",
+      "signup_url": "https://investor.henryschein.com/resources/investor-email-alerts/default.aspx",
       "url": "https://investor.henryschein.com/overview/default.aspx"
     },
     "HTFL": {
       "how": "probed",
       "name": "HeartFlow, Inc.",
       "scope": "core",
+      "signup_url": null,
       "url": "https://ir.heartflow.com/"
     },
     "HUM": {
       "how": "homepage",
       "name": "Humana Inc",
       "scope": "core",
+      "signup_url": null,
       "url": "https://www.humana.com/"
     },
     "HYPR": {
       "how": "probed",
       "name": "Hyperfine Inc",
       "scope": "core",
+      "signup_url": null,
       "url": "https://investors.hyperfine.io"
     },
     "IART": {
       "how": "probed",
       "name": "Integra LifeSciences Holdings Corporation",
       "scope": "core",
+      "signup_url": "https://investor.integralife.com/email-alerts",
       "url": "https://investor.integralife.com/"
     },
     "ICLR": {
       "how": "probed",
       "name": "ICON PLC",
       "scope": "core",
+      "signup_url": "https://investor.iconplc.com/email-alerts",
       "url": "https://investor.iconplc.com/"
     },
     "ICUI": {
       "how": "probed",
       "name": "ICU Medical, Inc.",
       "scope": "core",
+      "signup_url": null,
       "url": "https://ir.icumed.com/"
     },
     "IDXX": {
       "how": "probed",
       "name": "IDEXX Laboratories Inc",
       "scope": "portfolio",
+      "signup_url": null,
       "url": "https://ir.idexx.com/"
     },
     "ILMN": {
       "how": "probed",
       "name": "Illumina, Inc.",
       "scope": "core",
+      "signup_url": null,
       "url": "https://investor.illumina.com/"
     },
     "INMD": {
       "how": "homepage",
       "name": "InMode Ltd.",
       "scope": "core",
+      "signup_url": null,
       "url": "https://www.inmodemd.com/"
     },
     "INSP": {
       "how": "probed",
       "name": "Inspire Medical Systems, Inc.",
       "scope": "core",
+      "signup_url": "https://www.inspiresleep.com/resources/investor-email-alerts/default.aspx",
       "url": "https://www.inspiresleep.com/en-us/investors/"
     },
     "IQV": {
       "how": "probed",
       "name": "IQVIA Holdings Inc.",
       "scope": "core",
+      "signup_url": "https://ir.iqvia.com/resources/investor-email-alerts/default.aspx",
       "url": "https://ir.iqvia.com/overview/default.aspx"
     },
     "IRTC": {
       "how": "probed",
       "name": "iRhythm Holdings, Inc",
       "scope": "core",
+      "signup_url": "https://investors.irhythmtech.com/resources/investor-email-alerts/default.aspx",
       "url": "https://investors.irhythmtech.com/overview/default.aspx"
     },
     "ISRG": {
       "how": "probed",
       "name": "Intuitive Surgical Inc",
       "scope": "portfolio",
+      "signup_url": "https://www.intuitive.com/resources/investor-email-alerts/default.aspx",
       "url": "https://www.intuitive.com/investors"
     },
     "ITGR": {
       "how": "probed",
       "name": "Integer Holdings Corporation",
       "scope": "core",
+      "signup_url": "https://www.integer.net/email-alerts/",
       "url": "https://www.integer.net/company/about/default.aspx"
     },
     "JNJ": {
       "how": "probed",
       "name": "Johnson & Johnson",
       "scope": "core",
+      "signup_url": "https://www.jnj.com/resources/investor-email-alerts/default.aspx",
       "url": "https://www.jnj.com/investors"
     },
     "JPM": {
       "how": "probed",
       "name": "JPMorgan Chase & Co",
       "scope": "core",
+      "signup_url": null,
       "url": "https://www.jpmorganchase.com/ir"
     },
     "KIDS": {
       "how": "probed",
       "name": "OrthoPediatrics Corp.",
       "scope": "core",
+      "signup_url": null,
       "url": "https://ir.orthopediatrics.com/"
     },
     "KKR": {
       "how": "probed",
       "name": "KKR & Co Inc",
       "scope": "core",
+      "signup_url": "https://ir.kkr.com/resources/investor-email-alerts/default.aspx",
       "url": "https://ir.kkr.com/"
     },
     "KRC": {
       "how": "probed",
       "name": "Kilroy Realty Corporation",
       "scope": "portfolio",
+      "signup_url": null,
       "url": "https://investors.kilroyrealty.com/ir-home/default.aspx"
     },
     "LFST": {
       "how": "probed",
       "name": "Lifestance Health Group Inc",
       "scope": "core",
+      "signup_url": null,
       "url": "https://investor.lifestance.com/"
     },
     "LH": {
       "how": "probed",
       "name": "Labcorp Holdings Inc",
       "scope": "core",
+      "signup_url": "https://ir.labcorp.com/email-alerts",
       "url": "https://ir.labcorp.com/"
     },
     "LIN": {
       "how": "probed",
       "name": "Linde plc",
       "scope": "core",
+      "signup_url": null,
       "url": "https://www.linde.com/investors"
     },
     "LIVN": {
       "how": "probed",
       "name": "LivaNova PLC",
       "scope": "core",
+      "signup_url": null,
       "url": "https://investor.livanova.com/"
     },
     "LLY": {
       "how": "probed",
       "name": "Eli Lilly And Co",
       "scope": "portfolio",
+      "signup_url": "https://investor.lilly.com/email-alerts",
       "url": "https://investor.lilly.com/"
     },
     "LMRI": {
       "how": "probed",
       "name": "Lumexa Imaging Holdings Inc",
       "scope": "core",
+      "signup_url": null,
       "url": "https://ir.lumexaimaging.com/"
     },
     "LNTH": {
       "how": "probed",
       "name": "Lantheus Holdings, Inc.",
       "scope": "core",
+      "signup_url": "https://investor.lantheus.com/email-alerts",
       "url": "https://investor.lantheus.com/"
     },
     "LONN CH": {
       "how": "unverified",
       "name": "Lonza Group AG",
       "scope": "core",
+      "signup_url": null,
       "url": "https://www.lonza.com/investor-relations"
     },
     "MA": {
       "how": "probed",
       "name": "Mastercard Inc",
       "scope": "core",
+      "signup_url": null,
       "url": "https://investor.mastercard.com/overview/default.aspx"
     },
     "MCK": {
       "how": "probed",
       "name": "McKesson Corp",
       "scope": "core",
+      "signup_url": "https://investor.mckesson.com/resources/investor-email-alerts/default.aspx",
       "url": "https://investor.mckesson.com/overview/default.aspx"
     },
     "MCO": {
       "how": "probed",
       "name": "Moody's Corp",
       "scope": "core",
+      "signup_url": null,
       "url": "https://www.moodys.com/error"
     },
     "MD": {
       "how": "probed",
       "name": "Pediatrix Medical Group Inc",
       "scope": "core",
+      "signup_url": null,
       "url": "https://www.pediatrix.com/about/investors"
     },
     "MDLN": {
       "how": "probed",
       "name": "Medline Inc",
       "scope": "core",
+      "signup_url": null,
       "url": "https://ir.medline.com/"
     },
     "MDT": {
       "how": "homepage",
       "name": "Medtronic plc",
       "scope": "core",
+      "signup_url": "https://www.medtronic.com/resources/investor-email-alerts/default.aspx",
       "url": "https://www.medtronic.com/"
     },
     "MED": {
       "how": "probed",
       "name": "Medartis Holding AG",
       "scope": "core",
+      "signup_url": null,
       "url": "https://medartis.com/en/investors"
     },
     "MEDP": {
       "how": "probed",
       "name": "Medpace Holdings, Inc.",
       "scope": "core",
+      "signup_url": null,
       "url": "https://investor.medpace.com/"
     },
     "MMED": {
       "how": "probed",
       "name": "MiniMed Group Inc",
       "scope": "core",
+      "signup_url": null,
       "url": "https://investors.minimed.com/"
     },
     "MMSI": {
       "how": "probed",
       "name": "Merit Medical Systems, Inc.",
       "scope": "core",
+      "signup_url": null,
       "url": "https://www.merit.com/investors/"
     },
     "MOH": {
       "how": "probed",
       "name": "Molina Healthcare Inc",
       "scope": "core",
+      "signup_url": null,
       "url": "https://investors.molinahealthcare.com"
     },
     "MOVE": {
       "how": "probed",
       "name": "Medacta Group SA",
       "scope": "core",
+      "signup_url": null,
       "url": "https://www.medacta.com/en/investors"
     },
     "MRVI": {
       "how": "probed",
       "name": "Maravai LifeSciences Holdings, Inc.",
       "scope": "core",
+      "signup_url": null,
       "url": "https://investors.maravai.com/"
     },
     "MSFT": {
       "how": "probed",
       "name": "Microsoft Corporation",
       "scope": "core",
+      "signup_url": null,
       "url": "https://www.microsoft.com/en-us/investor/default"
     },
     "MTD": {
       "how": "probed",
       "name": "Mettler-Toledo International Inc",
       "scope": "core",
+      "signup_url": "https://investor.mt.com/resources/investor-email-alerts/default.aspx",
       "url": "https://investor.mt.com/investor-home/default.aspx"
     },
     "MYGN": {
       "how": "probed",
       "name": "Myriad Genetics, Inc.",
       "scope": "core",
+      "signup_url": "https://investor.myriad.com/email-alerts/",
       "url": "https://investor.myriad.com/"
     },
     "NEO": {
       "how": "probed",
       "name": "NeoGenomics, Inc.",
       "scope": "core",
+      "signup_url": null,
       "url": "https://ir.neogenomics.com/"
     },
     "NFLX": {
       "how": "probed",
       "name": "Netflix Inc",
       "scope": "core",
+      "signup_url": "https://www.netflix.com/NotFound?prev=https%3A%2F%2Fwww.netflix.com%2Fresources%2Finvestor-email-alerts%2Fdefault.aspx",
       "url": "https://www.netflix.com/NotFound?prev=https%3A%2F%2Fwww.netflix.com%2Finvestors"
     },
     "NNOX": {
       "how": "probed",
       "name": "Nano-X Imaging Ltd.",
       "scope": "core",
+      "signup_url": "https://investors.nanox.vision/email-alerts",
       "url": "https://investors.nanox.vision/"
     },
     "NOVT": {
       "how": "probed",
       "name": "Novanta Inc.",
       "scope": "core",
+      "signup_url": null,
       "url": "https://investors.novanta.com/overview/default.aspx"
     },
     "NTRA": {
       "how": "probed",
       "name": "Natera, Inc.",
       "scope": "core",
+      "signup_url": "https://investor.natera.com/resources/investor-email-alerts/default.aspx",
       "url": "https://investor.natera.com/overview/default.aspx"
     },
     "NVCR": {
       "how": "probed",
       "name": "Novocure Limited",
       "scope": "core",
+      "signup_url": null,
       "url": "https://investor.novocure.com/"
     },
     "NVDA": {
       "how": "probed",
       "name": "NVIDIA Corporation",
       "scope": "core",
+      "signup_url": null,
       "url": "https://investor.nvidia.com/home/default.aspx"
     },
     "NVST": {
       "how": "probed",
       "name": "Envista Holdings Corporation",
       "scope": "core",
+      "signup_url": "https://www.envistaco.com/resources/email-alerts",
       "url": "https://www.envistaco.com/investors"
     },
     "OFIX": {
       "how": "probed",
       "name": "Orthofix Medical Inc.",
       "scope": "core",
+      "signup_url": "https://ir.orthofix.com/resources/investor-email-alerts/default.aspx",
       "url": "https://ir.orthofix.com/overview/default.aspx"
     },
     "OMCL": {
       "how": "probed",
       "name": "Omnicell, Inc.",
       "scope": "core",
+      "signup_url": null,
       "url": "https://www.omnicell.com/404/"
     },
     "OMDA": {
       "how": "probed",
       "name": "Omada Health, Inc.",
       "scope": "core",
+      "signup_url": null,
       "url": "https://investors.omadahealth.com/"
     },
     "ONT.L": {
       "how": "homepage",
       "name": "Oxford Nanopore Technologies PLC",
       "scope": "core",
+      "signup_url": null,
       "url": "https://nanoporetech.com/"
     },
     "OPCH": {
       "how": "probed",
       "name": "Option Care Health Inc",
       "scope": "portfolio",
+      "signup_url": null,
       "url": "https://investors.optioncarehealth.com/"
     },
     "OSCR": {
       "how": "probed",
       "name": "Oscar Health Inc",
       "scope": "core",
+      "signup_url": null,
       "url": "https://ir.hioscar.com/overview/default.aspx"
     },
     "OSSFF": {
       "how": "probed",
       "name": "Embla Medical hf.",
       "scope": "core",
+      "signup_url": null,
       "url": "https://www.emblamedical.com/investor-relations"
     },
     "PACB": {
       "how": "probed",
       "name": "Pacific Biosciences of California, Inc.",
       "scope": "core",
+      "signup_url": null,
       "url": "https://www.pacb.com/literature/overview-analysis-options-for-hifi-data/"
     },
     "PACS": {
       "how": "probed",
       "name": "PACS Group Inc",
       "scope": "portfolio",
+      "signup_url": null,
       "url": "https://ir.pacs.com/"
     },
     "PAHC": {
       "how": "probed",
       "name": "Phibro Animal Health Corp",
       "scope": "core",
+      "signup_url": null,
       "url": "https://www.pahc.com/anticoccidial/home/"
     },
     "PEN": {
       "how": "probed",
       "name": "Penumbra, Inc.",
       "scope": "core",
+      "signup_url": null,
       "url": "https://www.penumbrainc.com/investors/"
     },
     "PGNY": {
       "how": "probed",
       "name": "Progyny Inc",
       "scope": "core",
+      "signup_url": null,
       "url": "https://investors.progyny.com/"
     },
     "PHG": {
       "how": "probed",
       "name": "Koninklijke Philips N.V.",
       "scope": "core",
+      "signup_url": null,
       "url": "https://www.philips.com/a-w/about/investor-relations.html"
     },
     "PHR": {
       "how": "probed",
       "name": "Phreesia Inc",
       "scope": "core",
+      "signup_url": null,
       "url": "https://ir.phreesia.com/home/default.aspx"
     },
     "PLSE": {
       "how": "probed",
       "name": "Pulse Biosciences Inc",
       "scope": "core",
+      "signup_url": null,
       "url": "https://investors.pulsebiosciences.com/"
     },
     "PNTG": {
       "how": "probed",
       "name": "Pennant Group Inc",
       "scope": "core",
+      "signup_url": null,
       "url": "https://investor.pennantgroup.com/"
     },
     "PODD": {
       "how": "probed",
       "name": "Insulet Corporation",
       "scope": "core",
+      "signup_url": "https://investors.insulet.com/resources/investor-email-alerts/default.aspx",
       "url": "https://investors.insulet.com/overview/default.aspx"
     },
     "PRCT": {
       "how": "probed",
       "name": "PROCEPT BioRobotics Corporation",
       "scope": "core",
+      "signup_url": null,
       "url": "https://ir.procept-biorobotics.com/"
     },
     "PRVA": {
       "how": "probed",
       "name": "Privia Health Group Inc",
       "scope": "core",
+      "signup_url": null,
       "url": "https://ir.priviahealth.com/"
     },
     "Q": {
       "how": "probed",
       "name": "Qnity Electronics Inc.",
       "scope": "portfolio",
+      "signup_url": "https://ir.qnityelectronics.com/resources/email-alerts",
       "url": "https://ir.qnityelectronics.com/"
     },
     "QDEL": {
       "how": "probed",
       "name": "QuidelOrtho Corporation",
       "scope": "core",
+      "signup_url": "https://ir.quidelortho.com/resources/default.aspx#investor-email-alerts",
       "url": "https://ir.quidelortho.com/home/default.aspx"
     },
     "QGEN": {
       "how": "probed",
       "name": "Qiagen N.V.",
       "scope": "core",
+      "signup_url": null,
       "url": "https://corporate.qiagen.com/English/investor-relations/overview/default.aspx"
     },
     "RDNT": {
       "how": "homepage",
       "name": "Radnet Inc",
       "scope": "core",
+      "signup_url": null,
       "url": "https://www.radnet.com/"
     },
     "RDOR3": {
       "how": "probed",
       "name": "Rede D'Or Sao Luiz SA",
       "scope": "core",
+      "signup_url": null,
       "url": "https://ri.rededorsaoluiz.com.br/en/"
     },
     "RGEN": {
       "how": "probed",
       "name": "Repligen Corporation",
       "scope": "core",
+      "signup_url": "https://investors.repligen.com/resources/investor-email-alerts/default.aspx",
       "url": "https://investors.repligen.com/overview/default.aspx"
     },
     "RMD": {
       "how": "probed",
       "name": "Resmed Inc",
       "scope": "core",
+      "signup_url": null,
       "url": "https://investor.resmed.com/"
     },
     "ROG": {
       "how": "probed",
       "name": "Rogers Corporation",
       "scope": "core",
+      "signup_url": null,
       "url": "https://www.rogerscorp.com/investors"
     },
     "ROIV": {
       "how": "probed",
       "name": "Roivant Sciences Ltd",
       "scope": "portfolio",
+      "signup_url": "https://investor.roivant.com/email-alerts",
       "url": "https://investor.roivant.com/"
     },
     "RPD": {
       "how": "probed",
       "name": "Rapid7, Inc.",
       "scope": "portfolio",
+      "signup_url": "https://investors.rapid7.com/resources/investor-email-alerts/default.aspx",
       "url": "https://investors.rapid7.com/overview/default.aspx"
     },
     "RVTY": {
       "how": "probed",
       "name": "Revvity, Inc.",
       "scope": "core",
+      "signup_url": "https://ir.revvity.com/resources/investor-email-alerts/default.aspx",
       "url": "https://ir.revvity.com/home/default.aspx"
     },
     "RXST": {
       "how": "probed",
       "name": "RxSight, Inc.",
       "scope": "core",
+      "signup_url": null,
       "url": "https://investors.rxsight.com/"
     },
     "SCI": {
       "how": "probed",
       "name": "Service Corporation International",
       "scope": "core",
+      "signup_url": "https://investors.sci-corp.com/investors/email-alerts",
       "url": "https://investors.sci-corp.com/"
     },
     "SDGR": {
       "how": "probed",
       "name": "Schrodinger Inc",
       "scope": "core",
+      "signup_url": null,
       "url": "https://www.schrodinger.com/life-science/learn/webinars/optimizing-protein-stability-using-new-computational-design-approaches-biologics/"
     },
     "SFZN.SW": {
       "how": "probed",
       "name": "Siegfried Holding AG",
       "scope": "core",
+      "signup_url": null,
       "url": "https://www.siegfried.ch/investors/"
     },
     "SGHT": {
       "how": "probed",
       "name": "Sight Sciences, Inc.",
       "scope": "core",
+      "signup_url": null,
       "url": "https://investors.sightsciences.com/"
     },
     "SGRY": {
       "how": "probed",
       "name": "Surgery Partners Inc",
       "scope": "core",
+      "signup_url": null,
       "url": "https://ir.surgerypartners.com/"
     },
     "SHC": {
       "how": "probed",
       "name": "Sotera Health Company",
       "scope": "core",
+      "signup_url": null,
       "url": "https://investors.soterahealth.com/"
     },
     "SHL GY": {
       "how": "probed",
       "name": "Siemens Healthineers AG",
       "scope": "core",
+      "signup_url": null,
       "url": "https://www.siemens-healthineers.com/investor-relations"
     },
     "SHMZF": {
       "how": "homepage",
       "name": "Shimadzu",
       "scope": "core",
+      "signup_url": null,
       "url": "https://www.shimadzu.com/"
     },
     "SIBN": {
       "how": "probed",
       "name": "SI-BONE, Inc.",
       "scope": "core",
+      "signup_url": null,
       "url": "https://investor.si-bone.com/"
     },
     "SNN": {
       "how": "probed",
       "name": "Smith & Nephew PLC",
       "scope": "core",
+      "signup_url": null,
       "url": "https://www.smith-nephew.com/Error-404.html"
     },
     "SOLV": {
       "how": "probed",
       "name": "Solventum Corporation",
       "scope": "core",
+      "signup_url": null,
       "url": "https://investors.solventum.com/"
     },
     "SOON": {
       "how": "curated",
       "name": "Sonova Holding AG",
       "scope": "core",
+      "signup_url": null,
       "url": "https://www.sonova.com/en/investors"
     },
     "SPCX": {
       "how": "probed",
       "name": "Space Exploration Technologies Corp.",
       "scope": "portfolio",
+      "signup_url": "https://www.spacex.com/resources/email-alerts",
       "url": "https://www.spacex.com/investors"
     },
     "SPGI": {
       "how": "probed",
       "name": "S&P Global Inc",
       "scope": "core",
+      "signup_url": null,
       "url": "https://investor.spglobal.com/investor-relations-overview/default.aspx"
     },
     "SPOT": {
       "how": "probed",
       "name": "Spotify Technology SA",
       "scope": "portfolio",
+      "signup_url": "https://www.spotify.com/us/resources/investor-email-alerts/default.aspx",
       "url": "https://www.spotify.com/us/investors/"
     },
     "SRT.DE": {
       "how": "homepage",
       "name": "Sartorius AG",
       "scope": "core",
+      "signup_url": null,
       "url": "https://www.sartorius.com/en"
     },
     "SRTA": {
       "how": "probed",
       "name": "Strata Critical Medical, Inc.",
       "scope": "core",
+      "signup_url": null,
       "url": "https://ir.stratacritical.com/"
     },
     "STAA": {
       "how": "probed",
       "name": "STAAR Surgical Company",
       "scope": "core",
+      "signup_url": null,
       "url": "https://www.staar.com/investors"
     },
     "STE": {
       "how": "probed",
       "name": "STERIS plc",
       "scope": "core",
+      "signup_url": null,
       "url": "https://sterisplc.gcs-web.com/investor-relations"
     },
     "STMN.SW": {
       "how": "unverified",
       "name": "Straumann Holding AG",
       "scope": "core",
+      "signup_url": null,
       "url": "https://www.straumann.com/group/en/home/investors.html"
     },
     "STVN": {
       "how": "probed",
       "name": "Stevanato Group S.p.A.",
       "scope": "core",
+      "signup_url": null,
       "url": "https://ir.stevanatogroup.com/"
     },
     "SYK": {
       "how": "probed",
       "name": "Stryker Corp",
       "scope": "core",
+      "signup_url": null,
       "url": "https://investors.stryker.com/home/default.aspx"
     },
     "Secare SS": {
       "how": "probed",
       "name": "Sectra AB",
       "scope": "core",
+      "signup_url": null,
       "url": "https://www.swedencare.com/en/financials"
     },
     "TALK": {
       "how": "probed",
       "name": "Talkspace Inc",
       "scope": "core",
+      "signup_url": null,
       "url": "https://investors.talkspace.com"
     },
     "TCMD": {
       "how": "probed",
       "name": "Tactile Systems Technology Inc",
       "scope": "core",
+      "signup_url": null,
       "url": "https://investors.tactilemedical.com/"
     },
     "TDOC": {
       "how": "probed",
       "name": "Teladoc Health Inc",
       "scope": "core",
+      "signup_url": null,
       "url": "https://www.teladochealth.com/errors/404"
     },
     "TECH": {
       "how": "probed",
       "name": "Bio-Techne Corporation",
       "scope": "core",
+      "signup_url": "https://investors.bio-techne.com/email-alerts",
       "url": "https://investors.bio-techne.com/"
     },
     "TEM": {
       "how": "probed",
       "name": "Tempus AI, Inc.",
       "scope": "core",
+      "signup_url": "https://investors.tempus.com/resources/email-alerts",
       "url": "https://investors.tempus.com/"
     },
     "TFX": {
       "how": "probed",
       "name": "Teleflex Incorporated",
       "scope": "core",
+      "signup_url": "https://investors.teleflex.com/resources/investor-email-alerts/default.aspx",
       "url": "https://investors.teleflex.com/home/default.aspx"
     },
     "THC": {
       "how": "probed",
       "name": "Tenet Healthcare Corp",
       "scope": "core",
+      "signup_url": null,
       "url": "https://investor.tenethealth.com/home/default.aspx"
     },
     "TMDX": {
       "how": "probed",
       "name": "TransMedics Group Inc",
       "scope": "core",
+      "signup_url": null,
       "url": "https://www.transmedics.com/investors/"
     },
     "TMO": {
       "how": "probed",
       "name": "Thermo Fisher Scientific Inc",
       "scope": "core",
+      "signup_url": null,
       "url": "https://ir.thermofisher.com/investors/overview/default.aspx"
     },
     "TNDM": {
       "how": "probed",
       "name": "Tandem Diabetes Care, Inc.",
       "scope": "core",
+      "signup_url": "https://investor.tandemdiabetes.com/email-alerts",
       "url": "https://investor.tandemdiabetes.com/"
     },
     "TPL": {
       "how": "probed",
       "name": "Texas Pacific Land Corp",
       "scope": "core",
+      "signup_url": null,
       "url": "https://www.texaspacific.com/investors"
     },
     "TSLA": {
       "how": "unverified",
       "name": "Tesla, Inc.",
       "scope": "portfolio",
+      "signup_url": null,
       "url": "https://ir.tesla.com/"
     },
     "TWST": {
       "how": "probed",
       "name": "Twist Bioscience Corporation",
       "scope": "core",
+      "signup_url": null,
       "url": "https://investors.twistbioscience.com/"
     },
     "TXG": {
       "how": "probed",
       "name": "10x Genomics, Inc.",
       "scope": "core",
+      "signup_url": null,
       "url": "https://investors.10xgenomics.com/overview/default.aspx"
     },
     "U": {
       "how": "probed",
       "name": "Unity Software Inc",
       "scope": "portfolio",
+      "signup_url": "https://investors.unity.com/resources/investor-email-alerts/default.aspx",
       "url": "https://investors.unity.com/overview/default.aspx"
     },
     "UFPT": {
       "how": "probed",
       "name": "UFP Technologies, Inc.",
       "scope": "core",
+      "signup_url": null,
       "url": "https://ufpt.com/investors/"
     },
     "UHS": {
       "how": "probed",
       "name": "Universal Health Services Inc",
       "scope": "core",
+      "signup_url": "https://ir.uhs.com/email-alerts",
       "url": "https://ir.uhs.com/"
     },
     "ULS": {
       "how": "probed",
       "name": "UL Solutions Inc.",
       "scope": "portfolio",
+      "signup_url": "https://ir.ul.com/resources/investor-email-alerts/default.aspx",
       "url": "https://ir.ul.com/overview/default.aspx"
     },
     "UNH": {
       "how": "probed",
       "name": "UnitedHealth Group Inc",
       "scope": "core",
+      "signup_url": null,
       "url": "https://www.unitedhealthgroup.com/page-not-found.html"
     },
     "UPS": {
       "how": "probed",
       "name": "United Parcel Service Inc",
       "scope": "core",
+      "signup_url": null,
       "url": "https://investors.ups.com/"
     },
     "USPH": {
       "how": "probed",
       "name": "US Physical Therapy Inc",
       "scope": "core",
+      "signup_url": null,
       "url": "https://www.usph.com/investor-relations/"
     },
     "V": {
       "how": "probed",
       "name": "Visa Inc",
       "scope": "portfolio",
+      "signup_url": null,
       "url": "https://investor.visa.com/"
     },
     "VCEL": {
       "how": "probed",
       "name": "Vericel Corporation",
       "scope": "core",
+      "signup_url": "https://investors.vcel.com/email-alerts",
       "url": "https://investors.vcel.com/"
     },
     "VCYT": {
       "how": "probed",
       "name": "Veracyte, Inc.",
       "scope": "core",
+      "signup_url": "https://investor.veracyte.com/investor-resources/email-alerts",
       "url": "https://investor.veracyte.com/"
     },
     "VEEV": {
       "how": "probed",
       "name": "Veeva Systems Inc.",
       "scope": "portfolio",
+      "signup_url": "https://ir.veeva.com/resources/investor-email-alerts/default.aspx",
       "url": "https://ir.veeva.com/overview/default.aspx"
     },
     "VLTO": {
       "how": "probed",
       "name": "Veralto Corp",
       "scope": "core",
+      "signup_url": "https://investors.veralto.com/email-alerts",
       "url": "https://investors.veralto.com/"
     },
     "VMD": {
       "how": "probed",
       "name": "Viemed Healthcare Inc",
       "scope": "core",
+      "signup_url": null,
       "url": "https://www.viemed.com/investors/"
     },
     "VREX": {
       "how": "probed",
       "name": "Varex Imaging Corporation",
       "scope": "core",
+      "signup_url": null,
       "url": "https://www.vareximaging.com/investor-relations/"
     },
     "WAT": {
       "how": "probed",
       "name": "Waters Corp",
       "scope": "core",
+      "signup_url": "https://ir.waters.com/resources/investor-email-alerts/default.aspx",
       "url": "https://ir.waters.com/overview/default.aspx"
     },
     "WAY": {
       "how": "probed",
       "name": "Waystar Holding Corp",
       "scope": "portfolio",
+      "signup_url": null,
       "url": "https://investors.waystar.com/"
     },
     "WMT": {
       "how": "probed",
       "name": "Walmart Inc",
       "scope": "core",
+      "signup_url": null,
       "url": "https://www.walmart.com/blocked?url=L2ludmVzdG9ycw==&uuid=ad4f958a-90ec-11f1-9c10-9a3de0523a28&vid=&g=b"
     },
     "WST": {
       "how": "probed",
       "name": "West Pharmaceutical Services Inc",
       "scope": "core",
+      "signup_url": "https://investor.westpharma.com/email-alerts",
       "url": "https://investor.westpharma.com"
     },
     "XRAY": {
       "how": "probed",
       "name": "DENTSPLY SIRONA Inc.",
       "scope": "core",
+      "signup_url": null,
       "url": "https://investors.dentsplysirona.com/"
     },
     "YPSN": {
       "how": "curated",
       "name": "Ypsomed Holding AG",
       "scope": "core",
+      "signup_url": null,
       "url": "https://www.ypsomed.com/en/investors"
     },
     "ZBH": {
       "how": "probed",
       "name": "Zimmer Biomet Holdings, Inc",
       "scope": "core",
+      "signup_url": null,
       "url": "https://investor.zimmerbiomet.com/"
     },
     "ZTS": {
       "how": "probed",
       "name": "Zoetis Inc.",
       "scope": "core",
+      "signup_url": null,
       "url": "https://investor.zoetis.com/home/default.aspx"
     }
   }
