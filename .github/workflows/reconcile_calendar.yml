@@ -21,8 +21,10 @@ on:
     inputs:
       lock:
         description: >-
-          Optional operator date lock, "TICKER:YYYY-MM-DD" (comma-separate several).
-          Applied BEFORE reconcile so the locked date is what reconcile then respects.
+          Operator date lock, "TICKER:YYYY-MM-DD". LOCKS AN EXISTING EVENT ON THAT DATE --
+          it cannot MOVE an event to a new date (that is a calendar-first operation and
+          only the Slack `lock <date>` reply does it today). Fails loudly if no event sits
+          on the date, rather than silently no-opping.
         required: false
         type: string
 
