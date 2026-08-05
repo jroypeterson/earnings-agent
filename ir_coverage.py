@@ -26,6 +26,7 @@ from __future__ import annotations
 import argparse
 import collections
 import csv
+import json
 import re
 import sys
 from datetime import date, datetime, timedelta, timezone
@@ -123,9 +124,29 @@ def _root(domain: str) -> str:
     return ".".join(parts[-2:])
 
 
+def _portfolio_tickers() -> set[str]:
+    """Held names, from CM's position export. Empty set on any failure -- never raises."""
+    p = ROOT / "Coverage Manager" / "exports" / "portfolio.json"
+    if not p.exists():
+        return set()
+    try:
+        return set(json.loads(p.read_text(encoding="utf-8")).keys())
+    except (ValueError, OSError):
+        return set()
+
+
 def load_universe() -> tuple[dict, dict, list[dict]]:
-    """({root domain: row}, {normalised company name: row}, core rows)."""
-    by_domain, by_name, core = {}, {}, []
+    """({root domain: row}, {normalised company name: row}, audited rows).
+
+    Audited = Core=Y **UNION Portfolio** (JP 2026-08-05). Core alone was the original
+    scope and it silently omitted 11 held names -- ADSK, BE, BRO, CPRT, FI, KRC, LLY, Q,
+    ROIV, SPCX, ULS -- none of which carry Core=Y. The audit exists to decide where to
+    sign up, and "I own it" is the strongest possible reason to be on a distribution
+    list, so a held name must never be invisible to it. Each row is tagged `_scope`
+    (portfolio > core) for the two output lists.
+    """
+    by_domain, by_name, audited = {}, {}, []
+    port = _portfolio_tickers()
     with open(UNIVERSE, encoding="utf-8-sig", newline="") as fh:
         for r in csv.DictReader(fh):
             site = (r.get("Website") or "").strip()
@@ -136,9 +157,12 @@ def load_universe() -> tuple[dict, dict, list[dict]]:
             nn = norm_name(r.get("Company Name", ""))
             if nn and nn not in by_name:
                 by_name[nn] = r
-            if (r.get("Core") or "").strip().upper() in ("Y", "YES", "TRUE", "1"):
-                core.append(r)
-    return by_domain, by_name, core
+            tk = (r.get("Ticker") or "").strip()
+            is_core = (r.get("Core") or "").strip().upper() in ("Y", "YES", "TRUE", "1")
+            if is_core or tk in port:
+                r["_scope"] = "portfolio" if tk in port else "core"
+                audited.append(r)
+    return by_domain, by_name, audited
 
 
 def fetch_senders(days: int, max_results: int = 500) -> tuple[list[tuple[str, str]], str]:
@@ -212,6 +236,7 @@ def build(days: int = 365) -> dict:
         "bulk": bulk.most_common(),
         "unmatched": unmatched.most_common(30),
         "core_rows": {r["Ticker"]: r.get("Company Name", "") for r in core},
+        "scopes": {r["Ticker"]: r.get("_scope", "core") for r in core},
     }
 
 
