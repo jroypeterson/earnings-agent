@@ -70,7 +70,7 @@ def _headers(token: str) -> dict:
 
 TIER_LIST_LABELS = {
     1: "Core Watchlist - Positions/Researching",  # all Tier 1 consolidated here
-    2: "HC Svcs & MedTech",
+    2: "HC Svcs, MedTech & Biopharma",
 }
 
 
@@ -116,7 +116,7 @@ def _quarter_list_name(event_date: str, tier: int = 2, position: str = "") -> st
 
     Examples:
       tier=1 -> "1Q26 Earnings - Core Watchlist"
-      tier=2 -> "1Q26 Earnings - HC Svcs & MedTech"
+      tier=2 -> "1Q26 Earnings - HC Svcs, MedTech & Biopharma"
       tier=3 -> "1Q26 Earnings"
     """
     rq = _reporting_quarter(event_date)

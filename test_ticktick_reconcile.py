@@ -107,7 +107,7 @@ def test_reconcile_marks_reported_fixes_dates_and_skips_done(monkeypatch):
                  quarter=date_to_quarter("2026-07-10"),
                  eps_actual=2.0, reported=True, tier=2, company_name="XYZ Corp")
 
-    project = {"id": "P_HC", "name": "2Q26 Earnings - HC Svcs & MedTech"}
+    project = {"id": "P_HC", "name": "2Q26 Earnings - HC Svcs, MedTech & Biopharma"}
     tasks = {
         "P_HC": [
             {"id": "T_UNH", "title": "UNH Q2 2026 Earnings (Jul 27 BMO)",
@@ -185,7 +185,7 @@ def test_reconcile_adds_missing_sector_tag_preserving_user_tags(monkeypatch):
                  quarter=date_to_quarter("2026-08-05"),
                  reported=False, tier=2, company_name="ABC Inc")
 
-    project = {"id": "P_HC", "name": "2Q26 Earnings - HC Svcs & MedTech"}
+    project = {"id": "P_HC", "name": "2Q26 Earnings - HC Svcs, MedTech & Biopharma"}
     tasks = {"P_HC": [{
         "id": "T_ABC", "title": "ABC Q2 2026 Earnings (Aug 05 BMO)",
         "content": "body", "dueDate": "2026-08-05T09:00:00.000+0000",
@@ -212,7 +212,7 @@ def test_reconcile_skips_tag_when_already_present(monkeypatch):
     upsert_event(conn, "ABC", "2026-08-05", "bmo", None,
                  quarter=date_to_quarter("2026-08-05"),
                  reported=False, tier=2, company_name="ABC Inc")
-    project = {"id": "P_HC", "name": "2Q26 Earnings - HC Svcs & MedTech"}
+    project = {"id": "P_HC", "name": "2Q26 Earnings - HC Svcs, MedTech & Biopharma"}
     tasks = {"P_HC": [{
         "id": "T_ABC", "title": "ABC Q2 2026 Earnings (Aug 05 BMO)",
         "content": "body", "dueDate": "2026-08-05T09:00:00.000+0000",
@@ -238,7 +238,7 @@ def test_reconcile_fixes_stale_date_on_already_reported_task(monkeypatch):
     upsert_event(conn, "UNH", "2026-07-16", "bmo", None,
                  quarter=date_to_quarter("2026-07-16"),
                  eps_actual=6.38, reported=True, tier=2, company_name="UnitedHealth")
-    project = {"id": "P_HC", "name": "2Q26 Earnings - HC Svcs & MedTech"}
+    project = {"id": "P_HC", "name": "2Q26 Earnings - HC Svcs, MedTech & Biopharma"}
     tasks = {"P_HC": [{
         "id": "T_UNH", "title": "[REPORTED] UNH Q2 2026 Earnings (Jul 27 BMO)",
         "content": "actuals body — do not clobber",
@@ -268,7 +268,7 @@ def test_reconcile_fixes_stale_startdate_when_duedate_matches(monkeypatch):
     upsert_event(conn, "ABC", "2026-08-05", "bmo", None,
                  quarter=date_to_quarter("2026-08-05"),
                  reported=False, tier=2, company_name="ABC Inc")
-    project = {"id": "P_HC", "name": "2Q26 Earnings - HC Svcs & MedTech"}
+    project = {"id": "P_HC", "name": "2Q26 Earnings - HC Svcs, MedTech & Biopharma"}
     tasks = {"P_HC": [{
         "id": "T_ABC", "title": "ABC Q2 2026 Earnings (Aug 05 BMO)", "content": "b",
         "startDate": "2026-08-01T09:00:00.000+0000",   # stale
@@ -297,7 +297,7 @@ def test_reconcile_honors_db_pointer_over_arbitrary_sibling(monkeypatch):
     conn.commit()
 
     p_legacy = {"id": "P_OLD", "name": "2Q26 Earnings - Core Watchlist - Positions/Researching"}
-    p_hc = {"id": "P_HC", "name": "2Q26 Earnings - HC Svcs & MedTech"}
+    p_hc = {"id": "P_HC", "name": "2Q26 Earnings - HC Svcs, MedTech & Biopharma"}
     stale = "2026-07-27T09:00:00.000+0000"
     tasks = {
         "P_OLD": [{"id": "T_OLD", "title": "ABC Q2 2026 Earnings (Jul 27 BMO)",
@@ -330,7 +330,7 @@ def test_reconcile_phantom_row_does_not_corrupt_reported_task(monkeypatch):
     upsert_event(conn, "ICLR", "2026-06-02", "amc", None,
                  quarter=date_to_quarter("2026-06-02"),
                  reported=False, tier=2, company_name="ICON")
-    project = {"id": "P_HC", "name": "1Q26 Earnings - HC Svcs & MedTech"}
+    project = {"id": "P_HC", "name": "1Q26 Earnings - HC Svcs, MedTech & Biopharma"}
     tasks = {"P_HC": [{
         "id": "T_ICLR", "title": "[REPORTED] ICLR Q1 2026 Earnings (May 27 AMC)",
         "content": "actuals", "startDate": "2026-05-27T09:00:00.000+0000",
@@ -357,7 +357,7 @@ def test_reconcile_prefers_open_candidate_when_pointer_missing(monkeypatch):
                  quarter=date_to_quarter("2026-07-16"),
                  reported=False, tier=2, company_name="ABC Inc")  # no pointer
     p_legacy = {"id": "P_OLD", "name": "2Q26 Earnings - Core Watchlist - Positions/Researching"}
-    p_hc = {"id": "P_HC", "name": "2Q26 Earnings - HC Svcs & MedTech"}
+    p_hc = {"id": "P_HC", "name": "2Q26 Earnings - HC Svcs, MedTech & Biopharma"}
     stale = "2026-07-27T09:00:00.000+0000"
     tasks = {
         "P_OLD": [{"id": "T_OLD", "title": "ABC Q2 2026 Earnings (Jul 27 BMO)",
@@ -389,7 +389,7 @@ def test_reconcile_phantom_guard_covers_out_of_window_reported(monkeypatch):
     upsert_event(conn, "ICLR", "2026-06-20", "amc", None,
                  quarter=date_to_quarter("2026-06-20"),
                  reported=False, tier=2, company_name="ICON")
-    project = {"id": "P_HC", "name": "1Q26 Earnings - HC Svcs & MedTech"}
+    project = {"id": "P_HC", "name": "1Q26 Earnings - HC Svcs, MedTech & Biopharma"}
     tasks = {"P_HC": [{
         "id": "T_ICLR", "title": "[REPORTED] ICLR Q1 2026 Earnings (May 01 AMC)",
         "content": "actuals", "startDate": "2026-05-01T09:00:00.000+0000",
@@ -442,7 +442,7 @@ def test_reconcile_mark_reported_and_tag_is_single_write(monkeypatch):
                  quarter=date_to_quarter("2026-07-16"),
                  eps_estimate=4.89, eps_actual=6.38, rev_estimate=111e9, rev_actual=112e9,
                  reported=True, tier=2, company_name="UnitedHealth")
-    project = {"id": "P_HC", "name": "2Q26 Earnings - HC Svcs & MedTech"}
+    project = {"id": "P_HC", "name": "2Q26 Earnings - HC Svcs, MedTech & Biopharma"}
     tasks = {"P_HC": [{
         "id": "T_UNH", "title": "UNH Q2 2026 Earnings (Jul 27 BMO)", "content": "body",
         "startDate": "2026-07-27T09:00:00.000+0000",
@@ -477,7 +477,7 @@ def test_reconcile_skips_row_with_stale_updated_at(monkeypatch):
     conn.execute("UPDATE events SET updated_at='2026-06-05 03:00:00' WHERE ticker='ABC'")
     conn.execute("UPDATE events SET updated_at='2026-07-22 03:00:00' WHERE ticker='XYZ'")
     conn.commit()
-    project = {"id": "P_HC", "name": "2Q26 Earnings - HC Svcs & MedTech"}
+    project = {"id": "P_HC", "name": "2Q26 Earnings - HC Svcs, MedTech & Biopharma"}
     stale = "2026-08-01T09:00:00.000+0000"  # both tasks have a wrong date
     tasks = {"P_HC": [
         # items present so the stale row needs NO items-upgrade write either —
@@ -572,7 +572,7 @@ def test_reconcile_locked_stale_row_does_not_abort(monkeypatch):
     conn.execute("UPDATE events SET date_locked=1, updated_at='2026-06-05 03:00:00' "
                  "WHERE ticker='ABC'")
     conn.commit()
-    project = {"id": "P_HC", "name": "2Q26 Earnings - HC Svcs & MedTech"}
+    project = {"id": "P_HC", "name": "2Q26 Earnings - HC Svcs, MedTech & Biopharma"}
     tasks = {"P_HC": [{"id": "T_ABC", "title": "ABC Q2 2026 Earnings (Aug 20 BMO)",
                        "content": "b", "startDate": "2026-08-20T09:00:00.000+0000",
                        "dueDate": "2026-08-20T09:00:00.000+0000", "status": 0}]}
@@ -598,7 +598,7 @@ def test_reconcile_skips_null_pointer_adoption_on_read_failure(monkeypatch):
                  quarter=date_to_quarter("2026-07-16"),
                  reported=False, tier=2, company_name="ABC Inc")  # NULL pointer
     p_old = {"id": "P_OLD", "name": "2Q26 Earnings - Core Watchlist - Positions/Researching"}
-    p_hc = {"id": "P_HC", "name": "2Q26 Earnings - HC Svcs & MedTech"}
+    p_hc = {"id": "P_HC", "name": "2Q26 Earnings - HC Svcs, MedTech & Biopharma"}
     stale = "2026-07-27T09:00:00.000+0000"
     # P_OLD returns a stale sibling; P_HC (where the real task lives) fails to read.
     old_tasks = [{"id": "T_OLD", "title": "ABC Q2 2026 Earnings (Jul 27 BMO)",
@@ -700,7 +700,7 @@ def test_reconcile_strips_date_from_unconfirmed_task(monkeypatch):
     upsert_event(conn, "ABC", "2026-08-05", "", None,
                  quarter=date_to_quarter("2026-08-05"),
                  reported=False, tier=2, company_name="ABC Inc")
-    project = {"id": "P_HC", "name": "2Q26 Earnings - HC Svcs & MedTech"}
+    project = {"id": "P_HC", "name": "2Q26 Earnings - HC Svcs, MedTech & Biopharma"}
     tasks = {"P_HC": [{
         "id": "T_ABC", "title": "ABC Q2 2026 Earnings (Aug 12)", "content": "b",
         "startDate": "2026-08-12T09:00:00.000+0000",
@@ -731,7 +731,7 @@ def test_reconcile_sets_date_when_confirmed(monkeypatch):
     upsert_event(conn, "ABC", "2026-08-05", "amc", None,
                  quarter=date_to_quarter("2026-08-05"),
                  reported=False, tier=2, company_name="ABC Inc")
-    project = {"id": "P_HC", "name": "2Q26 Earnings - HC Svcs & MedTech"}
+    project = {"id": "P_HC", "name": "2Q26 Earnings - HC Svcs, MedTech & Biopharma"}
     tasks = {"P_HC": [{
         "id": "T_ABC", "title": "ABC Q2 2026 Earnings", "content": "b",
         "status": 0, "items": _std_items(),   # no startDate/dueDate at all
@@ -758,7 +758,7 @@ def test_reconcile_unconfirmed_undated_converged_writes_nothing(monkeypatch):
     upsert_event(conn, "ABC", "2026-08-05", "", None,
                  quarter=date_to_quarter("2026-08-05"),
                  reported=False, tier=2, company_name="ABC Inc")
-    project = {"id": "P_HC", "name": "2Q26 Earnings - HC Svcs & MedTech"}
+    project = {"id": "P_HC", "name": "2Q26 Earnings - HC Svcs, MedTech & Biopharma"}
     tasks = {"P_HC": [{
         "id": "T_ABC", "title": "ABC Q2 2026 Earnings", "content": "b",
         "status": 0, "items": _std_items(),
@@ -791,7 +791,7 @@ def test_reconcile_stale_unconfirmed_task_still_stripped(monkeypatch):
     conn.execute("UPDATE events SET updated_at='2026-07-24 03:00:00' WHERE ticker='XYZ'")
     conn.commit()
     p_core = {"id": "P_CORE", "name": "2Q26 Earnings - Core Watchlist - Positions/Researching"}
-    p_hc = {"id": "P_HC", "name": "2Q26 Earnings - HC Svcs & MedTech"}
+    p_hc = {"id": "P_HC", "name": "2Q26 Earnings - HC Svcs, MedTech & Biopharma"}
     tasks = {
         "P_CORE": [{"id": "T_ENSG", "title": "ENSG Q2 2026 Earnings (Jul 22)",
                     "content": "checklist body",
@@ -870,7 +870,7 @@ def test_sync_creates_unconfirmed_task_undated(monkeypatch):
 
     monkeypatch.setattr(ticktick, "create_task", fake_create)
     monkeypatch.setattr(ticktick, "_list_all_projects",
-                        lambda token: [{"id": "P_HC", "name": "2Q26 Earnings - HC Svcs & MedTech"}])
+                        lambda token: [{"id": "P_HC", "name": "2Q26 Earnings - HC Svcs, MedTech & Biopharma"}])
     monkeypatch.setattr(ticktick, "list_tasks_in_project", lambda token, pid: [])
     monkeypatch.setattr(ticktick, "_gather_quarter_existing_tasks",
                         lambda token, projects, quarters: {q: {} for q in quarters})
@@ -918,7 +918,7 @@ def test_sync_locked_event_gets_date(monkeypatch):
                         lambda token, list_id, title, content, due_date, tags=None:
                         created.append((title, due_date)) or "TID1")
     monkeypatch.setattr(ticktick, "_list_all_projects",
-                        lambda token: [{"id": "P_HC", "name": "2Q26 Earnings - HC Svcs & MedTech"}])
+                        lambda token: [{"id": "P_HC", "name": "2Q26 Earnings - HC Svcs, MedTech & Biopharma"}])
     monkeypatch.setattr(ticktick, "list_tasks_in_project", lambda token, pid: [])
     monkeypatch.setattr(ticktick, "_gather_quarter_existing_tasks",
                         lambda token, projects, quarters: {q: {} for q in quarters})
@@ -1015,7 +1015,7 @@ def test_reconcile_adds_subtasks_to_converged_task_single_write(monkeypatch):
     upsert_event(conn, "ABC", "2026-08-05", "bmo", None,
                  quarter=date_to_quarter("2026-08-05"),
                  reported=False, tier=2, company_name="ABC Inc")
-    project = {"id": "P_HC", "name": "2Q26 Earnings - HC Svcs & MedTech"}
+    project = {"id": "P_HC", "name": "2Q26 Earnings - HC Svcs, MedTech & Biopharma"}
     tasks = {"P_HC": [{
         "id": "T_ABC", "title": "ABC Q2 2026 Earnings (Aug 05 BMO)",
         "content": "consensus body", "startDate": "2026-08-05T09:00:00.000+0000",
@@ -1046,7 +1046,7 @@ def test_reconcile_subtasks_preserve_user_items_and_ticks(monkeypatch):
     upsert_event(conn, "ABC", "2026-08-05", "bmo", None,
                  quarter=date_to_quarter("2026-08-05"),
                  reported=False, tier=2, company_name="ABC Inc")
-    project = {"id": "P_HC", "name": "2Q26 Earnings - HC Svcs & MedTech"}
+    project = {"id": "P_HC", "name": "2Q26 Earnings - HC Svcs, MedTech & Biopharma"}
     tasks = {"P_HC": [{
         "id": "T_ABC", "title": "ABC Q2 2026 Earnings (Aug 05 BMO)", "content": "b",
         "startDate": "2026-08-05T09:00:00.000+0000",
@@ -1135,7 +1135,7 @@ def test_reconcile_dry_run_writes_nothing(monkeypatch):
     upsert_event(conn, "UNH", "2026-07-16", "bmo", None,
                  quarter=date_to_quarter("2026-07-16"),
                  eps_actual=6.38, reported=True, tier=2, company_name="UnitedHealth")
-    project = {"id": "P_HC", "name": "2Q26 Earnings - HC Svcs & MedTech"}
+    project = {"id": "P_HC", "name": "2Q26 Earnings - HC Svcs, MedTech & Biopharma"}
     tasks = {"P_HC": [{"id": "T_UNH", "title": "UNH Q2 2026 Earnings (Jul 27 BMO)",
                        "content": "body", "dueDate": "2026-07-27T09:00:00.000+0000",
                        "status": 0}]}

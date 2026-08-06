@@ -125,7 +125,7 @@ TIMING_LABELS = {
 # ---------------------------------------------------------------------------
 
 TIER_1_LABEL = "Core Watchlist"
-TIER_2_LABEL = "HC Services + MedTech"
+TIER_2_LABEL = "HC Services + MedTech + Core Biopharma"
 TIER_3_LABEL = "Other"
 
 TIER_2_SECTORS = {"Healthcare Services", "MedTech"}

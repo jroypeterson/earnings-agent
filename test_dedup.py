@@ -562,16 +562,16 @@ def test_ticktick_quarter_list_name():
     assert _quarter_list_name("2026-04-30", tier=1, position="Researching") == "1Q26 Earnings - Core Watchlist - Positions/Researching"
     assert _quarter_list_name("2026-04-30", tier=1, position="Unknown") == "1Q26 Earnings - Core Watchlist - Positions/Researching"
 
-    # Tier 2 unchanged — HC Svcs & MedTech.
-    assert _quarter_list_name("2026-04-30", tier=2) == "1Q26 Earnings - HC Svcs & MedTech"
+    # Tier 2 label carries Biopharma since 2026-08-06 (Core-gated).
+    assert _quarter_list_name("2026-04-30", tier=2) == "1Q26 Earnings - HC Svcs, MedTech & Biopharma"
 
     # Tier 3 has no suffix.
     assert _quarter_list_name("2026-04-30", tier=3) == "1Q26 Earnings"
 
     # Reporting-quarter math unchanged — Jan-Mar releases report Q4 of prior year, etc.
-    assert _quarter_list_name("2026-07-15", tier=2) == "2Q26 Earnings - HC Svcs & MedTech"
+    assert _quarter_list_name("2026-07-15", tier=2) == "2Q26 Earnings - HC Svcs, MedTech & Biopharma"
     assert _quarter_list_name("2026-10-15", tier=1, position="Portfolio") == "3Q26 Earnings - Core Watchlist - Positions/Researching"
-    assert _quarter_list_name("2026-01-15", tier=2) == "4Q25 Earnings - HC Svcs & MedTech"
+    assert _quarter_list_name("2026-01-15", tier=2) == "4Q25 Earnings - HC Svcs, MedTech & Biopharma"
 
     print("PASS: TickTick quarterly list name generation correct")
 
