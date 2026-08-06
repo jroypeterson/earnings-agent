@@ -266,3 +266,52 @@ receiving it does not prove you are off one — a company may simply have sent n
 window, so those are separate buckets and never merged. And a Gmail failure renders as
 `INCONCLUSIVE`, not zero coverage: silence-because-unreadable read as
 silence-because-unsubscribed would send JP re-subscribing to everything.
+
+### The signup workflow — `ir_links.py` + `ir_ticktick.py` (2026-08-05)
+
+```
+python ir_links.py --refresh          # resolve + cache a VERIFIED IR url per name
+python ir_ticktick.py --dry-run       # show the two lists, write nothing
+python ir_ticktick.py                 # create/refresh both TickTick lists
+python ir_ticktick.py --update-links  # rewrite task bodies with the latest links
+python ir_ticktick.py --reconcile     # tick off names that have STARTED sending  <- weekly task
+```
+
+**Scope is Core=Y ∪ Portfolio, not Core alone.** Core-only silently omitted **11 held names**
+(ADSK, BE, BRO, CPRT, FI, KRC, LLY, Q, ROIV, SPCX, ULS), none of which carry `Core=Y`. Owning a
+company is the strongest possible reason to be on its list. That one change immediately found
+**LLY — 71 messages, the most active IR sender in the whole mailbox**, previously invisible;
+coverage went 8/256 → 9/267. `load_universe` tags every row `_scope` for the two output lists.
+
+**IR links are PROBED, not constructed.** CM carries a corporate homepage, not an IR page.
+A candidate is kept only if it returns 200 **AND does not land back on the bare homepage** —
+that second condition is load-bearing: bioMerieux's *published* IR address returned 200 while
+silently redirecting to the corporate site, and Coloplast's search-reported URL 404'd. Of 267:
+**228 probed, 11 curated** (CM has no `Website` for them at all — all European/Canadian, web-
+searched then fetch-verified), **23 honest homepage fallbacks**, **5 `unverified`**. Those 5
+(TSLA, LONN CH, 4543.T, CTEC LN, STMN.SW) sit behind bot protection that returns **403 on every
+path including nonsense ones** — tested, so a 403 there proves nothing and they cannot be
+verified from here. Recorded as unverified rather than dropped or silently trusted.
+`resolve_signup` additionally finds the **direct email-alerts page** for 95 of 267 —
+`resources/investor-email-alerts/default.aspx` is the Q4/gcs-web convention (found live on EHC);
+a hit only counts if the FINAL url mentions email/alert, so a site that 200s everything cannot
+pass its homepage off as a subscribe form.
+
+**Two lists, because 258 tasks in one is a wall** (`IR signups - Portfolio` 27 ·
+`IR signups - Coverage` 231). `--reconcile` **completes** a task when its company starts sending
+— never deletes: the tick is JP's durable record that he subscribed, and deleting would let a
+quiet quarter recreate the task as if he never had. Without it the lists rot from day one.
+
+**Do NOT use `ticktick.find_existing_task_by_ticker` here.** It splits the title on the first
+space, which is right for the earnings lists (US tickers, never spaced) and **wrong** for this
+universe, which carries exchange-suffixed tickers like `AFX DE` and `LONN CH` — it returns
+`AFX` / `LONN`, never matches, and the retry duplicated all 11 such names live. Use
+`ir_ticktick.find_existing`, which matches on our own `TICKER - Name` prefix. Regression-tested
+by asserting the old helper fails and the new one does not.
+
+**Rate limits: TickTick enforces BOTH 100/min AND 300 per 5 minutes**, and the second binds at
+~60/min sustained. `update_task_content` costs **two** calls (it re-reads the project, then
+writes), so the create-path pace put the update lane at ~160/min. **Past the cap the READ comes
+back empty and the write fails as `task not found in project`** — which reads like missing tasks
+rather than a rate limit, and is the single most misleading failure mode here. Creates pace at
+0.75s; the update lane widens to 2.2s.
