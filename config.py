@@ -130,6 +130,18 @@ TIER_3_LABEL = "Other"
 
 TIER_2_SECTORS = {"Healthcare Services", "MedTech"}
 
+# Sectors that join Tier 2 only for their **Core** names.
+#
+# Membership in TIER_2_SECTORS is by sector alone, which is right for the two
+# sectors above because they are almost entirely covered: 82 of 103 Healthcare
+# Services rows and 136 of 139 MedTech rows carry Core=Y. Biopharma is the
+# opposite shape — 687 rows, of which 38 are Core — so adding it to
+# TIER_2_SECTORS would enrol every clinical-stage shell in the universe in
+# quarterly TickTick tasks. Gating on Core keeps the set to the names JP
+# actually reads (JP 2026-08-06: tag biopharma "just like MedTech and
+# healthcare services").
+TIER_2_CORE_ONLY_SECTORS = {"Biopharma"}
+
 # ---------------------------------------------------------------------------
 # Logging
 # ---------------------------------------------------------------------------

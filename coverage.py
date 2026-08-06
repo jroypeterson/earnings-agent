@@ -29,7 +29,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from dataclasses import dataclass
 
-from config import COVERAGE_MANAGER_PATH, TIER_2_SECTORS, TICKERS_FILE
+from config import (COVERAGE_MANAGER_PATH, TIER_2_CORE_ONLY_SECTORS,
+                    TIER_2_SECTORS, TICKERS_FILE)
 
 logger = logging.getLogger("earnings_agent")
 
@@ -431,9 +432,18 @@ def load_coverage() -> list[TickerInfo]:
                 subsector = row.get("Subsector (JP)", "")
 
         # Determine tier
+        is_core = (meta.get("core") or "").strip().upper() == "Y"
+        if not is_core and position_entry is not None:
+            is_core = (position_entry[1].get("Core") or "").strip().upper() == "Y"
+
         if ticker in tier1_tickers:
             tier = 1
         elif sector in TIER_2_SECTORS:
+            tier = 2
+        elif sector in TIER_2_CORE_ONLY_SECTORS and is_core:
+            # Core-gated: see the TIER_2_CORE_ONLY_SECTORS note in config.py.
+            # Biopharma is 687 rows to MedTech's 139, so sector alone would put
+            # every clinical-stage shell into the TickTick sync.
             tier = 2
         else:
             tier = 3

@@ -713,9 +713,17 @@ def _merge_subtasks(existing: list[dict] | None) -> list[dict] | None:
     return merged if changed else None
 
 
-# Coverage sectors we surface as TickTick tags (JP's request). Restricted to the
-# two Tier-2 sectors — other sectors are left untagged rather than guessed.
-_SECTOR_TAGS = {"Healthcare Services", "MedTech"}
+# Coverage sectors we surface as TickTick tags (JP's request). Other sectors are
+# left untagged rather than guessed.
+#
+# Biopharma added 2026-08-06 at JP's request ("add a tag for biopharma ... just
+# like you do for MedTech and healthcare services"). Note the tag alone was NOT
+# enough: TickTick only syncs `tier <= 2`, and biopharma was Tier 3 for every
+# name outside a position list, so no biopharma task existed to carry a tag.
+# The companion change is `TIER_2_CORE_ONLY_SECTORS` in config.py, which admits
+# biopharma to Tier 2 **only when Core=Y** — sector alone would have enrolled all
+# 687 biopharma rows against MedTech's 139.
+_SECTOR_TAGS = {"Healthcare Services", "MedTech", "Biopharma"}
 
 
 def sector_tag(sector: str | None) -> str | None:
