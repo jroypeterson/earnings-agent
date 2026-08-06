@@ -1,13 +1,227 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-08-05T20:44:32Z",
+  "generated_at": "2026-08-06T13:13:10Z",
   "window": {
-    "start": "2026-08-05",
-    "end": "2026-08-08"
+    "start": "2026-08-06",
+    "end": "2026-08-09"
   },
   "counts": {
-    "previews": 0
+    "previews": 3
   },
-  "previews": []
+  "previews": [
+    {
+      "ticker": "DBX",
+      "company_name": "Dropbox, Inc.",
+      "tier": 1,
+      "event_date": "2026-08-06",
+      "event_hour": "amc",
+      "call_datetime_utc": "2026-08-06T21:00:00+00:00",
+      "last_price": 35.0,
+      "day_change_pct": 1.4198832289164458,
+      "consensus": {
+        "eps": {
+          "mean": 0.7449,
+          "count": null,
+          "low": null,
+          "high": null
+        },
+        "revenue": {
+          "mean": 632995421.0,
+          "count": null,
+          "low": null,
+          "high": null
+        }
+      },
+      "qtd": {
+        "since": "2026-06-30",
+        "ticker_pct": 27.411725063221283,
+        "spx_pct": 3.082603464791403,
+        "sector_etf": null,
+        "sector_etf_pct": null
+      },
+      "implied_move": {
+        "pct": 7.4,
+        "expiry": "2026-08-07",
+        "method": "ATM straddle",
+        "notes": [
+          "stale quote"
+        ]
+      },
+      "post_earnings_moves": [
+        {
+          "event_date": "2026-05-07",
+          "move_pct": 15.001991976384396,
+          "window_label": "next-day close vs earnings-day close"
+        }
+      ],
+      "beat_rates": {
+        "eps": {
+          "beats": null,
+          "total": null,
+          "source": "yfinance"
+        },
+        "revenue": {
+          "beats": 20,
+          "total": 20,
+          "source": "fmp"
+        }
+      },
+      "na_fields": [
+        {
+          "field": "qtd.sector_etf",
+          "reason": "no mapped ETF for sector 'Tech'"
+        },
+        {
+          "field": "beat_rates.eps",
+          "reason": "no yfinance surprise history"
+        },
+        {
+          "field": "consensus.eps.range",
+          "reason": "estimate range not available on FMP Starter plan"
+        }
+      ]
+    },
+    {
+      "ticker": "DOCS",
+      "company_name": "Doximity, Inc.",
+      "tier": 1,
+      "event_date": "2026-08-06",
+      "event_hour": "amc",
+      "call_datetime_utc": "2026-08-06T21:00:00+00:00",
+      "last_price": 21.6299991607666,
+      "day_change_pct": -1.1877580453692815,
+      "consensus": {
+        "eps": {
+          "mean": 0.3107,
+          "count": null,
+          "low": null,
+          "high": null
+        },
+        "revenue": {
+          "mean": 154761540.0,
+          "count": null,
+          "low": null,
+          "high": null
+        }
+      },
+      "qtd": {
+        "since": "2026-06-30",
+        "ticker_pct": 4.291221791081315,
+        "spx_pct": 3.082603464791403,
+        "sector_etf": "XLV",
+        "sector_etf_pct": 3.4665321272228677
+      },
+      "implied_move": {
+        "pct": 21.7,
+        "expiry": "2026-08-21",
+        "method": "ATM straddle",
+        "notes": [
+          "stale quote",
+          "(includes 14 extra days of time value)"
+        ]
+      },
+      "post_earnings_moves": [
+        {
+          "event_date": "2026-05-13",
+          "move_pct": -23.001279611608684,
+          "window_label": "next-day close vs earnings-day close"
+        }
+      ],
+      "beat_rates": {
+        "eps": {
+          "beats": null,
+          "total": null,
+          "source": "yfinance"
+        },
+        "revenue": {
+          "beats": 19,
+          "total": 20,
+          "source": "fmp"
+        }
+      },
+      "na_fields": [
+        {
+          "field": "beat_rates.eps",
+          "reason": "no yfinance surprise history"
+        },
+        {
+          "field": "consensus.eps.range",
+          "reason": "estimate range not available on FMP Starter plan"
+        }
+      ]
+    },
+    {
+      "ticker": "U",
+      "company_name": "Unity Software Inc",
+      "tier": 1,
+      "event_date": "2026-08-06",
+      "event_hour": "bmo",
+      "call_datetime_utc": "2026-08-06T12:30:00+00:00",
+      "last_price": 35.470001220703125,
+      "day_change_pct": 0.7098239390549602,
+      "consensus": {
+        "eps": {
+          "mean": -0.0875,
+          "count": null,
+          "low": null,
+          "high": null
+        },
+        "revenue": {
+          "mean": 525222582.0,
+          "count": null,
+          "low": null,
+          "high": null
+        }
+      },
+      "qtd": {
+        "since": "2026-06-30",
+        "ticker_pct": 24.107772272182785,
+        "spx_pct": 3.082603464791403,
+        "sector_etf": null,
+        "sector_etf_pct": null
+      },
+      "implied_move": {
+        "pct": 15.1,
+        "expiry": "2026-08-07",
+        "method": "ATM straddle",
+        "notes": [
+          "stale quote"
+        ]
+      },
+      "post_earnings_moves": [
+        {
+          "event_date": "2026-05-07",
+          "move_pct": -2.016133176559721,
+          "window_label": "earnings-day close vs prior close"
+        }
+      ],
+      "beat_rates": {
+        "eps": {
+          "beats": null,
+          "total": null,
+          "source": "yfinance"
+        },
+        "revenue": {
+          "beats": 15,
+          "total": 20,
+          "source": "fmp"
+        }
+      },
+      "na_fields": [
+        {
+          "field": "qtd.sector_etf",
+          "reason": "no mapped ETF for sector 'Tech'"
+        },
+        {
+          "field": "beat_rates.eps",
+          "reason": "no yfinance surprise history"
+        },
+        {
+          "field": "consensus.eps.range",
+          "reason": "estimate range not available on FMP Starter plan"
+        }
+      ]
+    }
+  ]
 }
