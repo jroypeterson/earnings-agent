@@ -5,7 +5,7 @@ sa-monitor/src/calendars.py:EarningsCalendar — see that file for the canonical
 contract.
 
 Window: events with event_date in [today - 2 days, today + 14 days] AND
-reported = 0 (i.e. earnings not yet reported). The 2-day lookback handles
+still open -- not reported AND not closed as delisted. The 2-day lookback handles
 late-night halts on prior-day AMC earnings.
 
 Run from the earnings-agent repo root:
@@ -22,6 +22,9 @@ import sqlite3
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from storage import OPEN_EVENT_SQL  # noqa: E402
 from typing import Optional
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -47,12 +50,12 @@ def export(db_path: Path, out_path: Path,
 
     con = sqlite3.connect(db_path)
     rows = con.execute(
-        """
+        f"""
         SELECT ticker, event_date, event_hour, tier, date_confirmed,
                call_datetime_utc, company_name
         FROM events
         WHERE event_date BETWEEN ? AND ?
-          AND COALESCE(reported, 0) = 0
+          AND {OPEN_EVENT_SQL}
         ORDER BY event_date, ticker
         """,
         (start, end),

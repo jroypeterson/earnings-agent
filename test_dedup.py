@@ -98,6 +98,8 @@ def make_in_memory_db():
             event_hour_yf   TEXT,
             call_datetime_utc TEXT,
             call_source     TEXT,
+            closed_reason   TEXT,
+            closed_at       TEXT,
             created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
             updated_at      TEXT    NOT NULL DEFAULT (datetime('now')),
             UNIQUE(ticker, event_date)

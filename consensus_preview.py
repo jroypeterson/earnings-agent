@@ -32,6 +32,8 @@ from __future__ import annotations
 
 import io
 import logging
+
+from storage import OPEN_EVENT_SQL
 import sqlite3
 from contextlib import contextmanager, redirect_stderr, redirect_stdout
 from dataclasses import dataclass, field
@@ -363,7 +365,7 @@ def select_upcoming_reporters(
         tk = ticker.strip().upper()
         row = conn.execute(
             f"SELECT {_SELECT_COLS} FROM events "
-            "WHERE ticker = ? AND COALESCE(reported, 0) = 0 AND event_date >= ? "
+            f"WHERE ticker = ? AND {OPEN_EVENT_SQL} AND event_date >= ? "
             "ORDER BY event_date LIMIT 1",
             (tk, today.isoformat()),
         ).fetchone()
@@ -375,7 +377,7 @@ def select_upcoming_reporters(
     end = (today + timedelta(days=days_ahead)).isoformat()
     rows = conn.execute(
         f"SELECT {_SELECT_COLS} FROM events "
-        "WHERE event_date BETWEEN ? AND ? AND COALESCE(reported, 0) = 0 "
+        f"WHERE event_date BETWEEN ? AND ? AND {OPEN_EVENT_SQL} "
         "ORDER BY event_date, ticker",
         (today.isoformat(), end),
     ).fetchall()

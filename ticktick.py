@@ -19,7 +19,7 @@ from datetime import datetime, timezone
 import requests
 
 from config import TIMEZONE, TIMING_LABELS
-from storage import date_to_quarter
+from storage import date_to_quarter, OPEN_EVENT_SQL
 
 logger = logging.getLogger("earnings_agent")
 
@@ -1229,7 +1229,7 @@ def reconcile_ticktick_tasks(
     # would otherwise abort the whole reconcile).
     newest = conn.execute(
         "SELECT MAX(updated_at) FROM events "
-        "WHERE tier <= 2 AND reported = 0 AND date_locked = 0 "
+        f"WHERE tier <= 2 AND {OPEN_EVENT_SQL} AND date_locked = 0 "
         "AND event_date BETWEEN ? AND ?",
         (lo, hi),
     ).fetchone()[0]
@@ -1253,7 +1253,14 @@ def reconcile_ticktick_tasks(
         "eps_estimate, eps_actual, rev_estimate, rev_actual, tier, "
         "company_name, ticktick_task_id, updated_at, date_locked, "
         "date_confirmed "
-        "FROM events WHERE tier <= 2 AND event_date BETWEEN ? AND ? "
+        # `closed_reason IS NULL` and NOT the full OPEN_EVENT_SQL: this pass
+        # must still see REPORTED rows (it marks their tasks `[REPORTED]`).
+        # It must not see CLOSED ones -- a terminal row entering the
+        # unconfirmed branch would strip or rewrite a task that is done.
+        # Codex caught that the freshness query above was filtered while this,
+        # the query that actually drives the mutations, was not.
+        "FROM events WHERE tier <= 2 AND closed_reason IS NULL "
+        "AND event_date BETWEEN ? AND ? "
         "ORDER BY event_date, ticker",
         (lo, hi),
     ).fetchall()

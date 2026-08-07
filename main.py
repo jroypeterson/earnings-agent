@@ -63,6 +63,8 @@ from storage import (
     kv_get,
     kv_set,
     kv_delete,
+    close_departed_events,
+    OPEN_EVENT_SQL,
 )
 from finnhub_client import get_client as get_finnhub_client, fetch_earnings, FinnhubError
 from fmp_client import fetch_fmp_earnings, merge_earnings
@@ -856,6 +858,18 @@ def run(
     _assert_coverage_not_collapsed(conn, coverage)
     _alert_coverage_changes_if_needed(conn, coverage)
 
+    # Close past-dated events on names that have left the universe. Ordering is
+    # load-bearing: this runs AFTER the collapse guard, so a broken exports read
+    # aborts before it can close every open event in the database. It is also
+    # the only lane that can notice these — the alerting loops all skip a ticker
+    # absent from `coverage_map`, so leaving the universe otherwise removes an
+    # event from every path that would ever resolve it. 51 of 160 past-dated
+    # unreported rows were in that state on 2026-08-06, the oldest 98 days.
+    _departed = close_departed_events(
+        conn, {t.ticker for t in coverage}, date.today().isoformat())
+    if _departed:
+        logger.info("Closed %d departed-ticker event(s) as delisted", len(_departed))
+
     cal_service = None
     if not dry_run:
         try:
@@ -1500,7 +1514,7 @@ def run(
             "date_locked, date_confirmed, announcement_url "
             "FROM events "
             "WHERE tier <= 2 AND event_date >= ? AND event_date <= ? "
-            "AND reported = 0",
+            f"AND {OPEN_EVENT_SQL}",
             (today.isoformat(), horizon_iso),
         )
         persistent_unseen: list[UnseenRow] = []
@@ -2537,7 +2551,7 @@ def run_edgar_results_fallback(dry_run: bool = False, skip_heartbeat: bool = Fal
     cur = conn.execute(
         "SELECT ticker, quarter, event_date, tier, company_name "
         "FROM events "
-        "WHERE tier <= 2 AND reported = 0 "
+        f"WHERE tier <= 2 AND {OPEN_EVENT_SQL} "
         "AND eps_actual IS NULL AND rev_actual IS NULL "
         "AND event_date <= ? AND event_date >= ? "
         "ORDER BY event_date",
@@ -3282,7 +3296,7 @@ def run_check_ir_emails(
     cur = conn.execute(
         "SELECT ticker, event_date, company_name, tier "
         "FROM events "
-        "WHERE tier <= 2 AND reported = 0 AND date_confirmed = 0 "
+        f"WHERE tier <= 2 AND {OPEN_EVENT_SQL} AND date_confirmed = 0 "
         "AND announcement_url IS NULL "
         "AND event_date >= ? AND event_date <= ? "
         "ORDER BY event_date, ticker",
@@ -3455,7 +3469,7 @@ def run_check_announcements(dry_run: bool = False, days_ahead: int = 30):
     cur = conn.execute(
         "SELECT ticker, event_date, company_name, tier "
         "FROM events "
-        "WHERE tier = 1 AND reported = 0 AND date_confirmed = 0 "
+        f"WHERE tier = 1 AND {OPEN_EVENT_SQL} AND date_confirmed = 0 "
         "AND announcement_url IS NULL "
         "AND event_date >= ? AND event_date <= ? "
         "ORDER BY event_date, ticker",
@@ -3801,7 +3815,7 @@ def run_cross_check(dry_run: bool = False, days_ahead: int = 14):
         "SELECT ticker, event_date, tier, company_name, last_xcheck_yf_dates, "
         "date_confirmed "
         "FROM events "
-        "WHERE tier <= 2 AND reported = 0 AND date_locked = 0 "
+        f"WHERE tier <= 2 AND {OPEN_EVENT_SQL} AND date_locked = 0 "
         "AND event_date >= ? AND event_date <= ? "
         "ORDER BY event_date, ticker",
         (today.isoformat(), horizon_iso),

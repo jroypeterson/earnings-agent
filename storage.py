@@ -18,9 +18,42 @@ logger = logging.getLogger("earnings_agent")
 # Schema version tracking
 # ---------------------------------------------------------------------------
 
-CURRENT_SCHEMA_VERSION = 12  # Bump when adding migrations
+CURRENT_SCHEMA_VERSION = 13  # Bump when adding migrations
+
+# The one definition of "this event is still waiting to happen".
+#
+# `reported = 0` alone is not that, and had not been since the coverage
+# universe started churning: an event whose company has been ACQUIRED can never
+# report, so it sits unreported forever. Measured 2026-08-06: **51 of 160**
+# past-dated unreported rows belonged to tickers that had left the universe
+# (APLS -> Biogen, EXAS -> Abbott, FOLD -> BioMarin, CFLT -> IBM, SEMR ->
+# Adobe), the oldest 98 days. Nothing flagged them, because the alerting loop
+# skips any ticker not in the coverage map — a correct guard (dead names would
+# otherwise alert forever) whose side effect is that LEAVING THE UNIVERSE
+# STOPS THE ONLY LANE THAT WOULD NOTICE.
+#
+# This is a constant rather than a phrase repeated in ~12 queries across
+# main.py, ticktick.py, storage.py and scripts/ because a new terminal state
+# that only some call sites honour is a SILENT HALF-FIX: the digest would drop
+# a closed event while TickTick kept nagging about it, or the reverse. Same
+# failure shape as portfolio_daily's two account rosters.
+# `test_no_query_filters_on_a_bare_reported_flag` scans the source for
+# stragglers, so a query added later cannot quietly skip it.
+OPEN_EVENT_SQL = "reported = 0 AND closed_reason IS NULL"
+
+# Terminal states other than reporting. `reported` stays a flag and keeps its
+# exact meaning — "the numbers came out" — so nothing that reads it changes.
+CLOSED_DELISTED = "delisted"
 
 _MIGRATIONS = {
+    # Version 12 → 13: a terminal state for events that can never report.
+    # NULL = open. See OPEN_EVENT_SQL above for why this exists and why every
+    # open-event query must go through the constant.
+    13: [
+        "ALTER TABLE events ADD COLUMN closed_reason TEXT",
+        "ALTER TABLE events ADD COLUMN closed_at TEXT",
+    ],
+
     # Version 11 → 12: track the earnings conference call timestamp
     # alongside the press-release date. The calendar event itself is
     # anchored to the press release (event_date / event_hour); the call
@@ -309,6 +342,8 @@ def init_db(db_path: Path = DB_PATH) -> sqlite3.Connection:
                 event_hour_yf   TEXT,
                 call_datetime_utc TEXT,
                 call_source     TEXT,
+                closed_reason   TEXT,
+                closed_at       TEXT,
                 created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
                 updated_at      TEXT    NOT NULL DEFAULT (datetime('now')),
                 UNIQUE(ticker, event_date)
@@ -386,6 +421,86 @@ def find_event_by_ticker_quarter(conn: sqlite3.Connection, ticker: str, quarter:
             "reported": bool(row[10]),
         }
     return None
+
+
+def close_departed_events(
+    conn: sqlite3.Connection,
+    covered_tickers: set[str],
+    today: str,
+    reason: str = CLOSED_DELISTED,
+) -> list[tuple[str, str]]:
+    """Close past-dated open events whose ticker has left the coverage universe.
+
+    Returns the `(ticker, event_date)` pairs closed, so the caller can report
+    them — this must never be a silent mutation.
+
+    **Only PAST-dated rows.** A ticker can leave the universe for reasons that
+    have nothing to do with the company ending — a Position change, a tier
+    edit, a sector reclassification — and a future event for such a name may
+    still be perfectly real. A past-dated event that never reported, on a name
+    no longer covered, is the case with no other explanation.
+
+    **Refuses an empty universe.** `covered_tickers` empty means the coverage
+    read failed, and closing every open event on that basis would be a silent
+    mass deletion of workflow state. Same reasoning as
+    `_assert_coverage_not_collapsed` — a whole-universe disappearance is always
+    a broken exports read, never a real edit.
+
+    **REOPENS on reappearance, and that is why this converges rather than
+    ratchets.** The collapse guard only fires on ≥25 names AND >20% of a tier,
+    so a *single* ticker dropping out of one exports read sails under it — and
+    without reopening, one bad run would close a live event permanently and
+    every `OPEN_EVENT_SQL` consumer would silently drop a name that is right
+    there in the universe. Closing has to be as reversible as the observation
+    that drove it. Codex raised this; a terminal state that a transient blip
+    can enter and nothing can leave is not a state, it is data loss.
+    """
+    if not covered_tickers:
+        logger.warning(
+            "close_departed_events: empty coverage set — refusing to close "
+            "anything (an empty universe is a failed read, not a real edit)"
+        )
+        return []
+
+    # Reopen first: a ticker that is covered again is not delisted, whatever a
+    # previous run concluded. Scoped to `delisted` so a future terminal reason
+    # with different semantics is not swept up by a coverage change.
+    reopened = conn.execute(
+        "UPDATE events SET closed_reason = NULL, closed_at = NULL, "
+        "updated_at = datetime('now') "
+        f"WHERE closed_reason = ? AND ticker IN "
+        f"({','.join('?' * len(covered_tickers))})",
+        (reason, *sorted(covered_tickers)),
+    ).rowcount
+    if reopened:
+        conn.commit()
+        logger.info("Reopened %d event(s) whose ticker returned to coverage",
+                    reopened)
+
+    rows = conn.execute(
+        f"SELECT ticker, event_date FROM events "
+        f"WHERE {OPEN_EVENT_SQL} AND event_date <= ? "
+        f"AND eps_actual IS NULL AND rev_actual IS NULL",
+        (today,),
+    ).fetchall()
+
+    departed = [(t, d) for t, d in rows if t not in covered_tickers]
+    if not departed:
+        return []
+
+    conn.executemany(
+        "UPDATE events SET closed_reason = ?, closed_at = datetime('now'), "
+        "updated_at = datetime('now') WHERE ticker = ? AND event_date = ?",
+        [(reason, t, d) for t, d in departed],
+    )
+    conn.commit()
+    logger.info(
+        "Closed %d past-dated event(s) as '%s' — ticker no longer covered: %s",
+        len(departed), reason,
+        ", ".join(f"{t}@{d}" for t, d in departed[:10])
+        + (" ..." if len(departed) > 10 else ""),
+    )
+    return departed
 
 
 def find_reported_event_for_quarter(
@@ -570,7 +685,7 @@ def upsert_event(
             row = conn.execute(
                 "SELECT ticktick_task_id FROM events "
                 "WHERE ticker = ? AND quarter = ? AND event_date != ? "
-                "AND reported = 0 AND date_locked = 0 AND ticktick_task_id IS NOT NULL "
+                f"AND {OPEN_EVENT_SQL} AND date_locked = 0 AND ticktick_task_id IS NOT NULL "
                 "ORDER BY updated_at DESC LIMIT 1",
                 (ticker, quarter, event_date),
             ).fetchone()
@@ -597,7 +712,7 @@ def upsert_event(
                 "slack_thread_ts, slack_channel_id, slack_question_kind, "
                 "slack_last_reply_ts, unseen_run_count FROM events "
                 "WHERE ticker = ? AND quarter = ? AND event_date != ? "
-                "AND reported = 0 AND date_locked = 0 "
+                f"AND {OPEN_EVENT_SQL} AND date_locked = 0 "
                 "AND (question_state IS NOT NULL OR unseen_run_count > 0) "
                 "ORDER BY updated_at DESC LIMIT 1",
                 (ticker, quarter, event_date),
@@ -612,7 +727,7 @@ def upsert_event(
             # same as the reported-row guard.
             conn.execute(
                 "DELETE FROM events WHERE ticker = ? AND quarter = ? "
-                "AND event_date != ? AND reported = 0 AND date_locked = 0",
+                f"AND event_date != ? AND {OPEN_EVENT_SQL} AND date_locked = 0",
                 (ticker, quarter, event_date),
             )
         conn.execute(
