@@ -353,3 +353,69 @@ def test_the_ticktick_reconcile_SEES_closed_rows_and_completes_them():
     assert "complete_task(" in body, "a closed row's task must be completed"
     assert "delete_task" not in body.split("if closed_reason:")[1][:800], (
         "complete, never delete")
+
+
+# --- round 4: the three ways the completion path was still inert -----------
+
+def test_reopening_drops_the_task_pointer():
+    """Codex round 4. Closing COMPLETED the task, and a completed task is
+    untouchable by design — creation skips a non-null pointer, the reconcile
+    refuses to act on `status == 2`. Keeping the pointer leaves the reopened
+    event with no live task and no path to ever getting one.
+    """
+    conn = _db()
+    _event(conn, "ENSG", "2026-05-01", ticktick_task_id="abc123")
+    storage.close_departed_events(conn, {"OTHER"}, "2026-08-06")
+    storage.close_departed_events(conn, {"ENSG"}, "2026-08-06")
+    assert conn.execute(
+        "SELECT ticktick_task_id FROM events WHERE ticker='ENSG'"
+    ).fetchone()[0] is None, "a fresh task must be creatable"
+
+
+def test_the_reconcile_selects_closed_rows_regardless_of_its_window():
+    """Codex round 4, and the finding that made the round-3 fix nearly inert.
+
+    The reconcile window defaults to a 14-day lookback; `close_departed_events`
+    reaches back as far as the backlog goes, and the oldest measured row was 98
+    days. Without this, almost none of the backlog's overdue tasks would ever
+    be completed.
+    """
+    import pathlib
+    src = (pathlib.Path(__file__).resolve().parent / "ticktick.py").read_text(
+        encoding="utf-8")
+    idx = src.index("FROM events WHERE tier <= 2")
+    window = src[idx:idx + 220]
+    assert "closed_reason IS NOT NULL OR" in window, (
+        "closed rows must be selected outside the date window:\n" + window)
+
+
+def test_the_closed_branch_runs_AFTER_task_identity_is_resolved():
+    """Codex round 4. Run earlier, it skips a row whose DB pointer is null (a
+    legacy or repointed task) and completes a non-null pointer against a list
+    GUESSED from the current date and tier rather than the list the task was
+    actually found in — wrong for anything legacy or tier-moved.
+    """
+    import pathlib
+    src = (pathlib.Path(__file__).resolve().parent / "ticktick.py").read_text(
+        encoding="utf-8")
+    body = src[src.index("def reconcile_ticktick_tasks("):]
+    resolved = body.index("pid, pname, task = chosen")
+    branch = body.index("if closed_reason:")
+    assert branch > resolved, (
+        "the closed branch must run after identity resolution, so it uses the "
+        "task's real list")
+    assert "list_id=pid" in body[branch:branch + 1400], (
+        "it must complete against the scanned list, not a guessed one")
+
+
+def test_a_failed_completion_reddens_the_run():
+    """A completion that fails leaves the task open indefinitely. Returning
+    False without counting an error would let the job stay green while the
+    thing it exists to fix silently did not happen."""
+    import pathlib
+    src = (pathlib.Path(__file__).resolve().parent / "ticktick.py").read_text(
+        encoding="utf-8")
+    body = src[src.index("if closed_reason:"):]
+    tail = body[:1600]
+    assert 'stats["errors"] += 1' in tail, (
+        "a failed completion must increment errors")

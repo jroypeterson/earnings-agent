@@ -1296,8 +1296,13 @@ def reconcile_ticktick_tasks(
         # exists. That is the exact cross-consumer inconsistency the terminal
         # state exists to remove. The CREATION query in main.py is the one that
         # must not see them; this one has to, to finish what creation started.
+        # The window bounds the OPEN population, but a closure reaches back as
+        # far as the backlog goes -- the oldest measured was 98 days, and the
+        # default lookback is 14. Selecting closed rows regardless of the window
+        # is the difference between this completing the backlog's tasks and
+        # completing almost none of them. Codex round 4.
         "FROM events WHERE tier <= 2 "
-        "AND event_date BETWEEN ? AND ? "
+        "AND (closed_reason IS NOT NULL OR event_date BETWEEN ? AND ?) "
         "ORDER BY event_date, ticker",
         (lo, hi),
     ).fetchall()
@@ -1340,31 +1345,6 @@ def reconcile_ticktick_tasks(
          row_updated, date_locked, date_confirmed, closed_reason) = r
         stats["checked"] += 1
 
-        # A terminal row: the company is gone, so the task is done, not
-        # pending. COMPLETE it -- never delete. The tick is the durable record
-        # that this was resolved, and deleting would let a later sync recreate
-        # the task as though nothing had happened. Same rule the IR-signup
-        # lists follow.
-        if closed_reason:
-            stats.setdefault("closed", 0)
-            if not db_task_id:
-                continue
-            if dry_run:
-                logger.info(f"{prefix}{ticker} {event_date}: would complete task "
-                            f"(closed: {closed_reason})")
-                stats["closed"] += 1
-                continue
-            try:
-                if complete_task(token, db_task_id, ticker, event_date, tier):
-                    stats["closed"] += 1
-                    logger.info(f"{ticker} {event_date}: task completed "
-                                f"(closed: {closed_reason})")
-            except TickTickTokenExpired:
-                raise
-            except Exception as e:  # noqa: BLE001 - one task must not stop the pass
-                logger.warning(f"{ticker} {event_date}: could not complete task: {e}")
-                stats["errors"] += 1
-            continue
 
         # Per-row staleness flag. The wholesale-frozen-DB case aborts loudly
         # above; this catches PARTIAL staleness the global MAX check can't — a
@@ -1463,6 +1443,44 @@ def reconcile_ticktick_tasks(
         # Never touch a task the user has completed.
         if task.get("status") == 2:
             stats["skipped_done"] += 1
+            continue
+
+        # A terminal row: the company is gone, so the task is DONE, not
+        # pending. Complete it and stop -- none of the date/title/subtask
+        # convergence below applies to an event that will never happen.
+        #
+        # This sits AFTER identity resolution on purpose. Run earlier it would
+        # skip a row whose DB pointer is null (a legacy or repointed task) and,
+        # worse, complete a non-null pointer against a list GUESSED from the
+        # current date and tier rather than `pid`, the list the task was
+        # actually found in — wrong for anything legacy or tier-moved. Codex
+        # round 4. Complete, never delete: the tick is the durable record, and
+        # a deleted task is recreated by the next sync as if nothing happened.
+        if closed_reason:
+            stats.setdefault("closed", 0)
+            if dry_run:
+                logger.info(f"{prefix}{ticker} {event_date}: would complete task "
+                            f"in '{pname}' (closed: {closed_reason})")
+                stats["closed"] += 1
+                continue
+            try:
+                ok = complete_task(token, task_id, ticker, event_date, tier,
+                                   list_id=pid)
+            except TickTickTokenExpired:
+                raise
+            except Exception as e:  # noqa: BLE001 - one task must not stop the pass
+                logger.warning(f"{ticker} {event_date}: could not complete task: {e}")
+                ok = False
+            if ok:
+                stats["closed"] += 1
+                logger.info(f"{ticker} {event_date}: task completed "
+                            f"(closed: {closed_reason})")
+            else:
+                # A failed completion leaves the task open indefinitely. It must
+                # redden the run, not pass silently.
+                stats["errors"] += 1
+                logger.warning(f"{ticker} {event_date}: FAILED to complete the "
+                               f"task for a closed event — it will keep nagging")
             continue
 
         title = task.get("title", "") or ""

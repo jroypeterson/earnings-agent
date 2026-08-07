@@ -465,9 +465,15 @@ def close_departed_events(
     # Reopen first: a ticker that is covered again is not delisted, whatever a
     # previous run concluded. Scoped to `delisted` so a future terminal reason
     # with different semantics is not swept up by a coverage change.
+    # `ticktick_task_id = NULL` is part of reopening, not an extra. Closing
+    # COMPLETED that task, and a completed task is untouchable by design —
+    # creation skips a non-null pointer and the reconcile refuses to act on
+    # `status == 2`. Keeping the pointer would leave the reopened event with no
+    # live task and no path to ever getting one. Dropping it lets the next sync
+    # create a fresh one. Codex round 4.
     reopened = conn.execute(
         "UPDATE events SET closed_reason = NULL, closed_at = NULL, "
-        "updated_at = datetime('now') "
+        "ticktick_task_id = NULL, updated_at = datetime('now') "
         f"WHERE closed_reason = ? AND ticker IN "
         f"({','.join('?' * len(covered_tickers))})",
         (reason, *sorted(covered_tickers)),
