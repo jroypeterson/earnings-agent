@@ -357,11 +357,20 @@ def test_the_ticktick_reconcile_SEES_closed_rows_and_completes_them():
 
 # --- round 4: the three ways the completion path was still inert -----------
 
-def test_reopening_drops_the_task_pointer():
-    """Codex round 4. Closing COMPLETED the task, and a completed task is
-    untouchable by design — creation skips a non-null pointer, the reconcile
-    refuses to act on `status == 2`. Keeping the pointer leaves the reopened
-    event with no live task and no path to ever getting one.
+def test_reopening_KEEPS_the_task_pointer():
+    """Codex round 4 said to clear it; round 5 showed that was wrong, and this
+    test is the reversal.
+
+    The diagnosis was right — closing COMPLETED the task, and a completed task
+    is untouchable (creation skips a non-null pointer, the reconcile refuses
+    `status == 2`). But a reopened row is NECESSARILY past-dated, because only
+    past-dated rows are ever closed, and `sync_ticktick_tasks` selects
+    `event_date >= today`. So clearing the pointer yields a row with no task
+    AND no path to one — strictly worse than pointing at a completed task.
+
+    A completed task is also the correct end state: the event already happened.
+    If actuals arrive later, `notify_results` marks that task `[REPORTED]`,
+    which needs the pointer.
     """
     conn = _db()
     _event(conn, "ENSG", "2026-05-01", ticktick_task_id="abc123")
@@ -369,8 +378,8 @@ def test_reopening_drops_the_task_pointer():
     storage.close_departed_events(conn, {"ENSG"}, "2026-08-06")
     assert conn.execute(
         "SELECT ticktick_task_id FROM events WHERE ticker='ENSG'"
-    ).fetchone()[0] is None, "a fresh task must be creatable"
-
+    ).fetchone()[0] == "abc123", (
+        "the pointer is the only link to the task that closing completed")
 
 def test_the_reconcile_selects_closed_rows_regardless_of_its_window():
     """Codex round 4, and the finding that made the round-3 fix nearly inert.

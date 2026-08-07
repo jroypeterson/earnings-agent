@@ -465,15 +465,23 @@ def close_departed_events(
     # Reopen first: a ticker that is covered again is not delisted, whatever a
     # previous run concluded. Scoped to `delisted` so a future terminal reason
     # with different semantics is not swept up by a coverage change.
-    # `ticktick_task_id = NULL` is part of reopening, not an extra. Closing
-    # COMPLETED that task, and a completed task is untouchable by design —
-    # creation skips a non-null pointer and the reconcile refuses to act on
-    # `status == 2`. Keeping the pointer would leave the reopened event with no
-    # live task and no path to ever getting one. Dropping it lets the next sync
-    # create a fresh one. Codex round 4.
+    # **The task pointer is KEPT.** Codex round 4 argued for clearing it, on
+    # the grounds that closing COMPLETED the task and a completed task is
+    # untouchable (creation skips a non-null pointer; the reconcile refuses
+    # `status == 2`), so a reopened event would have no live task. That
+    # diagnosis is right and the fix was wrong — round 5 caught it: a reopened
+    # row is NECESSARILY past-dated, because only past-dated rows are ever
+    # closed, and `sync_ticktick_tasks` selects `event_date >= today`. So
+    # clearing the pointer produces a row with no task AND no path to one,
+    # which is strictly worse than a row pointing at a completed task.
+    #
+    # And a completed task is the CORRECT end state here: the event already
+    # happened. If actuals eventually arrive, `notify_results` marks that task
+    # `[REPORTED]`, which needs the pointer. Reopening restores DB truth; it
+    # does not need to manufacture a new to-do for a date that has passed.
     reopened = conn.execute(
         "UPDATE events SET closed_reason = NULL, closed_at = NULL, "
-        "ticktick_task_id = NULL, updated_at = datetime('now') "
+        "updated_at = datetime('now') "
         f"WHERE closed_reason = ? AND ticker IN "
         f"({','.join('?' * len(covered_tickers))})",
         (reason, *sorted(covered_tickers)),
