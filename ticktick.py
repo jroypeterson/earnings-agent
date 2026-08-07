@@ -415,7 +415,19 @@ def _gather_quarter_existing_tasks(
             if name.startswith(f"{q} Earnings"):
                 pid = p["id"]
                 tasks = list_tasks_in_project(token, pid)
+                # A COMPLETED task must not block creation of a new one, and
+                # must not be adopted as the pointer. This dedup exists to stop
+                # a DUPLICATE live task, not to stop a live task existing at
+                # all. It matters because closing an event completes its task:
+                # after a reopen (a transient coverage dropout, then the ticker
+                # returns) the creation path would find that completed task,
+                # skip the create, and backfill the pointer straight back to
+                # it -- leaving the reopened event with no live task and no way
+                # to get one. That defeats the pointer-clearing on reopen.
+                # A completed task with no live sibling is simply not recorded.
                 for t in tasks:
+                    if t.get("status", 0) == 2:
+                        continue
                     ticker = _ticker_from_task_title(t.get("title", ""))
                     if ticker and ticker not in result[q]:
                         result[q][ticker] = (pid, name, t["id"])
@@ -1321,7 +1333,18 @@ def reconcile_ticktick_tasks(
     for r in rows:
         key = (r[0], _reporting_quarter(r[1]))
         cur = canonical.get(key)
-        if cur is None or (int(r[4] or 0), r[1]) > (int(cur[4] or 0), cur[1]):
+        # An OPEN row outranks a closed one, ahead of every other criterion.
+        # The reconcile now pulls closed rows in from OUTSIDE its date window,
+        # so a closed row and a live row for the same (ticker, quarter) can
+        # meet here for the first time. If the closed one won on a later date,
+        # the live row would be dropped from reconciliation entirely AND the
+        # branch below would complete its task. Not reachable today (the closer
+        # takes every eligible row of an uncovered ticker at once, so a mixed
+        # pair cannot form) -- but it depends on an invariant that lives in
+        # another file, and the cost of not depending on it is one tuple slot.
+        rank = (0 if r[15] else 1, int(r[4] or 0), r[1])
+        cur_rank = (0 if cur and cur[15] else 1, int(cur[4] or 0), cur[1]) if cur else None
+        if cur is None or rank > cur_rank:
             canonical[key] = r
     rows = list(canonical.values())
 

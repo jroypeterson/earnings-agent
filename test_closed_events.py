@@ -419,3 +419,43 @@ def test_a_failed_completion_reddens_the_run():
     tail = body[:1600]
     assert 'stats["errors"] += 1' in tail, (
         "a failed completion must increment errors")
+
+
+def test_a_completed_task_does_not_block_creating_a_new_one():
+    """Found by tracing round 4's own fix. Closing COMPLETES the task; reopening
+    clears the pointer so a fresh one can be created. But the creation path's
+    cross-list dedup did not filter on status — so it would find the COMPLETED
+    task, skip the create, and backfill the pointer straight back to it. The
+    reopened event ends up pointing at a completed task with no way to get a
+    live one, which is exactly what clearing the pointer was meant to prevent.
+
+    The dedup exists to stop a DUPLICATE live task, not to stop a live task
+    existing at all.
+    """
+    import pathlib
+    src = (pathlib.Path(__file__).resolve().parent / "ticktick.py").read_text(
+        encoding="utf-8")
+    body = src[src.index("def _gather_quarter_existing_tasks("):]
+    body = body[:body.index("\ndef ")]
+    assert 'status", 0) == 2' in body and "continue" in body, (
+        "the creation dedup must skip completed tasks:\n" + body)
+
+
+def test_a_closed_row_never_outranks_a_live_one_in_canonicalization():
+    """The reconcile pulls closed rows in from OUTSIDE its date window, so a
+    closed row and a live row for the same (ticker, quarter) can meet in the
+    canonicalization for the first time. If the closed one won on a later date,
+    the live row would be dropped from reconciliation entirely AND its task
+    completed.
+
+    Not reachable today — the closer takes every eligible row of an uncovered
+    ticker at once, so a mixed pair cannot form — but that invariant lives in
+    another file, and one tuple slot buys not depending on it.
+    """
+    import pathlib
+    src = (pathlib.Path(__file__).resolve().parent / "ticktick.py").read_text(
+        encoding="utf-8")
+    idx = src.index("canonical: dict[tuple, tuple] = {}")
+    window = src[idx:idx + 1400]
+    assert "0 if r[15] else 1" in window, (
+        "the canonical rank must put open rows ahead of closed ones:\n" + window)
