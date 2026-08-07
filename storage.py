@@ -1133,8 +1133,14 @@ def list_open_questions(conn: sqlite3.Connection) -> list[dict]:
         "slack_thread_ts, slack_question_kind, slack_last_reply_ts, "
         "question_state, question_snooze_until, question_first_seen, "
         "date_confirmed, last_xcheck_yf_dates, slack_channel_id "
+        # `closed_reason IS NULL` -- a CLOSED event must not still be
+        # answerable. A late `lock <date>` reply on a departed ticker reaches
+        # `_apply_edgar_auto_correction`, which moves the Calendar entry and
+        # INSERTS a replacement row (default `closed_reason = NULL`) before
+        # deleting the closed one -- resurrecting the event, date-locked,
+        # possibly at a future date. Codex round 3.
         "FROM events "
-        "WHERE slack_thread_ts IS NOT NULL "
+        "WHERE slack_thread_ts IS NOT NULL AND closed_reason IS NULL "
         "AND question_state IN ('open', 'monitoring', 'snoozed') "
         "ORDER BY event_date, ticker"
     )

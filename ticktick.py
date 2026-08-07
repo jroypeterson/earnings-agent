@@ -611,6 +611,41 @@ def create_task(
         return None
 
 
+def complete_task(token: str, task_id: str, ticker: str, event_date: str,
+                  tier: int, list_id: str | None = None,
+                  position: str | None = None) -> bool:
+    """Tick a task off. TickTick has a dedicated /complete endpoint.
+
+    Used when an event reaches a terminal state that is NOT reporting -- the
+    company was acquired or delisted, so the task will never be actioned.
+    **Complete, never delete**: the tick is the durable record that this was
+    resolved, and a deleted task would simply be recreated by a later sync as
+    though nothing had happened. Same rule `ir_ticktick.--reconcile` follows.
+    """
+    if list_id is None:
+        list_name = _quarter_list_name(event_date, tier, position=position)
+        try:
+            list_id = find_or_create_list(token, list_name)
+        except TickTickTokenExpired:
+            raise
+        if not list_id:
+            logger.warning(
+                f"  Could not resolve TickTick list '{list_name}' — "
+                f"{ticker} task {task_id} not completed")
+            return False
+    try:
+        resp = requests.post(
+            f"https://api.ticktick.com/open/v1/project/{list_id}/task/{task_id}/complete",
+            headers=_headers(token), timeout=30,
+        )
+    except requests.RequestException as e:
+        logger.warning(f"  TickTick complete failed for {ticker}: {e}")
+        return False
+    if resp.status_code == 401:
+        raise TickTickTokenExpired("TickTick access token expired")
+    return resp.status_code in (200, 204)
+
+
 def _find_task_in_project(token: str, project_id: str, task_id: str) -> dict | None:
     """
     Fetch one task by scanning its project's `/data` payload.
@@ -1252,14 +1287,16 @@ def reconcile_ticktick_tasks(
         "SELECT ticker, event_date, event_hour, quarter, reported, "
         "eps_estimate, eps_actual, rev_estimate, rev_actual, tier, "
         "company_name, ticktick_task_id, updated_at, date_locked, "
-        "date_confirmed "
-        # `closed_reason IS NULL` and NOT the full OPEN_EVENT_SQL: this pass
-        # must still see REPORTED rows (it marks their tasks `[REPORTED]`).
-        # It must not see CLOSED ones -- a terminal row entering the
-        # unconfirmed branch would strip or rewrite a task that is done.
-        # Codex caught that the freshness query above was filtered while this,
-        # the query that actually drives the mutations, was not.
-        "FROM events WHERE tier <= 2 AND closed_reason IS NULL "
+        "date_confirmed, closed_reason "
+        # This pass SEES closed rows on purpose, and `closed_reason` is
+        # selected so it can act on them. Hiding them here (which is what the
+        # first fix did) is worse than not filtering at all: an already-created
+        # task is then never completed, never cleared, never retitled -- it
+        # just stays overdue and keeps nagging about a company that no longer
+        # exists. That is the exact cross-consumer inconsistency the terminal
+        # state exists to remove. The CREATION query in main.py is the one that
+        # must not see them; this one has to, to finish what creation started.
+        "FROM events WHERE tier <= 2 "
         "AND event_date BETWEEN ? AND ? "
         "ORDER BY event_date, ticker",
         (lo, hi),
@@ -1300,8 +1337,34 @@ def reconcile_ticktick_tasks(
     for r in rows:
         (ticker, event_date, event_hour, quarter, reported,
          eps_est, eps_act, rev_est, rev_act, tier, company_name, db_task_id,
-         row_updated, date_locked, date_confirmed) = r
+         row_updated, date_locked, date_confirmed, closed_reason) = r
         stats["checked"] += 1
+
+        # A terminal row: the company is gone, so the task is done, not
+        # pending. COMPLETE it -- never delete. The tick is the durable record
+        # that this was resolved, and deleting would let a later sync recreate
+        # the task as though nothing had happened. Same rule the IR-signup
+        # lists follow.
+        if closed_reason:
+            stats.setdefault("closed", 0)
+            if not db_task_id:
+                continue
+            if dry_run:
+                logger.info(f"{prefix}{ticker} {event_date}: would complete task "
+                            f"(closed: {closed_reason})")
+                stats["closed"] += 1
+                continue
+            try:
+                if complete_task(token, db_task_id, ticker, event_date, tier):
+                    stats["closed"] += 1
+                    logger.info(f"{ticker} {event_date}: task completed "
+                                f"(closed: {closed_reason})")
+            except TickTickTokenExpired:
+                raise
+            except Exception as e:  # noqa: BLE001 - one task must not stop the pass
+                logger.warning(f"{ticker} {event_date}: could not complete task: {e}")
+                stats["errors"] += 1
+            continue
 
         # Per-row staleness flag. The wholesale-frozen-DB case aborts loudly
         # above; this catches PARTIAL staleness the global MAX check can't — a

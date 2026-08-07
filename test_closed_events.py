@@ -226,27 +226,13 @@ def test_reopening_does_not_disturb_a_reported_row():
         "SELECT reported FROM events WHERE ticker='ENSG'").fetchone()[0] == 1
 
 
-def test_the_ticktick_mutation_query_excludes_closed_rows():
-    """Codex round 1. The freshness query was filtered; the query that
-    actually drives the mutations was not — so a terminal row would enter the
-    unconfirmed branch and strip or rewrite a task that is done.
-
-    It must still see REPORTED rows (it marks their tasks `[REPORTED]`), so
-    the filter is `closed_reason IS NULL`, not the full open predicate.
-    """
-    import pathlib
-    src = (pathlib.Path(__file__).resolve().parent / "ticktick.py").read_text(
-        encoding="utf-8")
-    start = src.index("def reconcile_ticktick_tasks(")
-    nxt = src.find("\ndef ", start + 1)          # it is currently the last def
-    body = src[start:nxt if nxt != -1 else len(src)]
-    idx = body.index("FROM events WHERE tier <= 2 AND")
-    window = body[idx:idx + 200]
-    assert "closed_reason IS NULL" in window, (
-        "the mutation source query must exclude closed events:\n" + window)
-
-
-# --- boundaries, round 2 ---------------------------------------------------
+# NOTE: a `test_the_ticktick_mutation_query_excludes_closed_rows` lived here
+# after round 2 and was DELETED in round 3. It asserted that the reconcile
+# filters closed rows out — which turned out to be the wrong behaviour, because
+# hiding them orphans an already-created task forever. Its replacement is
+# `test_the_ticktick_reconcile_SEES_closed_rows_and_completes_them` below.
+# Recorded rather than silently dropped: a test that pins the wrong contract is
+# worse than no test, and this one was written confidently enough to ship.
 
 def test_a_SAME_DAY_event_is_never_closed():
     """Codex round 2. `event_date <= today` closed same-day events.
@@ -320,3 +306,50 @@ def test_every_events_query_that_drives_a_write_names_the_terminal_state():
     assert not offenders, (
         "these SELECT from `events` without naming the terminal state, so a "
         "closed event still reaches an external write:\n  " + "\n  ".join(offenders))
+
+
+# --- round 3: the state has to reach the two external systems --------------
+
+def test_a_closed_event_is_no_longer_answerable_in_slack():
+    """Codex round 3. `list_open_questions` did not filter the terminal state.
+
+    A late `lock <date>` reply on a departed ticker reaches
+    `_apply_edgar_auto_correction`, which moves the Calendar entry and INSERTS
+    a replacement row carrying the default `closed_reason = NULL` before
+    deleting the closed one — resurrecting the event, date-locked, possibly at
+    a future date.
+    """
+    conn = _db()
+    _event(conn, "APLS", "2026-05-01", slack_thread_ts="1.1",
+           question_state="open")
+    assert len(storage.list_open_questions(conn)) == 1
+    storage.close_departed_events(conn, {"ENSG"}, "2026-08-06")
+    assert storage.list_open_questions(conn) == []
+
+
+def test_the_ticktick_reconcile_SEES_closed_rows_and_completes_them():
+    """Codex round 3, and a regression the round-1 fix introduced.
+
+    Hiding closed rows from the reconcile is worse than not filtering at all:
+    an already-created task is then never completed, never cleared, never
+    retitled — it stays overdue and keeps nagging about a company that no
+    longer exists, which is the exact cross-consumer inconsistency the terminal
+    state exists to remove.
+
+    The CREATION query must not see them; this one has to, to finish what
+    creation started. And it COMPLETES, never deletes — the tick is the durable
+    record, and a deleted task would be recreated by a later sync.
+    """
+    import pathlib
+    src = (pathlib.Path(__file__).resolve().parent / "ticktick.py").read_text(
+        encoding="utf-8")
+    start = src.index("def reconcile_ticktick_tasks(")
+    body = src[start:]
+    idx = body.index("FROM events WHERE tier <= 2")
+    assert "closed_reason IS NULL" not in body[idx:idx + 200], (
+        "the reconcile must SEE closed rows, or their tasks are orphaned")
+    assert "closed_reason" in body[:idx + 3000], (
+        "...and must select the column so it can act on them")
+    assert "complete_task(" in body, "a closed row's task must be completed"
+    assert "delete_task" not in body.split("if closed_reason:")[1][:800], (
+        "complete, never delete")
