@@ -479,7 +479,12 @@ def close_departed_events(
 
     rows = conn.execute(
         f"SELECT ticker, event_date FROM events "
-        f"WHERE {OPEN_EVENT_SQL} AND event_date <= ? "
+        # STRICTLY before today. `<=` closed SAME-DAY events, and the sync runs
+        # at 6/7 AM and 2/3 PM ET -- when a BMO name's actuals may not be in
+        # yet and an AMC name has not reported at all. A coverage removal
+        # landing on the morning of an event would have terminally closed a
+        # live one. Codex round 2; the docstring already said "past-dated".
+        f"WHERE {OPEN_EVENT_SQL} AND event_date < ? "
         f"AND eps_actual IS NULL AND rev_actual IS NULL",
         (today,),
     ).fetchall()

@@ -244,3 +244,79 @@ def test_the_ticktick_mutation_query_excludes_closed_rows():
     window = body[idx:idx + 200]
     assert "closed_reason IS NULL" in window, (
         "the mutation source query must exclude closed events:\n" + window)
+
+
+# --- boundaries, round 2 ---------------------------------------------------
+
+def test_a_SAME_DAY_event_is_never_closed():
+    """Codex round 2. `event_date <= today` closed same-day events.
+
+    The sync runs at 6/7 AM and 2/3 PM ET. At 6 AM a BMO name's actuals are
+    not in yet; an AMC name has not reported at all. A coverage removal landing
+    on the morning of an event would have terminally closed a LIVE one — and
+    reopening only helps if the ticker comes back, which for a genuine
+    same-day removal it does not.
+    """
+    conn = _db()
+    _event(conn, "ENSG", "2026-08-06")
+    assert storage.close_departed_events(conn, {"OTHER"}, "2026-08-06") == []
+    assert _open_count(conn) == 1
+    # The day after, it is genuinely past-dated.
+    assert storage.close_departed_events(conn, {"OTHER"}, "2026-08-07")
+
+
+def test_the_ticktick_CREATION_query_excludes_closed_rows():
+    """Codex round 2, and the case the source-scan structurally cannot catch.
+
+    `test_no_query_filters_on_a_bare_reported_flag` looks for queries filtering
+    on `reported`; this one filters on neither `reported` nor `closed_reason`,
+    so there was nothing for the scan to find. A row closed earlier in the same
+    `run()` would have had a TickTick task created for it.
+    """
+    import pathlib
+    src = (pathlib.Path(__file__).resolve().parent / "main.py").read_text(
+        encoding="utf-8")
+    idx = src.index("Gather all Tier 1+2 events that need TickTick tasks")
+    window = src[idx:idx + 900]
+    assert "closed_reason IS NULL" in window, (
+        "the TickTick creation query must not see closed events:\n" + window)
+
+
+def test_every_events_query_that_drives_a_write_names_the_terminal_state():
+    """The generalized version of the two misses above.
+
+    Neither the TickTick creation query nor its reconcile sibling contained a
+    `reported` predicate, so scanning for one found neither. Scan instead for
+    what they DO have in common: a SELECT over `events` inside a module that
+    mutates something external (Calendar, TickTick). Each must name
+    `closed_reason`, whether via OPEN_EVENT_SQL or the bare column.
+    """
+    import pathlib
+    import re
+    root = pathlib.Path(__file__).resolve().parent
+    offenders = []
+    for name in ("main.py", "ticktick.py", "consensus_preview.py"):
+        text = (root / name).read_text(encoding="utf-8")
+        for m in re.finditer(r"FROM events\b", text):
+            # A window wide enough to cover a multi-line SQL string.
+            window = text[max(0, m.start() - 800):m.start() + 500]
+            if "closed_reason" in window or "OPEN_EVENT_SQL" in window:
+                continue
+            # Three shapes are legitimately unfiltered, checked one by one
+            # rather than waved through as a class:
+            #   * a targeted DELETE of one known row (ticker + event_date) --
+            #     it is removing a specific row, not reading a population;
+            #   * a query for REPORTED history -- a closed event is by
+            #     definition not reported, so it cannot appear;
+            #   * `find_reported_event_for_quarter`-style lookups, same reason.
+            tail = text[m.start():m.start() + 300]
+            if re.search(r"DELETE FROM events WHERE ticker = \? AND event_date = \?",
+                         window):
+                continue
+            if re.search(r"reported\s*,?\s*0?\s*\)?\s*=\s*1", tail):
+                continue
+            line = text[:m.start()].count("\n") + 1
+            offenders.append(f"{name}:{line}: {tail.splitlines()[0]}")
+    assert not offenders, (
+        "these SELECT from `events` without naming the terminal state, so a "
+        "closed event still reaches an external write:\n  " + "\n  ".join(offenders))

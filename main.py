@@ -1670,7 +1670,14 @@ def run(
         cur = conn.execute(
             "SELECT ticker, event_date, event_hour, eps_estimate, rev_estimate, "
             "tier, company_name, ticktick_task_id, date_confirmed, date_locked "
-            "FROM events WHERE tier <= 2 AND event_date >= ? "
+            # `closed_reason IS NULL`, not the full open predicate: this pass
+            # must still see REPORTED rows (their tasks get marked). It must
+            # not see CLOSED ones -- a row closed earlier in this same run()
+            # would otherwise have a TickTick task created for it. Codex round
+            # 2 found this; the source-scanning test could not, because the
+            # query names no `reported` predicate at all to scan for.
+            f"FROM events WHERE tier <= 2 AND closed_reason IS NULL "
+            f"AND event_date >= ? "
             "ORDER BY event_date, ticker",
             (today.isoformat(),)
         )
