@@ -17,7 +17,12 @@ if not exist "%PYTHON%" (
   exit /b 3
 )
 
-"%PYTHON%" ir_ticktick.py --reconcile
+REM Wrapped by run_guarded (board #287): measured BLIND -- ran and never
+REM heartbeated, so a failure was invisible until the weekly monitor noticed.
+REM Posts an error health/v1 heartbeat on a non-zero exit and re-exits with the
+REM payload's own code, so RC below is unchanged.
+set "GUARD=%USERPROFILE%\Dropbox\Claude Folder\scheduled_jobs_monitor\run_guarded.py"
+"%PYTHON%" "%GUARD%" --lane "earnings_agent IR reconcile" --project "earnings_agent" --cadence weekly -- "%PYTHON%" ir_ticktick.py --reconcile
 set RC=%ERRORLEVEL%
 echo ir reconcile exited with %RC%
 exit /b %RC%
