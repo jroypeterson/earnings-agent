@@ -57,6 +57,7 @@ from storage import (
     is_ticker_date_locked,
     open_question,
     get_question_snapshot,
+    resolve_reported_questions,
     update_question_state,
     advance_reply_watermark,
     list_open_questions,
@@ -1487,6 +1488,12 @@ def run(
                 (r.ticker, r.event_date),
             )
         conn.commit()
+        # The automatic report path never closed its Slack question - see
+        # resolve_reported_questions(). Sweeping here both closes the ones just marked and
+        # backfills any left open by earlier runs.
+        n_resolved = resolve_reported_questions(conn)
+        if n_resolved:
+            print(f"  resolved {n_resolved} question thread(s) whose event has reported")
         # Move-give-up alert: rows whose deferral window expired but yfinance
         # still produced no usable move. These are in sync_results because
         # _should_defer_post returned False (event too old to keep waiting).

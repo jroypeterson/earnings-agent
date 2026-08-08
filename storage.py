@@ -1072,6 +1072,35 @@ def open_question(
     conn.commit()
 
 
+def resolve_reported_questions(conn: sqlite3.Connection) -> int:
+    """Close question threads whose event has since reported. Returns rows changed.
+
+    `question_state` documents `resolved` as "action applied (lock, reported, etc.)", but
+    nothing ever applied the `reported` half. Two paths mark an event reported: the Slack
+    reply handler, which resolves the question right after, and the AUTOMATIC path, which
+    does not. So every self-healed event - an EDGAR 8-K 2.02 auto-correction, an IR
+    announcement, the web resolver - left its question open forever.
+
+    Measured on the live DB 2026-08-07: 8 of 21 question-bearing events were `reported = 1`
+    AND `question_state = 'open'`, and ZERO were `reported = 1` AND resolved, so the
+    transition had never once fired. The oldest had been open since May. It causes no
+    spurious alerts (every alert query gates on `reported = 0`) but it inflates the
+    open-question count by ~38%, burying real questions among answered ones.
+
+    Written as a SWEEP rather than a fix at the point of reporting, so it both closes new
+    ones and backfills the existing ones on the next run, and stays idempotent.
+
+    `dismissed` is deliberately untouched: the operator said "never alert me about this
+    again", which is already terminal and is not ours to relabel.
+    """
+    cur = conn.execute(
+        "UPDATE events SET question_state = 'resolved', updated_at = datetime('now') "
+        "WHERE reported = 1 AND question_state IN ('open', 'monitoring', 'snoozed')"
+    )
+    conn.commit()
+    return cur.rowcount
+
+
 def get_question_snapshot(
     conn: sqlite3.Connection, ticker: str, event_date: str
 ) -> dict | None:
