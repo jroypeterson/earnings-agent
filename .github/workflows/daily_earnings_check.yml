@@ -272,6 +272,19 @@ jobs:
         if: github.ref == 'refs/heads/main'
         run: python scripts/build_calendar_page.py
 
+      # The portfolio season page (docs/season.html) — the browsable companion
+      # to the Slack season card, where nothing is truncated and the reaction
+      # columns sort. Publishes JP's Portfolio + Researching composition, which
+      # he cleared 2026-08-09; share counts and cost basis are NOT on it.
+      # NOT gating: a failure here must not cost the run its calendar page or
+      # its exports commit-back.
+      - name: Build portfolio season Pages site
+        if: github.ref == 'refs/heads/main'
+        continue-on-error: true
+        env:
+          COVERAGE_MANAGER_PATH: ${{ github.workspace }}/coverage-manager
+        run: python scripts/build_season_page.py
+
       - name: Commit exports + Pages site if changed
         if: github.ref == 'refs/heads/main'
         run: |
@@ -281,6 +294,7 @@ jobs:
           git add exports/upcoming_events.json
           [ -f exports/consensus_preview.json ] && git add exports/consensus_preview.json || true
           [ -f docs/index.html ] && git add docs/index.html docs/.nojekyll || true
+          [ -f docs/season.html ] && git add docs/season.html || true
           if git diff --cached --quiet; then
             echo "no changes to exported JSON or Pages site"
             exit 0
