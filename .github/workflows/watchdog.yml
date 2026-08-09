@@ -93,6 +93,13 @@ jobs:
             "Reconcile Calendar|reconcile_calendar.yml|weekday|20|6|24"
             "Post-Earnings Results Check|post_earnings_check.yml|weekday|22|5|24"
             "Weekly Earnings Digest|weekly_digest.yml|sun|16|24|168"
+            # Season progress fires on two crons. Both are modelled, because
+            # the weekday card is deliberately SILENT when nothing new has
+            # reported — so "no Slack post" is indistinguishable from "the lane
+            # is down" by eye, and the workflow's own success is the only
+            # signal that it ran at all.
+            "Earnings Season Progress (weekday)|season_progress.yml|weekday|23|5|24"
+            "Earnings Season Progress (Sunday)|season_progress.yml|sun|17|24|168"
           )
 
           stale_lines=()

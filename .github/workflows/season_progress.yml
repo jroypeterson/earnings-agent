@@ -1,0 +1,198 @@
+# Portfolio earnings-season progress + Sunday forward calendar
+#
+# JP 2026-08-09: know which of his companies have reported this season, which
+# still need to report, and what the stock did after each print — plus a
+# forward calendar every Sunday for the week ahead.
+#
+# Scope is Portfolio + Researching (67 names as of 2026-08-09).
+#
+# Two cadences, one entry point:
+#   * Weekdays 23:07 UTC — AFTER post_earnings_check (22:37 UTC) has flipped
+#     today's reporters, so the card reflects tonight's prints rather than
+#     yesterday's. Silent unless a name newly reported; the watermark lives in
+#     kv_store inside the DB artifact.
+#   * Sunday 17:10 UTC (~1:10 PM ET) — posts unconditionally with the forward
+#     calendar appended. "Nothing changed" is the answer the Sunday post exists
+#     to give, so it is deliberately NOT gated on change.
+#
+# This workflow WRITES the DB (the watermark), so it restores and uploads the
+# earnings-db artifact and joins the shared serialization group. A run that
+# posted but failed to upload will re-announce the same names next run, which
+# is the safe direction.
+
+name: Earnings Season Progress
+
+on:
+  schedule:
+    - cron: "7 23 * * 1-5"     # weekday evenings, after the results sweep
+    - cron: "10 17 * * 0"      # Sunday, forward calendar
+  workflow_dispatch:
+    inputs:
+      date:
+        description: "As-of date (YYYY-MM-DD). Defaults to today."
+        required: false
+        type: string
+      forward_calendar:
+        description: "Append the forward calendar and post unconditionally."
+        required: false
+        type: boolean
+        default: false
+      force:
+        description: "Post the full standings even if nothing newly reported."
+        required: false
+        type: boolean
+        default: false
+
+# Serialize with daily_earnings_check, reconcile_calendar and
+# post_earnings_check — all read/write the earnings-db artifact.
+concurrency:
+  group: earnings-db-writer
+  cancel-in-progress: false
+
+jobs:
+  season-progress:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout earnings-agent
+        uses: actions/checkout@v5
+
+      - name: Checkout Coverage Manager exports
+        uses: actions/checkout@v5
+        with:
+          repository: jroypeterson/Coverage-Manager
+          path: coverage-manager
+          sparse-checkout: |
+            exports
+          sparse-checkout-cone-mode: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # Cross-run downloader pinned to a commit SHA — actions/download-artifact
+      # only sees same-run artifacts and would silently produce a fresh DB,
+      # erasing the watermark (and everything else).
+      - name: Restore earnings database
+        id: restore_db
+        continue-on-error: true
+        uses: dawidd6/action-download-artifact@bf251b5aa9c2f7eeb574a96ee720e24f801b7c11  # v6
+        with:
+          name: earnings-db
+          search_artifacts: true
+          workflow_search: true
+          workflow_conclusion: success
+          branch: main
+          if_no_artifact_found: warn
+          path: .
+
+      - name: Restore earnings database (retry after transient error)
+        if: steps.restore_db.outcome == 'failure'
+        uses: dawidd6/action-download-artifact@bf251b5aa9c2f7eeb574a96ee720e24f801b7c11  # v6
+        with:
+          name: earnings-db
+          search_artifacts: true
+          workflow_search: true
+          workflow_conclusion: success
+          branch: main
+          if_no_artifact_found: warn
+          path: .
+
+      # A fresh DB here is not merely lossy, it is WRONG in a specific way: an
+      # unseeded watermark makes the first run treat the entire season as
+      # already-seen and stay silent, so the failure would present as "quiet
+      # week" rather than as an outage.
+      - name: Abort if DB artifact missing post-bootstrap
+        if: vars.EA_DB_BOOTSTRAPPED == 'true' && hashFiles('earnings_events.db') == ''
+        env:
+          WEBHOOK_STATUS: ${{ secrets.SLACK_WEBHOOK_STATUS }}
+          WEBHOOK_EARNINGS: ${{ secrets.SLACK_WEBHOOK_EARNINGS }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          WEBHOOK="${WEBHOOK_STATUS:-$WEBHOOK_EARNINGS}"
+          if [ -n "$WEBHOOK" ]; then
+            curl -sS -X POST -H 'Content-Type: application/json' \
+              --data "{\"text\":\":rotating_light: *earnings-db artifact missing* — aborting the season-progress run. An unseeded watermark would make the season look already-reported and the lane would go quiet instead of failing. <${RUN_URL}|run details>\"}" \
+              "$WEBHOOK"
+          fi
+          exit 1
+
+      - name: Post season progress
+        env:
+          COVERAGE_MANAGER_PATH: ${{ github.workspace }}/coverage-manager
+          SLACK_WEBHOOK_EARNINGS: ${{ secrets.SLACK_WEBHOOK_EARNINGS }}
+          SLACK_WEBHOOK_STATUS: ${{ secrets.SLACK_WEBHOOK_STATUS }}
+        run: |
+          ARGS="--season-progress"
+
+          # The Sunday cron carries the forward calendar. github.event.schedule
+          # is the literal cron string of the trigger that fired, which is the
+          # only reliable way to tell two schedules on one workflow apart.
+          if [ "${{ github.event.schedule }}" = "10 17 * * 0" ]; then
+            ARGS="$ARGS --forward-calendar"
+          fi
+
+          if [ "${{ inputs.forward_calendar }}" = "true" ]; then
+            ARGS="$ARGS --forward-calendar"
+          fi
+          if [ "${{ inputs.force }}" = "true" ]; then
+            ARGS="$ARGS --force"
+          fi
+          if [ -n "${{ inputs.date }}" ]; then
+            ARGS="$ARGS --date ${{ inputs.date }}"
+          fi
+
+          echo "Running: python main.py $ARGS"
+          python main.py $ARGS
+
+      - name: Save earnings database
+        if: always() && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v6
+        with:
+          name: earnings-db
+          path: earnings_events.db
+          retention-days: 90
+          overwrite: true
+
+      - name: Notify Slack on failure
+        if: failure()
+        env:
+          SLACK_WEBHOOK_EARNINGS: ${{ secrets.SLACK_WEBHOOK_EARNINGS }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ -n "$SLACK_WEBHOOK_EARNINGS" ]; then
+            curl -sS -X POST -H 'Content-Type: application/json' \
+              --data "{\"text\":\":rotating_light: *Earnings Season Progress* failed — <${RUN_URL}|run details>\"}" \
+              "$SLACK_WEBHOOK_EARNINGS"
+          fi
+
+      # Out-of-band backup, inlined so it survives a failed checkout.
+      - name: Email backup on failure
+        if: failure()
+        env:
+          GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          ALERT_EMAIL_TO: jroypeterson+alerts@gmail.com
+          ALERT_SUBJECT: "[ClaudeFin] earnings_agent — Earnings Season Progress failed"
+          ALERT_BODY: "The Earnings Season Progress workflow failed (portfolio season card / Sunday forward calendar may be down). Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+        run: |
+          python3 - <<'PY'
+          import os, smtplib
+          from email.mime.text import MIMEText
+          addr = os.environ.get("GMAIL_ADDRESS", "").strip()
+          pw = os.environ.get("GMAIL_APP_PASSWORD", "").strip()
+          to = os.environ.get("ALERT_EMAIL_TO", "jroypeterson+alerts@gmail.com").strip()
+          if not addr or not pw:
+              print("email backup: GMAIL creds unset - skipping"); raise SystemExit(0)
+          msg = MIMEText(os.environ.get("ALERT_BODY", "") or os.environ.get("ALERT_SUBJECT", ""), "plain")
+          msg["Subject"] = os.environ.get("ALERT_SUBJECT", "[ClaudeFin] earnings_agent — alert")
+          msg["From"] = addr; msg["To"] = to
+          with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=30) as s:
+              s.login(addr, pw); s.send_message(msg)
+          print(f"email backup: sent to {to}")
+          PY

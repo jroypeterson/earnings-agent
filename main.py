@@ -98,6 +98,15 @@ from ticktick import (
     TickTickTokenExpired,
 )
 from digest import build_weekly_digest
+from season_progress import (
+    attach_reactions,
+    collect_season,
+    is_seeded,
+    mark_settled,
+    seed_watermark,
+    select_unsettled,
+)
+from season_render import build_forward_calendar_blocks, build_progress_blocks
 from consensus_preview import (
     select_upcoming_reporters,
     assemble_preview_rows,
@@ -1838,6 +1847,129 @@ def run_weekly_digest(dry_run: bool = False):
 
     logger.info("Weekly digest complete. Run Gmail MCP draft creation "
                 f"using content from {DIGEST_HTML_PATH}")
+
+
+# ---------------------------------------------------------------------------
+# Portfolio earnings-season progress + forward calendar
+# ---------------------------------------------------------------------------
+
+
+def run_season_progress(
+    dry_run: bool = False,
+    as_of: date | None = None,
+    forward_calendar: bool = False,
+    force: bool = False,
+):
+    """Post the portfolio season-progress card, and on Sunday the forward
+    calendar alongside it.
+
+    Two cadences share one collector (JP 2026-08-09):
+
+    * **Weekday** — posts ONLY when a Portfolio/Researching name has newly
+      reported since the last post. A quiet evening is silent; the watermark in
+      `kv_store` is what makes that decision, and it advances only after the
+      post succeeds, so a Slack outage re-announces rather than swallowing a
+      day's reporters.
+    * **Sunday** (`--forward-calendar`) — posts unconditionally, full standings
+      plus the week ahead. "Nothing changed" is exactly the answer the Sunday
+      post exists to give, so it must not be gated on change.
+    """
+    as_of = as_of or date.today()
+
+    coverage = load_coverage()
+    if not coverage:
+        logger.error("No tickers loaded. Cannot build season progress.")
+        sys.exit(1)
+    coverage_map = {t.ticker.upper(): t for t in coverage}
+
+    conn = init_db()
+    try:
+        progress = collect_season(conn, coverage_map, as_of)
+
+        if progress.in_scope == 0:
+            # collect_season already logged the cause. Refuse to post: an empty
+            # roster renders as a finished season, which is the most misleading
+            # thing this card could say.
+            logger.error(
+                "Season progress: empty in-scope roster — refusing to post."
+            )
+            sys.exit(1)
+
+        # A season's first run settles everything silently rather than
+        # announcing the whole quarter as "just reported".
+        if not is_seeded(conn, progress):
+            seed_watermark(conn, progress)
+            conn.commit()
+            logger.info(
+                "Season progress: seeded the %s watermark with %d reported "
+                "name(s).", progress.season, len(progress.reported),
+            )
+            if not forward_calendar and not force:
+                return
+
+        # Names not yet shown WITH a resolved reaction. Computed before the
+        # price fetch so a quiet evening costs nothing.
+        unsettled = select_unsettled(conn, progress)
+        progress.fresh = unsettled
+
+        if not forward_calendar and not unsettled and not force:
+            logger.info(
+                "Season progress: nothing new to say about %s "
+                "(%d of %d reported, all reactions already posted) — silent.",
+                progress.season, len(progress.reported), progress.scheduled,
+            )
+            return
+
+        attach_reactions(progress.reported, as_of)
+
+        blocks = build_progress_blocks(
+            progress, fresh_only=not (forward_calendar or force)
+        )
+        if forward_calendar:
+            blocks.append({"type": "divider"})
+            blocks.extend(build_forward_calendar_blocks(progress))
+
+        fallback = (
+            f"{progress.season} earnings season — {len(progress.reported)} of "
+            f"{progress.scheduled} reported, {len(progress.upcoming)} to come"
+        )
+
+        if dry_run:
+            logger.info("=" * 50)
+            logger.info("DRY RUN — season progress payload preview:")
+            logger.info(fallback)
+            for block in blocks:
+                if block.get("type") == "section":
+                    logger.info("  [section]\n%s", block["text"]["text"])
+                elif block.get("type") == "header":
+                    logger.info("  [header] %s", block["text"]["text"])
+                elif block.get("type") == "context":
+                    for el in block.get("elements", []):
+                        logger.info("  [context] %s", el.get("text", ""))
+            logger.info("=" * 50)
+            logger.info("(Dry run — no Slack post, watermark NOT advanced)")
+            return
+
+        if not SLACK_WEBHOOK_EARNINGS:
+            logger.warning(
+                "SLACK_WEBHOOK_EARNINGS not set — skipping season-progress post."
+            )
+            return
+
+        post_slack(SLACK_WEBHOOK_EARNINGS, blocks, fallback)
+
+        # Post-then-mark, matching the results lane: a failed post raises above
+        # this line and the same reporters are announced on the next run.
+        mark_settled(conn, progress, as_of)
+        conn.commit()
+        logger.info(
+            "Season progress posted: %d of %d reported, %d shown as new, "
+            "%d to come.",
+            len(progress.reported), progress.scheduled,
+            len(progress.fresh), len(progress.upcoming),
+        )
+    finally:
+        conn.close()
 
 
 # ---------------------------------------------------------------------------
@@ -4738,6 +4870,27 @@ def main():
         help="Build and send the weekly earnings digest (Slack + email HTML for MCP draft)",
     )
     parser.add_argument(
+        "--season-progress",
+        action="store_true",
+        help="Post the portfolio earnings-season progress card (Portfolio + "
+             "Researching): who has reported, the post-earnings reaction, and "
+             "who is still to come. Silent unless a name newly reported since "
+             "the last post; use --force to post anyway.",
+    )
+    parser.add_argument(
+        "--forward-calendar",
+        action="store_true",
+        help="With --season-progress: also append the Sunday forward calendar "
+             "(the week ahead day by day, then the rest of the season) and post "
+             "unconditionally, even when nothing new has reported.",
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="With --season-progress: post the full standings even when no "
+             "name has newly reported.",
+    )
+    parser.add_argument(
         "--check-results",
         action="store_true",
         help="Check for newly-reported earnings on --date (default: today); post results to Slack",
@@ -4861,6 +5014,13 @@ def main():
         run_reconcile_ticktick(dry_run=args.dry_run)
     elif args.weekly_digest:
         run_weekly_digest(dry_run=args.dry_run)
+    elif args.season_progress:
+        run_season_progress(
+            dry_run=args.dry_run,
+            as_of=date.fromisoformat(args.date) if args.date else None,
+            forward_calendar=args.forward_calendar,
+            force=args.force,
+        )
     elif args.check_results:
         run_check_results(
             target_date=args.date,
