@@ -220,10 +220,22 @@ anchor on the prior close, AMC on the report-day close, positions resolved again
 index so a holiday cannot shift a window. One batched download covers all names plus SPY.
 Cross-checks against the fleet: DOCS +32.6% matches the figure post_earnings_movers recorded.
 
-**No HTML artifact.** `readable/` is tracked in this PUBLIC repo, so a portfolio-scoped page
-would publish the book. JP already decided the general position-leak question
-(`project_cm_positions_public_leak` — "I don't care about privacy now", do not re-raise); this
-lane simply does not add a new one. Slack only.
+**Public Pages companion — `scripts/build_season_page.py` → `docs/season.html`**, live at
+<https://jroypeterson.github.io/earnings-agent/season.html>. Built in `daily_earnings_check.yml`
+(`continue-on-error`, riding the existing commit-back), reusing `collect_season` +
+`attach_reactions` so the page and the Slack card cannot disagree. Slack is the lossy push
+surface; this is the pull surface — nothing truncated, every column sortable. Its sort
+comparator parks blank cells at the bottom in **both** directions, so *not measurable* can
+never sort as though it were the smallest number.
+
+⚠ **It publishes JP's Portfolio + Researching composition, and that is deliberate** — JP
+2026-08-09: *"Its fine to have my portfolio public"* (consistent with
+`project_cm_positions_public_leak`, where the same book is already public in Coverage-Manager
+and sigma-alert). **What was cleared is WHICH NAMES are in the book, not their sizes.** Share
+counts, cost basis, average cost and P&L are absent from this page and must stay absent — CM's
+`positions_and_researching.csv` carries `Shares` / `Average Cost` / `Buy Price` columns, so a
+future "just join a bit more of the CSV" is the specific way this becomes a different
+disclosure than the one he agreed to.
 
 Both crons are modelled in `watchdog.yml`, because the weekday card is deliberately **silent**
 when nothing is unsettled — so "no Slack post" is indistinguishable from an outage by eye, and
@@ -292,6 +304,7 @@ Same keys as above (minus the JSON-blob form of Google creds — local uses the 
 - `web_resolver.py` — web-search resolution of cross-check disagreements (Anthropic web_search tool → `WebVerdict`; see B1.5). Never raises; None on any failure.
 - `slack_replies.py` — reply-command parser + help/status text. `parse_reply(text, ctx) -> ParsedAction`. Caller dispatches the action via `_apply_action` in `main.py`.
 - `scripts/build_calendar_page.py` — renders the public earnings-calendar site to `docs/index.html` (see below).
+- `scripts/build_season_page.py` — renders the portfolio season page to `docs/season.html` (sortable; publishes position COMPOSITION only, never sizes).
 - `season_progress.py` — portfolio season roster + post-earnings reaction (move / sigma / vs SPY) + the settle-on-reaction watermark. See the section below.
 - `season_render.py` — fixed-width Slack tables for the progress card and the Sunday forward calendar.
 
