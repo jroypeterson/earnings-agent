@@ -21,6 +21,11 @@ An earnings review execution system that monitors upcoming earnings, syncs to Go
 - **Multi-source date correctness**: cross-checks Finnhub against yfinance + SEC EDGAR historical cadence, scans IR RSS feeds for pre-release announcements, alerts on Tier 1 moves within 5 business days
 - Human override via `--lock TICKER:DATE` when Finnhub is wrong and IR page is verified
 - Supports dry-run, backfill, cleanup, and reconcile modes
+- **Portfolio season progress + Sunday forward calendar** — for the Portfolio + Researching
+  names, who has reported this season, the post-earnings reaction (move / sigma / vs SPY),
+  and who is still to come. Posts to `#earnings` on weekday evenings (only when something
+  is new) and every Sunday with the week ahead, and publishes a sortable page at
+  <https://jroypeterson.github.io/earnings-agent/season.html>
 
 ## Architecture
 
@@ -95,21 +100,31 @@ python main.py --ticktick-status
 # backfill lost pointers, ensure sector tags). Add --dry-run to preview.
 python main.py --reconcile-ticktick [--dry-run]
 
+# Portfolio season progress (Portfolio + Researching): who has reported, the
+# reaction, and who is still to come. Silent unless a name is unsettled.
+python main.py --season-progress
+python main.py --season-progress --forward-calendar   # + the Sunday week-ahead
+python main.py --season-progress --force              # full standings on demand
+
 # Clean up duplicate calendar events
 python main.py --cleanup
 ```
 
 ## Deploy on GitHub Actions
 
-Four workflows ship in `.github/workflows/`:
+Six workflows ship in `.github/workflows/`. Every cron is deliberately offset off `:00` —
+the top of the hour is the worst window for GitHub Actions delays and skips.
 
 | Workflow | Cron (UTC) | Local ET (EDT) | Purpose |
 |---|---|---|---|
-| `daily_earnings_check.yml` | `0 11 * * *` | ~7 AM | Full daily sync + B1 cross-check |
-| `daily_earnings_check.yml` | `0 19 * * 1-5` | ~3 PM weekdays | Afternoon redundancy for mid-day Finnhub changes |
-| `reconcile_calendar.yml` | `0 14,17,20 * * 1-5` | ~10 AM / 1 PM / 4 PM | Lightweight drift auto-repair |
-| `weekly_digest.yml` | `0 16 * * 0` | Sunday ~12 PM | Weekly digest to Slack |
-| `post_earnings_check.yml` | `0 22 * * 1-5` | Weekday ~6 PM | Results sweep + AMC overnight catch-up |
+| `daily_earnings_check.yml` | `13 11 * * *` | ~7:13 AM | Full daily sync + cross-check + IR email scan + Pages rebuild |
+| `daily_earnings_check.yml` | `23 19 * * 1-5` | ~3:23 PM weekdays | Afternoon redundancy for mid-day Finnhub changes |
+| `reconcile_calendar.yml` | `9 14,17,20 * * 1-5` | ~10:09 AM / 1:09 PM / 4:09 PM | Lightweight drift auto-repair |
+| `post_earnings_check.yml` | `37 22 * * 1-5` | Weekday ~6:37 PM | Results sweep + AMC overnight catch-up |
+| `season_progress.yml` | `7 23 * * 1-5` | Weekday ~7:07 PM | Portfolio season card — silent unless a name is unsettled |
+| `season_progress.yml` | `10 17 * * 0` | Sunday ~1:10 PM | Season card + forward calendar, unconditional |
+| `weekly_digest.yml` | `43 16 * * 0` | Sunday ~12:43 PM | Weekly digest to Slack |
+| `watchdog.yml` | `37 13,17,21 * * *` | ~9:37 AM / 1:37 PM / 5:37 PM | Detect stale sibling workflows + auto-dispatch recovery |
 
 All workflows clone the public [Coverage-Manager](https://github.com/jroypeterson/Coverage-Manager) repo (sparse checkout of `exports/`). DB-writing workflows share `concurrency: earnings-db-writer` so they serialize on the shared `earnings-db` artifact. A `Workflow Watchdog` (`watchdog.yml`) runs 3×/day and is schedule-aware — it alerts (and auto-dispatches recovery) when a workflow's most-recent *expected* run hasn't succeeded, so a skipped weekday run is caught within ~24h without weekend false alarms.
 
@@ -151,7 +166,7 @@ earnings_agent/
 ├── main.py              # CLI entry point + all top-level flows
 ├── config.py            # Environment, paths, constants
 ├── coverage.py          # Coverage Manager integration, tier resolution
-├── storage.py           # SQLite schema (v8), non-destructive migrations
+├── storage.py           # SQLite schema (v13), non-destructive migrations + OPEN_EVENT_SQL
 ├── finnhub_client.py    # Finnhub API with adaptive chunk splitting + fail-fast
 ├── calendar_sync.py     # Google Calendar CRUD + dedup + confirmed/est rendering
 ├── edgar_client.py      # SEC EDGAR 8-K fetcher + cadence inference
@@ -160,17 +175,25 @@ earnings_agent/
 ├── ticktick.py          # TickTick list/task management
 ├── digest.py            # Weekly digest query + grouping + clustering
 ├── notifications.py     # Slack Block Kit builders for every alert surface
+├── season_progress.py   # Portfolio season roster + post-earnings reaction + watermark
+├── season_render.py     # Fixed-width Slack tables for the season card + forward calendar
+├── daily_summary.py     # Same-day narrative summaries from the EX-99 release
 ├── weekly_digest.bat    # Windows Task Scheduler wrapper for the weekly digest
 ├── earnings_agent.py    # Legacy entry point (delegates to main.py)
 ├── ir_feeds.json        # Per-ticker IR RSS URL mapping (for --check-announcements)
-├── test_dedup.py        # Test suite
+├── test_dedup.py        # Test suite (see test_*.py for the rest)
 ├── requirements.txt
 ├── .env.example
 ├── PLAN.md              # Detailed implementation plan (7 phases)
+├── scripts/
+│   ├── build_calendar_page.py  # -> docs/index.html   (public earnings calendar)
+│   └── build_season_page.py    # -> docs/season.html  (portfolio season progress)
 └── .github/workflows/
     ├── daily_earnings_check.yml
     ├── reconcile_calendar.yml
     ├── post_earnings_check.yml
+    ├── season_progress.yml
+    ├── watchdog.yml
     └── weekly_digest.yml
 ```
 
