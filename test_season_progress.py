@@ -660,25 +660,119 @@ def test_undated_names_are_surfaced_on_the_calendar_not_silently_dropped():
     assert "ZZZ" in text
 
 
-def test_status_precedence_matches_the_public_calendar_page():
-    base = dict(reported=False, date_confirmed=True, date_locked=True)
-    locked = SeasonRow("A", "A", "Portfolio", "2026-08-20", "bmo", **base)
-    assert locked.status == "Locked"
+def test_status_is_binary_on_trust_not_a_three_level_scale():
+    """JP 2026-08-09: *"you have a confirmed and locked status... aren't those
+    redundant?"* They are, for the question the column answers.
 
+    `date_confirmed` (evidence: the company announced it) and `date_locked`
+    (mechanism: a sync cannot move it) are INDEPENDENT axes. Rendering them as
+    an ordered precedence made a row that was BOTH display only "Locked", which
+    reads as an alternative kind of certainty rather than as the same one.
+    """
+    both = SeasonRow("A", "A", "Portfolio", "2026-08-20", "bmo",
+                     reported=False, date_confirmed=True, date_locked=True)
     confirmed = SeasonRow("A", "A", "Portfolio", "2026-08-20", "bmo",
                           False, True, False)
-    assert confirmed.status == "Confirmed"
+    locked_only = SeasonRow("A", "A", "Portfolio", "2026-08-20", "bmo",
+                            False, False, True)
 
+    # All three are the same answer to "can I trust this date?"
+    assert both.status == confirmed.status == locked_only.status == "Confirmed"
+
+    # The lock survives as provenance, never as a status.
+    assert both.pinned and locked_only.pinned
+    assert not confirmed.pinned
+
+
+def test_an_unevidenced_date_is_estimated():
     estimated = SeasonRow("A", "A", "Portfolio", "2026-08-20", "bmo",
                           False, False, False)
     assert estimated.status == "Estimated"
+    assert not estimated.pinned
 
+
+def test_reported_and_undated_still_have_their_own_status():
     reported = SeasonRow("A", "A", "Portfolio", "2026-08-20", "bmo",
                          True, False, True)
     assert reported.status == "Reported"
 
     undated = SeasonRow("A", "A", "Portfolio", None, None, False, False, False)
     assert undated.status == "No date"
+
+
+# ---------------------------------------------------------------------------
+# Revenue surprise
+# ---------------------------------------------------------------------------
+
+
+def _rev_row(est, act):
+    return SeasonRow("A", "A", "Portfolio", "2026-08-01", "bmo", True, True, False,
+                     rev_estimate=est, rev_actual=act)
+
+
+def test_revenue_surprise_is_a_percentage():
+    assert _rev_row(1_000_000.0, 1_100_000.0).rev_surprise_pct == pytest.approx(10.0)
+
+
+def test_revenue_surprise_has_no_near_zero_floor():
+    """Unlike EPS: a revenue consensus is an absolute dollar figure in the
+    millions, so the unstable-denominator case that suppresses a 2.9-cent EPS
+    estimate cannot arise. A small-but-real revenue estimate must still yield a
+    number."""
+    assert _rev_row(0.05, 0.06).rev_surprise_pct == pytest.approx(20.0)
+
+
+def test_a_non_positive_revenue_estimate_is_suppressed():
+    assert _rev_row(0.0, 500.0).rev_surprise_pct is None
+    assert _rev_row(-100.0, 500.0).rev_surprise_pct is None
+
+
+def test_a_missing_revenue_side_is_suppressed():
+    assert _rev_row(1000.0, None).rev_surprise_pct is None
+    assert _rev_row(None, 1000.0).rev_surprise_pct is None
+
+
+# ---------------------------------------------------------------------------
+# YTD
+# ---------------------------------------------------------------------------
+
+
+def test_ytd_is_anchored_on_the_prior_year_final_close():
+    """Not the first close of January — the Jan 2 close is not the start of the
+    year's return, and anchoring there silently drops the first session."""
+    closes = _flat(40, start=100.0)
+    closes[-1] = 125.0
+    frame = _frame(AAA=closes, SPY=_flat(40))
+    # bdate_range starts 2026-07-01, so every bar is inside 2026 and there is
+    # no prior-year close to anchor on.
+    row = SeasonRow("AAA", "A", "Portfolio", None, None, False, True, False)
+    attach_reactions([row], AS_OF, downloader=lambda *a: frame, with_ytd=True)
+    assert row.ytd_pct is None          # unmeasurable, NOT zero
+
+
+def test_ytd_is_computed_for_names_that_have_not_reported():
+    import pandas as pd
+
+    idx = pd.to_datetime(["2025-12-31", "2026-01-02", "2026-08-07"])
+    frame = pd.DataFrame(
+        {("AAA", "Close"): [100.0, 101.0, 150.0], ("SPY", "Close"): [10.0, 10.0, 10.0]},
+        index=idx,
+        columns=pd.MultiIndex.from_tuples([("AAA", "Close"), ("SPY", "Close")]),
+    )
+    upcoming = SeasonRow("AAA", "A", "Portfolio", "2026-08-20", "bmo",
+                         reported=False, date_confirmed=True, date_locked=False)
+
+    attach_reactions([upcoming], AS_OF, downloader=lambda *a: frame, with_ytd=True)
+
+    assert upcoming.ytd_pct == pytest.approx(50.0)
+    assert upcoming.move_pct is None     # still no reaction — it has not reported
+
+
+def test_ytd_is_not_computed_unless_asked():
+    frame = _frame(AAA=_flat(40), SPY=_flat(40))
+    row = SeasonRow("AAA", "A", "Portfolio", "2026-08-01", "bmo", True, True, False)
+    attach_reactions([row], AS_OF, downloader=lambda *a: frame)
+    assert row.ytd_pct is None
 
 
 def test_a_dropped_reaction_column_is_explained_rather_than_silent():

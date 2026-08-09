@@ -101,6 +101,9 @@ class SeasonRow:
     rel_pct: float | None = None      # move minus benchmark over the same window
     window_label: str | None = None   # e.g. "08-04 close -> 08-05 close"
     reaction_note: str | None = None  # why a reaction is absent, when it is
+    # Year-to-date total return to the LATEST close (so for a reported name it
+    # includes the post-earnings reaction). See _ytd_from_closes.
+    ytd_pct: float | None = None
 
     @property
     def eps_surprise_pct(self) -> float | None:
@@ -131,17 +134,59 @@ class SeasonRow:
 
     @property
     def status(self) -> str:
-        """Reported / Confirmed / Estimated / No date — mirrors the public
-        calendar page's derived status so the two surfaces agree."""
+        """Reported / Confirmed / Estimated / No date.
+
+        **Deliberately BINARY on trust** (JP 2026-08-09: *"you have a confirmed
+        and locked status… aren't those redundant?"* — he was right).
+
+        `date_confirmed` and `date_locked` are two INDEPENDENT axes, not two
+        levels of one scale:
+
+        * `date_confirmed` — the company announced the date. *Evidence.*
+        * `date_locked` — the date is pinned so provider syncs cannot move it.
+          *Mechanism*, set by an operator lock, a Slack `lock` reply, or a
+          corroborated EDGAR 8-K 2.02 / 6-K auto-correction.
+
+        Rendering them as an ordered precedence made them look mutually
+        exclusive, so a row that was BOTH (SGRY) displayed only "Locked" and
+        read as some *alternative* kind of certainty. Measured across the whole
+        DB: 1,465 rows confirmed-not-locked, 15 both, and only **4**
+        locked-not-confirmed — so the lock almost never carries trust
+        information the confirmed flag doesn't already carry.
+
+        The question this column answers is "can I trust this date?", which has
+        two answers. The lock survives as `pinned`, an annotation, because
+        "this one was pinned after a provider disagreement" is real provenance
+        — just not a third trust level. Same failure as
+        `feedback_two_independent_axes_read_as_one`.
+        """
         if self.reported:
             return "Reported"
         if self.event_date is None:
             return "No date"
-        if self.date_locked:
-            return "Locked"
-        if self.date_confirmed:
-            return "Confirmed"
-        return "Estimated"
+        return "Confirmed" if (self.date_confirmed or self.date_locked) else "Estimated"
+
+    @property
+    def pinned(self) -> bool:
+        """The date was pinned against provider drift. Provenance detail shown
+        as an annotation, never as a separate status — see `status`."""
+        return self.date_locked
+
+    @property
+    def rev_surprise_pct(self) -> float | None:
+        """Revenue surprise vs consensus.
+
+        Same shape as `eps_surprise_pct` but WITHOUT the near-zero floor: a
+        revenue consensus is an absolute dollar figure in the millions or
+        billions, so the unstable-denominator case that suppresses a 2.9-cent
+        EPS estimate simply does not arise. A non-positive estimate is still
+        rejected — the sign of the ratio would stop tracking beat-vs-miss.
+        """
+        if self.rev_actual is None or self.rev_estimate is None:
+            return None
+        if self.rev_estimate <= 0:
+            return None
+        return (self.rev_actual - self.rev_estimate) / self.rev_estimate * 100
 
 
 @dataclass
@@ -316,6 +361,7 @@ def attach_reactions(
     as_of: date,
     benchmark: str = _BENCHMARK,
     downloader=None,
+    with_ytd: bool = False,
 ) -> None:
     """Populate move_pct / sigma / rel_pct on reported rows, in place.
 
@@ -323,18 +369,30 @@ def attach_reactions(
     wide enough for both the reaction and the trailing sigma — per-ticker
     fetches would be ~50 round trips for JP's book.
 
+    ``with_ytd`` additionally fills ``ytd_pct`` for **every** row passed in,
+    reported or not, off that same frame. It is a flag rather than a second
+    function so the page cannot end up issuing two downloads of overlapping
+    data, and so the reaction math has exactly one implementation.
+
     Never raises: a ticker whose prices are unavailable keeps `None` metrics and
     gains a `reaction_note` saying so. A blank reaction cell means *not
     measurable*, never zero — the renderer relies on that distinction.
     """
     targets = [r for r in rows if r.reported and r.event_date]
-    if not targets:
+    ytd_targets = [r for r in rows if r.ticker] if with_ytd else []
+    if not targets and not ytd_targets:
         return
 
-    tickers = sorted({r.ticker for r in targets})
-    earliest = min(r.event_date for r in targets)
-    start = date.fromisoformat(earliest) - timedelta(
-        days=int(_SIGMA_LOOKBACK_DAYS * 1.6) + 10
+    tickers = sorted({r.ticker for r in targets} | {r.ticker for r in ytd_targets})
+
+    # Reach back far enough for the trailing sigma AND for the first close of
+    # the current year. With no reported rows yet (early season) there is no
+    # earliest event to anchor on, so fall back to as_of.
+    dated = [r.event_date for r in targets if r.event_date]
+    anchor = date.fromisoformat(min(dated)) if dated else as_of
+    start = min(
+        anchor - timedelta(days=int(_SIGMA_LOOKBACK_DAYS * 1.6) + 10),
+        date(as_of.year - 1, 12, 1),
     )
     end = as_of + timedelta(days=2)
 
@@ -345,11 +403,17 @@ def attach_reactions(
         for r in targets:
             r.reaction_note = "price download failed"
         logger.warning(
-            "season_progress: price download failed for all %d reported names; "
-            "reaction columns will render blank",
-            len(targets),
+            "season_progress: price download failed for %d ticker(s); reaction "
+            "and YTD columns will render blank",
+            len(tickers),
         )
         return
+
+    if with_ytd:
+        for row in ytd_targets:
+            closes = _closes_for(frame, row.ticker, single=(len(tickers) == 1))
+            if closes is not None:
+                row.ytd_pct = _ytd_from_closes(closes, as_of)
 
     bench_closes = _closes_for(frame, benchmark, single=(len(tickers) == 0))
     if bench_closes is None:
@@ -475,6 +539,36 @@ def _move_from_closes(closes, event_date: str, anchor: str):
     if base == 0:
         return None
     return (later - base) / base * 100, idx[base_pos], idx[to_pos]
+
+
+def _ytd_from_closes(closes, as_of: date) -> float | None:
+    """Year-to-date total return: last close of the PRIOR year -> latest close.
+
+    Deliberately anchored on the prior year's final close rather than the first
+    close of January — the January 2nd open is not the starting point of the
+    year's return, and using it silently drops the first session.
+
+    ⚠ This runs to the LATEST close, so for a company that has already
+    reported it INCLUDES its post-earnings reaction. That is the right answer
+    for "where does this stock stand now" (the triage question, and the only
+    definition that also works for the not-yet-reported table), but it is a
+    different measure from post_earnings_movers' `YTD`, which deliberately
+    stops at the print so it never includes the move it is explaining. The page
+    says so in prose; do not quietly switch one for the other.
+    """
+    prior_year_end = date(as_of.year - 1, 12, 31)
+    try:
+        prior = closes[closes.index <= str(prior_year_end)]
+        current = closes[closes.index <= str(as_of + timedelta(days=1))]
+    except TypeError:
+        return None
+    if len(prior) == 0 or len(current) == 0:
+        return None
+    base = float(prior.iloc[-1])
+    last = float(current.iloc[-1])
+    if base == 0:
+        return None
+    return (last - base) / base * 100
 
 
 def _trailing_sigma(closes, reaction_ts) -> float | None:

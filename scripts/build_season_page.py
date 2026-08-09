@@ -64,12 +64,7 @@ a { color: #0fbcf9; }
 .bar { height: 10px; background: #16213e; border: 1px solid #2a2a50; border-radius: 6px;
        overflow: hidden; margin-bottom: 20px; }
 .bar > span { display: block; height: 100%; background: #2ecc71; }
-.controls { display: flex; gap: 12px; flex-wrap: wrap; align-items: center;
-            background: #16213e; border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; }
-.controls input[type=search], .controls select {
-  background: #0f0f23; border: 1px solid #333; border-radius: 6px; color: #eee;
-  padding: 7px 10px; font-size: 13px; }
-.controls label { font-size: 13px; color: #c9c9d4; display: flex; align-items: center; gap: 6px; }
+.pin { font-size: 11px; opacity: .75; cursor: help; }
 table { width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 8px; }
 th, td { padding: 7px 9px; text-align: left; border-bottom: 1px solid #23233f; white-space: nowrap; }
 th { color: #a8a8b3; font-weight: 600; font-size: 12px; text-transform: uppercase;
@@ -82,9 +77,9 @@ td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .muted { color: #6a6a80; }
 .badge { display: inline-block; padding: 1px 7px; border-radius: 999px; font-size: 11px;
          font-weight: 600; border: 1px solid; }
-.badge.locked { color: #7ee787; border-color: #2c5a35; background: #14261a; }
-.badge.announced { color: #79c0ff; border-color: #1f4b7a; background: #10202f; }
+.badge.confirmed { color: #7ee787; border-color: #2c5a35; background: #14261a; }
 .badge.reported { color: #d2a8ff; border-color: #4a3060; background: #1d1428; }
+.badge.nodate { color: #a8a8b3; border-color: #3a3a5c; background: #1a1a30; }
 .badge.estimated { color: #ffcc66; border-color: #6b551f; background: #2a2210; }
 .badge.p { color: #fff; border-color: #e94560; background: #3a1420; }
 .badge.r { color: #c9c9d4; border-color: #3a3a5c; background: #1a1a30; }
@@ -127,8 +122,22 @@ def _list_badge(pos: str) -> str:
 
 
 def _status_badge(r: SeasonRow) -> str:
+    """Trust is binary: Confirmed or Estimated.
+
+    A pinned date gets a small marker rather than a third status — the lock is
+    a *mechanism* (this date will not be moved by a provider sync), not a higher
+    grade of evidence, and rendering it as one made a row that was both look
+    like some alternative kind of certainty. See SeasonRow.status.
+    """
     s = r.status
-    return f'<span class="badge {s.lower().replace(" ", "")}">{html.escape(s)}</span>'
+    badge = f'<span class="badge {s.lower().replace(" ", "")}">{html.escape(s)}</span>'
+    if r.pinned:
+        badge += (
+            ' <span class="pin" title="Date pinned against provider drift '
+            '(operator lock or a corroborated SEC filing) — it will not be '
+            'moved by a calendar sync.">&#128204;</span>'
+        )
+    return badge
 
 
 def _reported_table(rows: list[SeasonRow]) -> str:
@@ -141,23 +150,26 @@ def _reported_table(rows: list[SeasonRow]) -> str:
         gap = ""
         if r.move_pct is None and r.reaction_note:
             gap = f' <span class="muted" title="{html.escape(r.reaction_note)}">&#9432;</span>'
+        sort_ytd = "" if r.ytd_pct is None else f"{r.ytd_pct:.4f}"
         body.append(
             "<tr>"
             f'<td class="tick">{html.escape(r.ticker)}</td>'
             f"<td>{html.escape(r.company_name)}</td>"
             f'<td data-sort="{html.escape(r.event_date or "")}">{_when(r)}</td>'
             f'<td class="num">{_pct(r.eps_surprise_pct, 0)}</td>'
+            f'<td class="num">{_pct(r.rev_surprise_pct, 0)}</td>'
             f'<td class="num" data-sort="{sort_move}">{_pct(r.move_pct)}{gap}</td>'
             f'<td class="num" data-sort="{sort_sig}">{_sigma(r.sigma)}</td>'
             f'<td class="num">{_pct(r.rel_pct)}</td>'
+            f'<td class="num" data-sort="{sort_ytd}">{_pct(r.ytd_pct, 0)}</td>'
             f"<td>{_list_badge(r.position)}</td>"
             "</tr>"
         )
     return f"""<table id="reported">
 <thead><tr>
 <th>Ticker</th><th>Company</th><th>Reported</th>
-<th class="num">EPS surp.</th><th class="num">Move</th>
-<th class="num">Sigma</th><th class="num">vs SPY</th><th>List</th>
+<th class="num">EPS surp.</th><th class="num">Rev surp.</th><th class="num">Move</th>
+<th class="num">Sigma</th><th class="num">vs SPY</th><th class="num">YTD</th><th>List</th>
 </tr></thead>
 <tbody>{''.join(body)}</tbody></table>"""
 
@@ -169,34 +181,33 @@ def _upcoming_table(rows: list[SeasonRow], today: date) -> str:
     for r in rows:
         days = (date.fromisoformat(r.event_date) - today).days if r.event_date else None
         in_ = "today" if days == 0 else (f"{days}d" if days else "")
+        sort_ytd = "" if r.ytd_pct is None else f"{r.ytd_pct:.4f}"
         body.append(
             "<tr>"
             f'<td class="tick">{html.escape(r.ticker)}</td>'
             f"<td>{html.escape(r.company_name)}</td>"
             f'<td data-sort="{html.escape(r.event_date or "")}">{_when(r)}</td>'
             f"<td>{_status_badge(r)}</td>"
-            f'<td class="num">{in_}</td>'
+            f'<td class="num" data-sort="{days if days is not None else ""}">{in_}</td>'
+            f'<td class="num" data-sort="{sort_ytd}">{_pct(r.ytd_pct, 0)}</td>'
             f"<td>{_list_badge(r.position)}</td>"
             "</tr>"
         )
     return f"""<table id="upcoming">
 <thead><tr>
 <th>Ticker</th><th>Company</th><th>Expected</th>
-<th>Status</th><th class="num">In</th><th>List</th>
+<th>Status</th><th class="num">In</th><th class="num">YTD</th><th>List</th>
 </tr></thead>
 <tbody>{''.join(body)}</tbody></table>"""
 
 
+# Sorting only. The search box was removed 2026-08-09 (JP: "the ticker or
+# company filter is useless") — at 50 and 15 rows the whole table already fits
+# a couple of screens, so filtering solved a problem the page does not have,
+# while sorting is what actually answers a question.
 JS = """
-function wire(tableId, boxId){
+function wire(tableId){
   const t=document.getElementById(tableId); if(!t) return;
-  const box=document.getElementById(boxId);
-  if(box) box.addEventListener('input',()=>{
-    const q=box.value.trim().toLowerCase();
-    t.tBodies[0].querySelectorAll('tr').forEach(tr=>{
-      tr.style.display = !q || tr.innerText.toLowerCase().includes(q) ? '' : 'none';
-    });
-  });
   t.querySelectorAll('th').forEach((th,i)=>{
     th.style.cursor='pointer';
     th.addEventListener('click',()=>{
@@ -220,7 +231,7 @@ function wire(tableId, boxId){
     });
   });
 }
-wire('reported','q1'); wire('upcoming','q2');
+wire('reported'); wire('upcoming');
 """
 
 
@@ -297,16 +308,26 @@ def render(p: SeasonProgress, *, generated_at: str, db_asof: str | None) -> str:
   the same move net of the index over the identical window &mdash; which is what separates a
   real reaction from a tape move. <strong>EPS surp.</strong> is surprise against consensus,
   not growth, and is blank where consensus is missing or too near zero for a percentage to
-  mean anything.</p>
+  mean anything. <strong>Rev surp.</strong> is the same against revenue consensus.</p>
+  <p><strong>YTD</strong> is total return from the last close of {p.as_of.year - 1} to the
+  <em>latest</em> close &mdash; so for a company that has already reported it
+  <strong>includes that post-earnings reaction</strong>. It answers &ldquo;where does this
+  stock stand now&rdquo;, which is the only definition that also works for the names that
+  have not reported yet. It is deliberately <em>not</em> the post-earnings-movers
+  <code>YTD</code>, which stops at the print so it never includes the move it is explaining.</p>
+  <p><strong>Status</strong> is binary on purpose. <span class="badge confirmed">Confirmed</span>
+  means the date has positive evidence behind it &mdash; the company announced it, or an SEC
+  filing corroborated it. <span class="badge estimated">Estimated</span> means a provider
+  projected it from historical cadence; treat it as a guess. A &#128204; marks a date
+  additionally <em>pinned</em> against provider drift, which is a note about the plumbing
+  rather than a third grade of confidence.</p>
 </div>
 
 <h2>Reported this season <span class="count">{len(reported)}</span></h2>
-<div class="controls"><label>Filter <input type="search" id="q1" placeholder="ticker or company"></label></div>
 {_reported_table(reported)}
 {gap_note}
 
 <h2>Still to report <span class="count">{len(upcoming)}</span></h2>
-<div class="controls"><label>Filter <input type="search" id="q2" placeholder="ticker or company"></label></div>
 {_upcoming_table(upcoming, p.as_of)}
 {nodate}
 {overdue}
@@ -346,7 +367,12 @@ def build(db_path: Path, out_path: Path, as_of: date | None = None) -> dict:
             "page that would read as a completed season"
         )
 
-    attach_reactions(progress.reported, as_of)
+    # with_ytd covers EVERY in-scope row (reported and not) off the same single
+    # download, so the page never issues two overlapping price fetches.
+    attach_reactions(
+        progress.reported + progress.upcoming + progress.overdue,
+        as_of, with_ytd=True,
+    )
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     (out_path.parent / ".nojekyll").touch()
