@@ -164,6 +164,71 @@ JP (board row #22, 2026-07-16): *"For any earnings reported on a given day that 
 - **Known duplication:** `earnings_kpi/src/earnings_kpi/{edgar,exhibits}.py` implements the same exhibit fetch/parse; promote to `_shared/` if a third consumer appears.
 - **Not yet scheduled** — channel/time decision pending.
 
+## Portfolio season progress + Sunday forward calendar (`season_progress.py`, `season_render.py`, 2026-08-09)
+
+JP: *"During earnings season I want an earnings progress printed so I know which of my
+companies have reported ... and what the stock reaction was after earnings. This is going to
+be a way I think about triaging. And then a calendar of forward-looking earnings posted every
+Sunday."*
+
+```
+python main.py --season-progress --dry-run --date 2026-08-09      # weekday card
+python main.py --season-progress --forward-calendar --dry-run     # the Sunday card
+python main.py --season-progress --force                          # full standings on demand
+```
+
+**Scope = Position in {Portfolio, Researching}** (67 names). JP chose it over Portfolio-only
+(33) and all five lists (85), because a name being researched is one whose print IS the
+trigger to look.
+
+**It must run in CI and cannot run locally.** `earnings_events.db` is **gitignored** and exists
+only as the Actions artifact, so no `git pull` can freshen a local clone — unlike every other
+cross-project artifact in the fleet. Measured 2026-08-09 on one 7-day window, the stale local
+copy was missing **167 of 467** events and had **54 on the wrong date**. Any local consumer of
+this DB is wrong by construction.
+
+**The watermark settles on the REACTION, not on first sighting** — this is the non-obvious
+part and getting it wrong ships a permanently invisible column. An AMC print flips at 18:37
+UTC and this card runs at 23:07; its reaction is the *next* session's close, which does not
+exist yet. Under a first-sighting watermark the name is marked seen and **its real move never
+reaches the daily card**. So the `kv_store` key holds the *settled* set (reported AND
+reaction-resolved), a name appears exactly twice, and one whose reaction never resolves
+settles after `_REACTION_GIVE_UP_DAYS`=5 rather than repeating nightly forever.
+
+**`reported` is not the definition of "has reported" here.** It is a *posting* flag that
+`_should_defer_post` deliberately holds back for up to 3 days while the move is uncomputable.
+`_is_reported()` also accepts actuals, or the table shows a company that reported this morning
+as "still to report".
+
+Other rules, each one a defect the first build produced:
+- **Names with no season date are surfaced, never folded into the denominator** (2 of 67 today:
+  `2715.HK`, `FI`). Same discipline as `compute_season_stats`.
+- **An empty in-scope roster refuses to post** — `0 of 0 reported` reads as a *finished* season.
+- **EPS surprise is suppressed below a $0.10 consensus.** ARXS printed $0.28 against $0.0292 —
+  a true, useless **+859%** in a column of single digits. The estimate/actual stay on the row.
+- **A rounded-away value loses its sign.** BSX closed -0.004% and the table said `-0.0%`.
+- **A dropped all-blank reaction column is explained by ticker and reason**, so an absence
+  never passes as "nothing to measure". See `feedback_absent_data_is_not_a_finding`.
+- Tables re-implement the three post_earnings_movers rules (one width map per table; all-empty
+  column dropped, blank = *not measurable* never zero; splits only between whole rows so a code
+  fence never opens). Re-implemented, not imported — that project is a separate repo with no
+  remote and CI has no path to it. Key appears **once**, at the end.
+
+**Reaction** = 1-day move + sigma (own trailing 252d, reaction day excluded — including it lets
+the move inflate its own denominator) + move net of SPY over the identical window. BMO/DMH
+anchor on the prior close, AMC on the report-day close, positions resolved against the price
+index so a holiday cannot shift a window. One batched download covers all names plus SPY.
+Cross-checks against the fleet: DOCS +32.6% matches the figure post_earnings_movers recorded.
+
+**No HTML artifact.** `readable/` is tracked in this PUBLIC repo, so a portfolio-scoped page
+would publish the book. JP already decided the general position-leak question
+(`project_cm_positions_public_leak` — "I don't care about privacy now", do not re-raise); this
+lane simply does not add a new one. Slack only.
+
+Both crons are modelled in `watchdog.yml`, because the weekday card is deliberately **silent**
+when nothing is unsettled — so "no Slack post" is indistinguishable from an outage by eye, and
+the workflow's own success is the only evidence it ran.
+
 ## Slack channel routing
 
 - **#earnings** (`SLACK_WEBHOOK_EARNINGS`, `SLACK_CHANNEL_ID`): heartbeat, weekly digest, results beat/miss alerts, urgent Tier 1 date moves within 5 biz days. The "primary feed" — actual earnings updates.
@@ -177,6 +242,8 @@ JP (board row #22, 2026-07-16): *"For any earnings reported on a given day that 
 | `daily_earnings_check.yml` | `23 19 * * 1-5` | ~3:23 PM (weekdays) | Afternoon redundancy — catches mid-day Finnhub updates |
 | `reconcile_calendar.yml` | `9 14,17,20 * * 1-5` | ~10:09 AM / 1:09 PM / 4:09 PM | Lightweight drift auto-repair (silent unless drift found) + `--check-replies` poll |
 | `weekly_digest.yml` | `43 16 * * 0` | Sunday ~12:43 PM | Weekly digest to Slack |
+| `season_progress.yml` | `7 23 * * 1-5` | Weekday ~7:07 PM | Portfolio season-progress card; silent unless a name is unsettled |
+| `season_progress.yml` | `10 17 * * 0` | Sunday ~1:10 PM | Season progress + forward calendar, unconditional |
 | `post_earnings_check.yml` | `37 22 * * 1-5` | Weekday ~6:37 PM | Results sweep (today + yesterday for AMC overnight catch-up) |
 | `watchdog.yml` | `37 13,17,21 * * *` | ~9:37 AM / 1:37 PM / 5:37 PM | Detect stale sibling workflows + auto-dispatch recovery |
 
@@ -225,6 +292,8 @@ Same keys as above (minus the JSON-blob form of Google creds — local uses the 
 - `web_resolver.py` — web-search resolution of cross-check disagreements (Anthropic web_search tool → `WebVerdict`; see B1.5). Never raises; None on any failure.
 - `slack_replies.py` — reply-command parser + help/status text. `parse_reply(text, ctx) -> ParsedAction`. Caller dispatches the action via `_apply_action` in `main.py`.
 - `scripts/build_calendar_page.py` — renders the public earnings-calendar site to `docs/index.html` (see below).
+- `season_progress.py` — portfolio season roster + post-earnings reaction (move / sigma / vs SPY) + the settle-on-reaction watermark. See the section below.
+- `season_render.py` — fixed-width Slack tables for the progress card and the Sunday forward calendar.
 
 ## Public earnings calendar page (`docs/index.html`)
 
