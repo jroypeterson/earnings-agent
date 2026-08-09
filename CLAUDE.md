@@ -213,6 +213,20 @@ Other rules, each one a defect the first build produced:
   column dropped, blank = *not measurable* never zero; splits only between whole rows so a code
   fence never opens). Re-implemented, not imported — that project is a separate repo with no
   remote and CI has no path to it. Key appears **once**, at the end.
+- **`status` is BINARY on trust — Confirmed or Estimated** (JP 2026-08-09: *"you have a
+  confirmed and locked status… aren't those redundant?"*, and he was right). `date_confirmed`
+  is *evidence* (the company announced it); `date_locked` is *mechanism* (a sync cannot move
+  it). They are independent axes, so an ordered precedence made SGRY — which is both — display
+  only "Locked" and read as an alternative kind of certainty. Whole-DB counts: 1,465
+  confirmed-not-locked, 15 both, **4** locked-not-confirmed. The lock survives as
+  `SeasonRow.pinned`, rendered as a 📌 marker, never as a status. Both surfaces use it, so they
+  cannot disagree.
+- **`ytd_pct` runs to the LATEST close** and therefore INCLUDES a reported name's own
+  post-earnings reaction. That is intended — it answers "where does this stock stand now" and
+  is the only definition that also works for names that have not reported. ⚠ It is **not**
+  post_earnings_movers' `YTD`, which deliberately stops at the print so it never contains the
+  move it is explaining. Two different measures with the same name across two projects; the
+  page prose states which one it is.
 
 **Reaction** = 1-day move + sigma (own trailing 252d, reaction day excluded — including it lets
 the move inflate its own denominator) + move net of SPY over the identical window. BMO/DMH
