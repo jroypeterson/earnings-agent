@@ -249,6 +249,26 @@ def _funnel_line(p: SeasonProgress) -> str:
     return f":bar_chart: *{p.season} season — Portfolio + Researching* · " + " · ".join(parts)
 
 
+SEASON_PAGE_URL = "https://jroypeterson.github.io/earnings-agent/season.html"
+
+
+def _page_link_note(p: SeasonProgress) -> str:
+    """Point at the full page from every card.
+
+    JP 2026-08-10 asked for *"a notification that the table is updating"*. A
+    post fired on every page rebuild would be noise — the page rebuilds daily
+    whether or not anything happened. The card already fires exactly when
+    something DID happen, so the honest version is to make the card carry the
+    link: the notification and the thing it is notifying about arrive together.
+    Also removes the need to remember which channel holds the bookmark.
+    """
+    return (
+        f":bar_chart: Full season table — every one of the {p.in_scope} names, "
+        f"sortable and untruncated: <{SEASON_PAGE_URL}|season progress page>. "
+        f"Rebuilt each morning from the same data as this card."
+    )
+
+
 def _denominator_note(p: SeasonProgress) -> str:
     note = (
         f"Denominator = {p.scheduled} name(s) with a scheduled {p.season} date. "
@@ -384,6 +404,9 @@ def build_progress_blocks(
     blocks.append(_key_block())
     blocks.append(
         {"type": "context", "elements": [{"type": "mrkdwn", "text": _denominator_note(p)}]}
+    )
+    blocks.append(
+        {"type": "context", "elements": [{"type": "mrkdwn", "text": _page_link_note(p)}]}
     )
     return blocks
 

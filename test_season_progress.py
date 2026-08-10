@@ -821,3 +821,36 @@ def test_the_weekday_card_notes_gaps_only_for_the_names_it_shows():
     )
     assert "AAA" in text
     assert "BBB" not in text
+
+
+def test_every_card_links_the_full_season_page():
+    """JP 2026-08-10 wanted to know when the table updates. The card fires
+    exactly when something happened, so it carries the link rather than a
+    separate post on every (daily, usually uneventful) page rebuild."""
+    conn = _db()
+    _event(conn, "AAA", "2026-08-01", reported=1)
+    _event(conn, "BBB", "2026-08-20")
+    p = collect_season(conn, _cov(AAA="Portfolio", BBB="Researching"), AS_OF)
+    p.fresh = {"AAA"}
+
+    for blocks in (R.build_progress_blocks(p),
+                   R.build_progress_blocks(p, fresh_only=True)):
+        text = " ".join(
+            e["text"] for b in blocks if b["type"] == "context"
+            for e in b["elements"]
+        )
+        assert R.SEASON_PAGE_URL in text
+
+
+def test_the_page_link_appears_once_not_per_table():
+    conn = _db()
+    _event(conn, "AAA", "2026-08-01", reported=1)
+    _event(conn, "BBB", "2026-08-20")
+    p = collect_season(conn, _cov(AAA="Portfolio", BBB="Researching"), AS_OF)
+
+    blocks = R.build_progress_blocks(p)
+    n = sum(
+        e["text"].count(R.SEASON_PAGE_URL)
+        for b in blocks if b["type"] == "context" for e in b["elements"]
+    )
+    assert n == 1
