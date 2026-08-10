@@ -26,6 +26,10 @@ An earnings review execution system that monitors upcoming earnings, syncs to Go
   and who is still to come. Posts to `#earnings` on weekday evenings (only when something
   is new) and every Sunday with the week ahead, and publishes a sortable page at
   <https://jroypeterson.github.io/earnings-agent/season.html>
+- **A short "X reported" ping to `#portfolio`** the evening a Portfolio or Researching name
+  reports — ticker, company, whether it printed before or after the close, and the link. Once
+  per name per season. Beat/miss and the stock reaction stay in `#earnings`; nothing was
+  re-routed to add it.
 
 ## Architecture
 
@@ -121,7 +125,7 @@ the top of the hour is the worst window for GitHub Actions delays and skips.
 | `daily_earnings_check.yml` | `23 19 * * 1-5` | ~3:23 PM weekdays | Afternoon redundancy for mid-day Finnhub changes |
 | `reconcile_calendar.yml` | `9 14,17,20 * * 1-5` | ~10:09 AM / 1:09 PM / 4:09 PM | Lightweight drift auto-repair |
 | `post_earnings_check.yml` | `37 22 * * 1-5` | Weekday ~6:37 PM | Results sweep + AMC overnight catch-up |
-| `season_progress.yml` | `7 23 * * 1-5` | Weekday ~7:07 PM | Portfolio season card — silent unless a name is unsettled |
+| `season_progress.yml` | `7 23 * * 1-5` | Weekday ~7:07 PM | Portfolio season card to `#earnings` + the short "X reported" ping to `#portfolio` — silent unless a name is unsettled |
 | `season_progress.yml` | `10 17 * * 0` | Sunday ~1:10 PM | Season card + forward calendar, unconditional |
 | `weekly_digest.yml` | `43 16 * * 0` | Sunday ~12:43 PM | Weekly digest to Slack |
 | `watchdog.yml` | `37 13,17,21 * * *` | ~9:37 AM / 1:37 PM / 5:37 PM | Detect stale sibling workflows + auto-dispatch recovery |

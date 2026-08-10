@@ -255,6 +255,32 @@ Both crons are modelled in `watchdog.yml`, because the weekday card is deliberat
 when nothing is unsettled — so "no Slack post" is indistinguishable from an outage by eye, and
 the workflow's own success is the only evidence it ran.
 
+### The terse `#portfolio` ping (2026-08-10)
+
+JP: *"tell me in the portfolio channel when earnings are reported for a company in the
+portfolio or researching… just say something like RPD reported and then flag the bookmark."*
+
+Ticker + company + before/after the close + the page link. **No move number, even when it is
+known** — a number turns this into a second, thinner results card competing with the real one
+in `#earnings`, and it changes the moment an AMC name's next close lands.
+
+⚠ **It runs on `_ANNOUNCED_KEY`, a watermark SEPARATE from the table's `_WATERMARK_KEY`, and
+the two must not be merged.** The table's watermark settles on the *reaction* and therefore
+re-surfaces an AMC name the evening its move resolves — correct for a table, because the move
+is new information. A bare "RPD reported" posted on two consecutive evenings is simply false
+the second time. `select_unannounced` / `mark_announced` fire **once per name per season**; a
+season's first run seeds the set without posting, or day one pings fifty names at once.
+
+Posted with the **bot token** (`SLACK_BOT_TOKEN` + `SLACK_PORTFOLIO_CHANNEL_ID`) via
+`slack_api.post_message` — an incoming webhook is channel-locked, so a second channel cannot
+ride the `#earnings` webhook. ClaudeBot must stay a member of `#portfolio`. `_post_reported_ping`
+runs AFTER the `#earnings` card, **never raises, and never gates it**: a secondary notification
+must not cost the main card. Every skip/failure path logs loudly — a ping that quietly stops is
+indistinguishable from a quiet week, which is the failure this lane exists to avoid.
+
+Nothing was re-routed to build it. `#earnings` keeps every card it had and `#earnings-movers`
+is untouched; the ping is purely additive.
+
 ## Slack channel routing
 
 - **#earnings** (`SLACK_WEBHOOK_EARNINGS`, `SLACK_CHANNEL_ID`): heartbeat, weekly digest, results beat/miss alerts, urgent Tier 1 date moves within 5 biz days. The "primary feed" — actual earnings updates.
@@ -286,6 +312,11 @@ Strongly recommended: `FMP_API_KEY` (set 2026-06-04) — enables the FMP co-prim
 Out-of-band failure email (set 2026-06-05): `GMAIL_ADDRESS` + `GMAIL_APP_PASSWORD` (the existing Gmail app-password creds, same as 13F Analyzer — see AUTHENTICATIONS.md) → emails `jroypeterson+alerts@gmail.com`. The non-Slack backup for when Slack itself is the failure point. **Every workflow's `if: failure()` block INLINES the SMTP send** (runner `python3` + stdlib, via a `python3 - <<'PY'` heredoc reading `ALERT_SUBJECT`/`ALERT_BODY` from env) — deliberately NOT a call to `scripts/send_failure_email.py`, so the backup still works even if `actions/checkout` is what failed. **Do not "simplify" these back to `python scripts/...` — that reintroduces the checkout dependency.** `scripts/send_failure_email.py` remains the canonical, unit-tested reference for that logic + a manual/local sender; keep the inlines in sync with it. The watchdog additionally emails the *stale workflow lines* when Slack is unavailable OR delivery fails (not just on a watchdog crash), and exits non-zero if a stale alert reaches no channel at all. Fires ONLY on failures (which every critical alert-delivery failure now is — they raise), never on normal posts. Opt-in: no creds → no-op. The 24h-awareness backstop of last resort.
 
 Optional for Slack-reply flow: `SLACK_BOT_TOKEN` (xoxb-...) + `SLACK_CHANNEL_ID` (Cxxx) for the earnings channel. Bot needs `chat:write` and `channels:history` (or `groups:history` for private channels) scopes. When unset, the agent falls back to webhook-only batched messages with no reply support.
+
+Optional for the `#portfolio` ping: `SLACK_PORTFOLIO_CHANNEL_ID` (set 2026-08-10, `C0B1CM66T19`)
+alongside the existing `SLACK_BOT_TOKEN`. Both must be present or `_post_reported_ping` skips
+with a loud warning and the `#earnings` card posts normally. A webhook cannot substitute —
+incoming webhooks are channel-locked to the channel they were created for.
 
 Optional for status-reports routing: `SLACK_WEBHOOK_STATUS` + `SLACK_STATUS_CHANNEL_ID`. Cross-check / unseen / reconcile alerts post here instead of #earnings. Bot must be a member of #status-reports for threaded replies to work. Falls back to the earnings webhook/channel when unset.
 
