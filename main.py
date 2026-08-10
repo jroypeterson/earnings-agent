@@ -101,12 +101,19 @@ from digest import build_weekly_digest
 from season_progress import (
     attach_reactions,
     collect_season,
+    is_announce_seeded,
     is_seeded,
+    mark_announced,
     mark_settled,
     seed_watermark,
+    select_unannounced,
     select_unsettled,
 )
-from season_render import build_forward_calendar_blocks, build_progress_blocks
+from season_render import (
+    build_forward_calendar_blocks,
+    build_progress_blocks,
+    build_reported_ping,
+)
 from consensus_preview import (
     select_upcoming_reporters,
     assemble_preview_rows,
@@ -1854,6 +1861,62 @@ def run_weekly_digest(dry_run: bool = False):
 # ---------------------------------------------------------------------------
 
 
+def _post_reported_ping(conn, progress, as_of) -> None:
+    """Tell #portfolio, briefly, that a name it cares about has reported.
+
+    Never raises: this is a secondary notification and the #earnings card has
+    already landed by the time it runs. Every failure path logs loudly rather
+    than passing silently — a ping that quietly stops is indistinguishable from
+    a quiet week, which is the failure mode this whole lane was built to avoid.
+    """
+    from config import SLACK_PORTFOLIO_CHANNEL_ID
+
+    if not (SLACK_BOT_TOKEN and SLACK_PORTFOLIO_CHANNEL_ID):
+        logger.warning(
+            "Season progress: #portfolio ping SKIPPED — %s unset. The "
+            "#earnings card posted normally.",
+            "SLACK_BOT_TOKEN" if not SLACK_BOT_TOKEN else "SLACK_PORTFOLIO_CHANNEL_ID",
+        )
+        return
+
+    try:
+        seeded = is_announce_seeded(conn, progress)
+        fresh = select_unannounced(conn, progress)
+
+        if not seeded:
+            # First run of a season: record everyone as announced without
+            # posting. Otherwise the very first run pings 50 names at once.
+            mark_announced(conn, progress)
+            conn.commit()
+            logger.info(
+                "Season progress: seeded the #portfolio announce set with %d "
+                "name(s); no retroactive pings.", len(progress.reported),
+            )
+            return
+
+        if not fresh:
+            logger.info("Season progress: no new names to announce to #portfolio.")
+            return
+
+        blocks = build_reported_ping(fresh, progress)
+        names = ", ".join(r.ticker for r in fresh)
+        slack_post_message(
+            SLACK_BOT_TOKEN,
+            SLACK_PORTFOLIO_CHANNEL_ID,
+            blocks=blocks,
+            text=f"{names} reported",
+        )
+        mark_announced(conn, progress)
+        conn.commit()
+        logger.info("Season progress: announced %s to #portfolio.", names)
+
+    except Exception as exc:  # noqa: BLE001 — secondary lane, never gate on it
+        logger.error(
+            "Season progress: #portfolio ping FAILED (%s). The #earnings card "
+            "posted normally; these names will be re-announced next run.", exc,
+        )
+
+
 def run_season_progress(
     dry_run: bool = False,
     as_of: date | None = None,
@@ -1957,6 +2020,11 @@ def run_season_progress(
             return
 
         post_slack(SLACK_WEBHOOK_EARNINGS, blocks, fallback)
+
+        # The terse #portfolio ping (JP 2026-08-10). Runs AFTER the #earnings
+        # card and never gates it: #earnings is the deliverable, and a bot-token
+        # failure on a secondary notification must not cost the main card.
+        _post_reported_ping(conn, progress, as_of)
 
         # Post-then-mark, matching the results lane: a failed post raises above
         # this line and the same reporters are announced on the next run.

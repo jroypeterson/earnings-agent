@@ -269,6 +269,53 @@ def _page_link_note(p: SeasonProgress) -> str:
     )
 
 
+def build_reported_ping(rows: list[SeasonRow], p: SeasonProgress) -> list[dict]:
+    """The terse #portfolio notification: *"RPD reported"*, then the link.
+
+    JP 2026-08-10: *"I want you to tell me in the portfolio channel when
+    earnings are reported for a company in the portfolio or researching. You
+    could just say something like RPD reported and then flag the bookmark."*
+
+    So this is deliberately NOT the season table. #portfolio is a P&L channel,
+    the full standings already post to #earnings, and the ask was explicitly for
+    the short form. It carries the company name (a bare ticker is unreadable at
+    a glance for 67 names), whether it printed before or after the close — which
+    is what says whether the reaction is knowable yet — and nothing else.
+
+    The move is deliberately absent even when it IS known: putting a number here
+    makes this a second, thinner results card competing with the real one, and
+    the number changes the moment an AMC name's next close lands.
+    """
+    if not rows:
+        return []
+
+    lines = []
+    for r in rows:
+        when = {"bmo": "before the open", "amc": "after the close",
+                "dmh": "during the session"}.get((r.event_hour or "").lower())
+        name = _short_company_name(r.company_name)
+        tail = f" _{when}_" if when else ""
+        lines.append(f"•  `{r.ticker}`  {name} reported{tail}  · _{r.position}_")
+
+    head = (
+        f":mega: *{len(rows)} of your names reported*"
+        if len(rows) > 1
+        else ":mega: *A name you follow reported*"
+    )
+
+    return [
+        {"type": "section", "text": {"type": "mrkdwn",
+                                     "text": head + "\n" + "\n".join(lines)}},
+        {"type": "context", "elements": [{"type": "mrkdwn", "text": (
+            f"{len(p.reported)} of {p.scheduled} reported this season · "
+            f"{len(p.upcoming)} still to come — "
+            f"<{SEASON_PAGE_URL}|full table> "
+            f"(also the *Earnings in Season Progress* bookmark above). "
+            f"Beat/miss and the stock reaction post to <#C0AT6UNGJ5V|earnings>."
+        )}]},
+    ]
+
+
 def _denominator_note(p: SeasonProgress) -> str:
     note = (
         f"Denominator = {p.scheduled} name(s) with a scheduled {p.season} date. "

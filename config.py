@@ -64,6 +64,13 @@ SLACK_WEBHOOK_STREET_ACCOUNT = os.getenv("SLACK_WEBHOOK_STREET_ACCOUNT")
 # replies. When SLACK_BOT_TOKEN + SLACK_CHANNEL_ID are unset, threaded
 # question paths fall back to webhook posting (no replies possible).
 SLACK_BOT_TOKEN = os.getenv("SLACK_BOT_TOKEN")
+
+# #portfolio — the terse "X reported" ping for Portfolio/Researching names
+# (JP 2026-08-10). Posted with the BOT TOKEN, not a webhook: earnings_agent has
+# no #portfolio webhook and an incoming webhook is channel-locked anyway, so a
+# second channel needs the bot. ClaudeBot must stay a member of #portfolio.
+# Unset -> the ping is skipped and says so; the #earnings card is unaffected.
+SLACK_PORTFOLIO_CHANNEL_ID = os.getenv("SLACK_PORTFOLIO_CHANNEL_ID")
 SLACK_CHANNEL_ID = os.getenv("SLACK_CHANNEL_ID")
 EMAIL_TO = os.getenv("EMAIL_TO")
 

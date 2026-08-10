@@ -127,6 +127,12 @@ jobs:
           COVERAGE_MANAGER_PATH: ${{ github.workspace }}/coverage-manager
           SLACK_WEBHOOK_EARNINGS: ${{ secrets.SLACK_WEBHOOK_EARNINGS }}
           SLACK_WEBHOOK_STATUS: ${{ secrets.SLACK_WEBHOOK_STATUS }}
+          # The terse "X reported" ping to #portfolio needs the BOT token —
+          # incoming webhooks are channel-locked, so a second channel cannot
+          # ride the #earnings webhook. Unset -> the ping is skipped loudly and
+          # the #earnings card is unaffected.
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_PORTFOLIO_CHANNEL_ID: ${{ secrets.SLACK_PORTFOLIO_CHANNEL_ID }}
         run: |
           ARGS="--season-progress"
 

@@ -22,9 +22,12 @@ from season_progress import (
     SeasonRow,
     attach_reactions,
     collect_season,
+    is_announce_seeded,
     is_seeded,
+    mark_announced,
     mark_settled,
     seed_watermark,
+    select_unannounced,
     select_unsettled,
 )
 from storage import init_db
@@ -854,3 +857,110 @@ def test_the_page_link_appears_once_not_per_table():
         for b in blocks if b["type"] == "context" for e in b["elements"]
     )
     assert n == 1
+
+
+# ---------------------------------------------------------------------------
+# The terse #portfolio ping
+# ---------------------------------------------------------------------------
+
+
+def test_the_first_run_of_a_season_announces_nobody():
+    """Otherwise day one pings fifty names at once."""
+    conn = _db()
+    for t in ("AAA", "BBB", "CCC"):
+        _event(conn, t, "2026-08-01", reported=1)
+    cov = _cov(AAA="Portfolio", BBB="Portfolio", CCC="Researching")
+    p = collect_season(conn, cov, AS_OF)
+
+    assert not is_announce_seeded(conn, p)
+    mark_announced(conn, p)
+    assert select_unannounced(conn, p) == []
+
+
+def test_a_newly_reported_name_is_announced_once():
+    conn = _db()
+    _event(conn, "AAA", "2026-08-01", reported=1)
+    cov = _cov(AAA="Portfolio", RPD="Portfolio")
+    mark_announced(conn, collect_season(conn, cov, AS_OF))      # seed
+
+    _event(conn, "RPD", "2026-08-10", reported=1, hour="amc")
+    p = collect_season(conn, cov, AS_OF)
+    assert [r.ticker for r in select_unannounced(conn, p)] == ["RPD"]
+
+    mark_announced(conn, p)
+    assert select_unannounced(conn, collect_season(conn, cov, AS_OF)) == []
+
+
+def test_an_amc_name_is_NOT_announced_again_when_its_reaction_lands():
+    """The settled watermark deliberately re-surfaces an AMC name the evening
+    its move resolves — right for the table, wrong for a bare 'RPD reported',
+    which would be false the second time. The two watermarks must stay
+    separate."""
+    conn = _db()
+    _event(conn, "AAA", "2026-08-01", reported=1)
+    cov = _cov(AAA="Portfolio", RPD="Portfolio")
+    seed_watermark(conn, collect_season(conn, cov, AS_OF))
+    mark_announced(conn, collect_season(conn, cov, AS_OF))
+
+    _event(conn, "RPD", "2026-08-10", reported=1, hour="amc")
+
+    night1 = collect_season(conn, cov, date(2026, 8, 10))
+    assert [r.ticker for r in select_unannounced(conn, night1)] == ["RPD"]
+    mark_announced(conn, night1)
+    mark_settled(conn, night1, date(2026, 8, 10))      # move still None
+
+    night2 = collect_season(conn, cov, date(2026, 8, 11))
+    # The TABLE still owes RPD a second appearance (its reaction landed)...
+    assert select_unsettled(conn, night2) == {"RPD"}
+    # ...but the PING must not fire again.
+    assert select_unannounced(conn, night2) == []
+
+
+def test_the_ping_is_terse_and_names_the_company():
+    conn = _db()
+    _event(conn, "RPD", "2026-08-10", reported=1, hour="amc",
+           company_name="Rapid7, Inc.")
+    p = collect_season(conn, _cov(RPD="Portfolio"), AS_OF)
+
+    blocks = R.build_reported_ping(p.reported, p)
+    text = " ".join(
+        b["text"]["text"] for b in blocks if b["type"] == "section"
+    )
+    assert "RPD" in text and "Rapid7" in text and "reported" in text
+    assert "after the close" in text          # AMC -> reaction not knowable yet
+    assert "Portfolio" in text
+
+
+def test_the_ping_carries_no_move_number():
+    """A number here makes this a second, thinner results card competing with
+    the real one — and it changes the moment an AMC name's next close lands."""
+    conn = _db()
+    _event(conn, "RPD", "2026-08-10", reported=1, hour="amc")
+    p = collect_season(conn, _cov(RPD="Portfolio"), AS_OF)
+    p.reported[0].move_pct = -4.2
+    p.reported[0].sigma = -1.8
+
+    text = " ".join(
+        b["text"]["text"] for b in R.build_reported_ping(p.reported, p)
+        if b["type"] == "section"
+    )
+    assert "-4.2" not in text and "4.2" not in text
+
+
+def test_the_ping_flags_the_bookmark_and_the_page():
+    conn = _db()
+    _event(conn, "RPD", "2026-08-10", reported=1)
+    p = collect_season(conn, _cov(RPD="Portfolio"), AS_OF)
+
+    text = " ".join(
+        e["text"] for b in R.build_reported_ping(p.reported, p)
+        if b["type"] == "context" for e in b["elements"]
+    )
+    assert R.SEASON_PAGE_URL in text
+    assert "Earnings in Season Progress" in text
+
+
+def test_an_empty_ping_renders_nothing():
+    conn = _db()
+    p = collect_season(conn, _cov(RPD="Portfolio"), AS_OF)
+    assert R.build_reported_ping([], p) == []

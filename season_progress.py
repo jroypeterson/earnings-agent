@@ -55,6 +55,12 @@ SCOPE_POSITIONS: tuple[str, ...] = ("Portfolio", "Researching")
 # Watermark key for the daily "has anything newly reported?" gate.
 _WATERMARK_KEY = "season_progress:last_reported_set"
 
+# Separate watermark for the terse #portfolio ping. It must NOT reuse the
+# settled set: that one deliberately re-surfaces an AMC name a second time when
+# its reaction lands, which is right for the table and wrong for a "X reported"
+# notification — JP would be told RPD reported on two consecutive evenings.
+_ANNOUNCED_KEY = "season_progress:announced_set"
+
 # Trailing window for the reaction sigma. Matches sigma-alert / PEM /
 # portfolio_daily so the same number means the same thing across the fleet.
 _SIGMA_LOOKBACK_DAYS = 252
@@ -689,3 +695,55 @@ def seed_watermark(conn: sqlite3.Connection, progress: SeasonProgress) -> None:
 
 def is_seeded(conn: sqlite3.Connection, progress: SeasonProgress) -> bool:
     return kv_get(conn, _watermark_key(progress.season)) is not None
+
+
+# ---------------------------------------------------------------------------
+# The terse "X reported" ping (#portfolio)
+# ---------------------------------------------------------------------------
+
+
+def _announced_key(season: str) -> str:
+    return f"{_ANNOUNCED_KEY}:{season}"
+
+
+def select_unannounced(
+    conn: sqlite3.Connection, progress: SeasonProgress
+) -> list[SeasonRow]:
+    """Reported names that have not yet been announced to #portfolio.
+
+    **Deliberately NOT `select_unsettled`.** That set re-surfaces an AMC name
+    the evening its reaction lands, which is correct for the table (the move is
+    new information) and wrong here — a bare "RPD reported" posted on two
+    consecutive evenings says something false the second time.
+
+    Ordered by report date so a batch reads chronologically.
+    """
+    key = _announced_key(progress.season)
+    raw = kv_get(conn, key)
+    already = {t for t in (raw or "").split(",") if t}
+
+    fresh = [r for r in progress.reported if r.ticker not in already]
+    fresh.sort(key=lambda r: (r.event_date or "", r.ticker))
+    return fresh
+
+
+def mark_announced(conn: sqlite3.Connection, progress: SeasonProgress) -> None:
+    """Record every currently-reported name as announced.
+
+    Called only AFTER a successful post, so a Slack failure re-announces rather
+    than swallowing the notification — the same post-then-mark rule the results
+    lane uses.
+
+    Marks the WHOLE reported set, not just what was posted: on a season's first
+    run there is nothing to announce retroactively, and folding them all in here
+    is what stops fifty "X reported" pings on day one.
+    """
+    kv_set(
+        conn,
+        _announced_key(progress.season),
+        ",".join(sorted(r.ticker for r in progress.reported)),
+    )
+
+
+def is_announce_seeded(conn: sqlite3.Connection, progress: SeasonProgress) -> bool:
+    return kv_get(conn, _announced_key(progress.season)) is not None
