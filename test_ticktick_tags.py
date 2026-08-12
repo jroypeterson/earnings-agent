@@ -211,3 +211,57 @@ def test_position_tag_reaches_an_unreported_task_too(monkeypatch):
     assert len(posts) == 1
     assert posts[0]["body"]["tags"] == ["Portfolio"]
     assert "Reported" not in posts[0]["body"]["tags"], "not reported yet"
+
+
+# ── A tracked name with no task must be NAMED, not just counted ─────────
+
+def test_a_reported_row_with_no_task_is_named_in_a_warning(monkeypatch, caplog):
+    """`no_task` counted this condition for two years and named nothing, so
+    `no_task=20` scrolled past every run while LLY had no task for a whole
+    season. The reported ones especially: main.py's creation query is
+    forward-only, so nothing will ever mint their task automatically."""
+    conn = init_db(":memory:")
+    upsert_event(conn, "RVMD", "2026-08-05", "amc", None,
+                 quarter=date_to_quarter("2026-08-05"),
+                 eps_actual=1.1, reported=True, tier=2, company_name="Revolution")
+    monkeypatch.setenv("TICKTICK_ACCESS_TOKEN", "tok")
+    project = {"id": "P1", "name": "2Q26 Earnings - HC Svcs, MedTech & Biopharma"}
+    _stub_api(monkeypatch, {"P1": []})          # the list exists but is EMPTY
+    monkeypatch.setattr(ticktick, "_list_all_projects", lambda token: [project])
+
+    with caplog.at_level("WARNING"):
+        stats = ticktick.reconcile_ticktick_tasks(
+            conn, date(2026, 8, 12), max_db_staleness_days=10_000)
+
+    assert stats["no_task"] == 1 and stats["no_task_open"] == 1
+    warned = "\n".join(r.getMessage()
+                       for r in caplog.records if r.levelname == "WARNING")
+    assert "RVMD@2026-08-05" in warned
+    assert "ALREADY REPORTED" in warned
+
+
+def test_a_closed_row_with_no_task_is_not_warned_about(monkeypatch, caplog):
+    """An acquired name that never reported SHOULD have no task — it was the
+    majority (10 of 20) on the run that prompted this, and warning about it
+    would bury the half that matters."""
+    conn = init_db(":memory:")
+    upsert_event(conn, "EXAS", "2026-08-04", "amc", None,
+                 quarter=date_to_quarter("2026-08-04"),
+                 reported=False, tier=2, company_name="Exact Sciences")
+    conn.execute("UPDATE events SET closed_reason='delisted' WHERE ticker='EXAS'")
+    conn.commit()
+    monkeypatch.setenv("TICKTICK_ACCESS_TOKEN", "tok")
+    project = {"id": "P1", "name": "2Q26 Earnings - HC Svcs, MedTech & Biopharma"}
+    _stub_api(monkeypatch, {"P1": []})
+    monkeypatch.setattr(ticktick, "_list_all_projects", lambda token: [project])
+
+    with caplog.at_level("WARNING"):
+        stats = ticktick.reconcile_ticktick_tasks(
+            conn, date(2026, 8, 12), max_db_staleness_days=10_000)
+
+    assert stats["no_task"] == 1, "still counted"
+    assert stats["no_task_open"] == 0, "but not surfaced as a gap"
+    # getMessage(), not .message: the latter is the unformatted template, so a
+    # ticker that only appears via lazy %-args would slip past this assertion.
+    assert "EXAS" not in "\n".join(r.getMessage() for r in caplog.records
+                                   if r.levelname == "WARNING")

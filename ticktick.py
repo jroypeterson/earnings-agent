@@ -1345,6 +1345,10 @@ def reconcile_ticktick_tasks(
     }
     sector_by_ticker = sector_by_ticker or {}
     position_by_ticker = position_by_ticker or {}
+    # (ticker, event_date, reported) for tracked rows with NO task and no
+    # terminal reason to lack one. Named at the end rather than per-row so the
+    # list reads as one finding instead of scrolling past in the per-task log.
+    no_task_open: list[tuple[str, str, bool]] = []
     from storage import find_reported_event_for_quarter
 
     config = get_ticktick_config()
@@ -1498,6 +1502,34 @@ def reconcile_ticktick_tasks(
         candidates = qmap.get(rq, {}).get(ticker) or []
         if not candidates:
             stats["no_task"] += 1
+            # A COUNT is not a finding. This branch is the one place that knows
+            # a tracked name has no TickTick task at all, and for two years it
+            # only incremented a number — so the condition was real, visible in
+            # every run's summary line as `no_task=N`, and still took a human
+            # asking "is LLY in any of my 2Q lists?" to surface (2026-08-12).
+            #
+            # Two populations, and conflating them is why one number was
+            # useless: a CLOSED row (acquired/delisted before it ever reported)
+            # SHOULD have no task, and is the majority — 10 of 20 on the run
+            # that prompted this. Naming only the other half keeps the signal
+            # worth reading.
+            #
+            # Phrased as a negation on purpose, and this comment deliberately
+            # does not spell the positive form either. Two source-scanning
+            # tests in test_closed_events.py locate the real closed-completion
+            # branch by searching this file for that positive phrase, and the
+            # FIRST match wins — so any earlier occurrence, in code OR in a
+            # comment, silently retargets both assertions onto this block. Both
+            # failed that way while the invariant they guard was untouched.
+            # A scanner's anchor is a shared namespace; don't take a name out
+            # of it, not even in prose.
+            if not closed_reason:
+                no_task_open.append((ticker, event_date, bool(reported)))
+            else:
+                logger.debug(
+                    "  no task for %s %s — closed (%s), which is expected",
+                    ticker, event_date, closed_reason,
+                )
             continue
 
         # Candidate selection.
@@ -1813,4 +1845,22 @@ def reconcile_ticktick_tasks(
            stats["skipped_done"], stats["skipped_phantom"], stats["skipped_stale"],
            stats["skipped_ambiguous"], stats["no_task"], stats["errors"])
     )
+    if no_task_open:
+        # WARNING, not info: a tracked name with no task is invisible in the
+        # surface JP actually works from. Reported ones lead — that name's
+        # quarter is already spent, and the forward-only creation query in
+        # main.py can never mint the task, so it needs
+        # `scripts/backfill_ticktick_quarter.py` or nothing will ever fix it.
+        already = [f"{t}@{d}" for t, d, rep in no_task_open if rep]
+        upcoming = [f"{t}@{d}" for t, d, rep in no_task_open if not rep]
+        logger.warning(
+            "TickTick: %d tracked event(s) have NO task and no terminal reason "
+            "to lack one%s%s",
+            len(no_task_open),
+            f" — ALREADY REPORTED (needs backfill_ticktick_quarter.py): "
+            f"{', '.join(already)}" if already else "",
+            f" — still upcoming (next sync should create): "
+            f"{', '.join(upcoming)}" if upcoming else "",
+        )
+    stats["no_task_open"] = len(no_task_open)
     return stats
