@@ -88,7 +88,20 @@ def main() -> int:
         name = proj.get("name") or ""
         if not any(name.startswith(f"{q} Earnings") for q in quarters):
             continue
-        tasks = tt.list_tasks_in_project(token, proj["id"])
+        # `_list_tasks_strict`, not `list_tasks_in_project`: the latter warns
+        # and returns [] on a failed read, which this loop cannot tell apart
+        # from a genuinely empty list — so a network blip logs "(0 tasks)" and
+        # the whole project is silently skipped as though it were already
+        # converged. That happened live on the first run of this script
+        # (2026-08-12): 19 connection errors, and one project reported 0 tasks
+        # when it had 56. Raising here makes the run visibly incomplete, and
+        # the sweep is idempotent, so the fix is simply to run it again.
+        try:
+            tasks = tt._list_tasks_strict(token, proj["id"])
+        except tt.TickTickError as exc:
+            logger.error("--- %s: READ FAILED (%s) — re-run to finish", name, exc)
+            errors += 1
+            continue
         logger.info("--- %s (%d tasks)", name, len(tasks))
 
         for task in tasks:
