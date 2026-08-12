@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-08-12T20:08:55Z",
+  "generated_at": "2026-08-12T20:25:20Z",
   "window": {
     "start": "2026-08-10",
     "end": "2026-08-26"
   },
   "counts": {
-    "events": 249
+    "events": 246
   },
   "events": [
     {
@@ -54,15 +54,6 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Aptevo Therapeutics Inc."
-    },
-    {
-      "ticker": "ATRA",
-      "event_date": "2026-08-10",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Atara Biotherapeutics Inc"
     },
     {
       "ticker": "AZTR",
@@ -144,15 +135,6 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Generation Bio Co."
-    },
-    {
-      "ticker": "INO",
-      "event_date": "2026-08-10",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Inovio Pharmaceuticals Inc"
     },
     {
       "ticker": "MBRX",
@@ -540,15 +522,6 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Adlai Nortye Ltd"
-    },
-    {
-      "ticker": "ANRO",
-      "event_date": "2026-08-12",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Alto Neuroscience Inc"
     },
     {
       "ticker": "ARTL",
@@ -1145,15 +1118,6 @@
       "company_name": "Telomir Pharmaceuticals Inc"
     },
     {
-      "ticker": "TLPH",
-      "event_date": "2026-08-12",
-      "event_hour": "amc",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Talphera Inc"
-    },
-    {
       "ticker": "TRVN",
       "event_date": "2026-08-12",
       "event_hour": "",
@@ -1611,6 +1575,15 @@
       "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "ARS Pharmaceuticals Inc"
+    },
+    {
+      "ticker": "TLPH",
+      "event_date": "2026-08-13",
+      "event_hour": "amc",
+      "tier": 3,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Talphera Inc"
     },
     {
       "ticker": "TRAW",
