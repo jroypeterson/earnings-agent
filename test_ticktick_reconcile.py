@@ -141,7 +141,8 @@ def test_reconcile_marks_reported_fixes_dates_and_skips_done(monkeypatch):
     posted_ids = [p["url"].rsplit("/", 1)[-1] for p in posts]
     assert sorted(posted_ids) == ["T_ABC", "T_UNH"]
     unh_body = next(p["body"] for p in posts if p["url"].endswith("T_UNH"))
-    assert unh_body["title"].startswith("[REPORTED]")
+    assert unh_body["title"] == "UNH Q2 2026 Earnings (Jul 16 BMO)"
+    assert "Reported" in unh_body["tags"]   # tag, not a title prefix
     assert unh_body["dueDate"] == "2026-07-16T09:00:00.000+0000"
 
 
@@ -230,9 +231,10 @@ def test_reconcile_skips_tag_when_already_present(monkeypatch):
 
 
 def test_reconcile_fixes_stale_date_on_already_reported_task(monkeypatch):
-    """Finding 1: an already-[REPORTED] task with a stale date must still be
-    date-corrected (reconcile is a true date desired-state), keeping its
-    [REPORTED] prefix and not rewriting the body."""
+    """Finding 1: an already-reported task with a stale date must still be
+    date-corrected (reconcile is a true date desired-state) without rewriting
+    the body. The legacy `[REPORTED] ` prefix is STRIPPED by the same write
+    and replaced with the tag — that is how pre-2026-08-12 tasks migrate."""
     monkeypatch.setenv("TICKTICK_ACCESS_TOKEN", "tok")
     conn = init_db(":memory:")
     upsert_event(conn, "UNH", "2026-07-16", "bmo", None,
@@ -256,7 +258,8 @@ def test_reconcile_fixes_stale_date_on_already_reported_task(monkeypatch):
     body = posts[0]["body"]
     assert body["startDate"] == "2026-07-16T09:00:00.000+0000"
     assert body["dueDate"] == "2026-07-16T09:00:00.000+0000"
-    assert body["title"].startswith("[REPORTED]") and "Jul 16" in body["title"]
+    assert body["title"] == "UNH Q2 2026 Earnings (Jul 16 BMO)"  # prefix stripped
+    assert "Reported" in body["tags"]
     assert body["content"] == "actuals body — do not clobber"  # body preserved
 
 
@@ -320,7 +323,13 @@ def test_reconcile_honors_db_pointer_over_arbitrary_sibling(monkeypatch):
 
 def test_reconcile_phantom_row_does_not_corrupt_reported_task(monkeypatch):
     """Finding 3: a same-quarter unreported phantom (ICLR class) must NOT move
-    the reported task to the phantom date or strip [REPORTED]."""
+    the reported task to the phantom date or strip its reported state.
+
+    The task here carries the LEGACY `[REPORTED] ` prefix, so one write is
+    expected and correct — the 2026-08-12 migration to a `Reported` tag. What
+    must not happen is the phantom's 2026-06-02 date reaching the task, or the
+    actuals body being rewritten. Asserting zero writes would now pin the
+    absence of the migration rather than the absence of the corruption."""
     monkeypatch.setenv("TICKTICK_ACCESS_TOKEN", "tok")
     conn = init_db(":memory:")
     # Real reported row + a no-actuals phantom forward date, same quarter (1Q26).
@@ -343,8 +352,15 @@ def test_reconcile_phantom_row_does_not_corrupt_reported_task(monkeypatch):
     stats = ticktick.reconcile_ticktick_tasks(
         conn, date(2026, 6, 2), max_db_staleness_days=10_000)
 
-    # Canonical row is the reported one; task already converged -> no writes.
-    assert posts == [], "phantom row moved/stripped the reported task"
+    # Canonical row is the reported one. The single write is the legacy-prefix
+    # migration; it must leave the DATE and the BODY exactly as they were.
+    assert len(posts) == 1, "expected only the [REPORTED]->tag migration write"
+    body = posts[0]["body"]
+    assert body["startDate"] == "2026-05-27T09:00:00.000+0000", "phantom date leaked"
+    assert body["dueDate"] == "2026-05-27T09:00:00.000+0000", "phantom date leaked"
+    assert body["content"] == "actuals", "actuals body was clobbered"
+    assert "Reported" in body["tags"], "reported state was stripped, not migrated"
+    assert body["title"] == "ICLR Q1 2026 Earnings (May 27 AMC)"
     assert stats["date_fixed"] == 0 and stats["marked_reported"] == 0
 
 
@@ -458,9 +474,9 @@ def test_reconcile_mark_reported_and_tag_is_single_write(monkeypatch):
     assert stats["marked_reported"] == 1 and stats["tag_added"] == 1
     assert len(posts) == 1, "must be a single combined write"
     body = posts[0]["body"]
-    assert body["title"].startswith("[REPORTED]") and "Jul 16" in body["title"]
+    assert body["title"] == "UNH Q2 2026 Earnings (Jul 16 BMO)"
     assert body["dueDate"] == "2026-07-16T09:00:00.000+0000"
-    assert body["tags"] == ["Healthcare Services"]
+    assert body["tags"] == ["Healthcare Services", "Reported"]
 
 
 def test_reconcile_skips_row_with_stale_updated_at(monkeypatch):
@@ -1085,7 +1101,8 @@ def test_mark_reported_ensures_subtasks_and_mirrors_desc(monkeypatch):
     body = posts[0]["body"]
     assert [i["title"] for i in body["items"]] == STD_TITLES
     assert body["desc"] == body["content"]          # actuals visible either way
-    assert body["title"].startswith("[REPORTED]")
+    assert body["title"] == "UNH Q2 2026 Earnings (Jul 16 BMO)"
+    assert "Reported" in body["tags"]
 
 
 def test_reconcile_undated_strip_carries_subtasks_and_removes_est_legacy(monkeypatch):

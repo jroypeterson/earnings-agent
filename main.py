@@ -2313,12 +2313,15 @@ def run_reconcile_ticktick(dry_run: bool = False):
         # Services / MedTech). The events table has no sector column, so it
         # comes from coverage.
         try:
-            sector_by_ticker = {t.ticker: t.sector for t in load_coverage()}
+            _cov = load_coverage()
+            sector_by_ticker = {t.ticker: t.sector for t in _cov}
+            position_by_ticker = {t.ticker: t.position for t in _cov}
         except Exception as exc:  # coverage load is best-effort for tagging
             logger.warning(f"Coverage load failed; reconcile will skip tags: {exc}")
-            sector_by_ticker = {}
+            sector_by_ticker = position_by_ticker = {}
         stats = reconcile_ticktick_tasks(
-            conn, date.today(), sector_by_ticker=sector_by_ticker, dry_run=dry_run
+            conn, date.today(), sector_by_ticker=sector_by_ticker,
+            position_by_ticker=position_by_ticker, dry_run=dry_run,
         )
     finally:
         conn.close()

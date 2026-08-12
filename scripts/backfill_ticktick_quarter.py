@@ -144,19 +144,20 @@ def main() -> int:
             continue
 
         # Created already-reported: the call happened, so the date is real and
-        # the title carries it. Mirrors mark_task_reported's title exactly.
-        title = "[REPORTED] " + tt.build_task_title(ticker, event_date, r["event_hour"])
+        # the title carries it. Reported-ness rides the tag, not a title prefix
+        # (JP 2026-08-12) — mirrors mark_task_reported exactly.
+        title = tt.build_task_title(ticker, event_date, r["event_hour"])
         content = tt.build_task_content(
             ticker, r["event_hour"],
             eps_estimate=r["eps_estimate"], revenue_estimate=r["rev_estimate"],
             eps_actual=r["eps_actual"], revenue_actual=r["rev_actual"],
             tier=tier, company_name=r["company_name"],
         )
-        tag = tt.sector_tag(sector)
+        tags = [t for t in (tt.sector_tag(sector), tt.position_tag(position),
+                            tt.REPORTED_TAG) if t]
 
         if args.dry_run:
-            logger.info("WOULD CREATE in %r: %s  (tags=%s)", list_name, title,
-                        [tag] if tag else [])
+            logger.info("WOULD CREATE in %r: %s  (tags=%s)", list_name, title, tags)
             created += 1
             continue
 
@@ -167,8 +168,7 @@ def main() -> int:
             continue
 
         task_id = tt.create_task(token, list_id, title, content,
-                                 due_date=event_date,
-                                 tags=[tag] if tag else None)
+                                 due_date=event_date, tags=tags)
         if task_id:
             logger.info("CREATED %s in %r", title, list_name)
             created += 1

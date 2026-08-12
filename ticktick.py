@@ -578,7 +578,9 @@ def create_task(
               company-confirmed/locked — probe-verified that omitting the date
               fields on create yields an undated task).
         tags: optional workspace tags to attach (e.g. the coverage sector,
-              "Healthcare Services" / "MedTech"). Case is preserved by the API.
+              "Healthcare Services" / "MedTech", the Position, "Reported").
+              **The API LOWERCASES these** — probe-verified 2026-08-12 — so
+              never compare a stored tag case-sensitively. See `_merge_tags`.
     """
     payload = {
         "title": title,
@@ -778,13 +780,76 @@ def sector_tag(sector: str | None) -> str | None:
     return sector if sector in _SECTOR_TAGS else None
 
 
-def _merge_tags(existing: list[str] | None, add: str) -> list[str] | None:
-    """Add `add` to `existing` if not already present (case-insensitive).
-    Returns the merged list, or None if no change is needed (tag already there)."""
+# Position tags (JP 2026-08-12: "lets tag entries as portfolio or researching
+# so I can sort by that"). All five Position values get one, not just the two he
+# named: `Ready to Buy` / `Ready to Short` names sit in the SAME Core Watchlist
+# list as Portfolio and Researching, so tagging only two would leave holes in
+# the exact sort he asked for — an untagged row in a tag-sorted list reads as a
+# missing answer rather than a different one.
+_POSITION_TAGS = {
+    "Portfolio", "Researching", "Ready to Buy", "Ready to Short",
+    "Following for Interest",
+}
+
+# JP 2026-08-12: "Instead of having [Reported] at the front as a text lets just
+# add it as a tag that the stock has reported." The title now carries only the
+# company + quarter + date, and reported-ness is a filterable/sortable facet
+# rather than a string that has to be parsed back off the front of the title.
+REPORTED_TAG = "Reported"
+
+# The legacy marker. `_ticker_from_task_title` still strips it, and
+# `task_is_reported` still honours it, because every task minted before
+# 2026-08-12 carries it and they migrate lazily as the reconcile reaches them.
+_LEGACY_REPORTED_PREFIX = "[REPORTED]"
+
+
+def position_tag(position: str | None) -> str | None:
+    """Return the TickTick tag for a coverage Position, or None if untracked."""
+    return position if position in _POSITION_TAGS else None
+
+
+def task_is_reported(task: dict) -> bool:
+    """Has this task already been marked reported?
+
+    Reads the tag first and falls back to the legacy `[REPORTED] ` title
+    prefix. The fallback is what makes the migration lazy and idempotent: a
+    pre-2026-08-12 task answers True here, so the reconcile routes it down the
+    cheap title-repair branch (which strips the prefix and adds the tag in one
+    write) instead of the mark-reported branch, which would rewrite the body
+    and re-count the task as newly reported on every pass until it converged.
+    """
+    if any((t or "").lower() == REPORTED_TAG.lower() for t in (task.get("tags") or [])):
+        return True
+    return _LEGACY_REPORTED_PREFIX in (task.get("title") or "")
+
+
+def _merge_tags(existing: list[str] | None, *adds: str | None) -> list[str] | None:
+    """Add each of `adds` to `existing` if not already present.
+
+    Returns the merged list, or None when nothing needs adding — callers use
+    that None as the "no write required" signal.
+
+    **Comparison is case-insensitive because TickTick LOWERCASES tags.**
+    Probe-verified 2026-08-12: POSTing `tags: ["MixedCase", "Portfolio"]` reads
+    back as `["portfolio", "mixedcase"]`. (The earlier note in this file's
+    history claiming tags are "case-preserved" was wrong.) A case-sensitive
+    check would therefore find `Portfolio` "missing" from `['portfolio']` on
+    every single reconcile pass and rewrite every managed task forever.
+    """
     existing = existing or []
-    if any((t or "").lower() == add.lower() for t in existing):
+    have = {(t or "").lower() for t in existing}
+    new: list[str] = []
+    for a in adds:
+        # `have` accumulates, so a tag repeated WITHIN `adds` is added once.
+        # Not hypothetical: `mark_task_reported` appends REPORTED_TAG to a list
+        # the reconcile had already put it in, and without this the task ends
+        # up tagged `['Reported', 'Healthcare Services', 'Reported']`.
+        if a and a.lower() not in have:
+            new.append(a)
+            have.add(a.lower())
+    if not new:
         return None
-    return existing + [add]
+    return existing + new
 
 
 def update_task_content(
@@ -798,6 +863,7 @@ def update_task_content(
     allow_completed: bool = False,
     ensure_subtasks: bool = False,
     clear_date: bool = False,
+    ensure_tags: list[str] | None = None,
 ) -> bool:
     """
     Update a task's title / content / date in place. Returns success.
@@ -849,6 +915,15 @@ def update_task_content(
         task["dueDate"] = None
     if new_tags is not None:
         task["tags"] = new_tags
+    if ensure_tags:
+        # Merge against the JUST-READ task rather than a list the caller
+        # computed from an earlier read. `new_tags` replaces wholesale, which
+        # silently drops any tag the user added in the interim — and the
+        # reconcile's read-then-write gap is wide enough to matter now that
+        # three tags (sector, position, reported) converge on the same task.
+        merged = _merge_tags(task.get("tags"), *ensure_tags)
+        if merged is not None:
+            task["tags"] = merged
     if ensure_subtasks:
         # Reconcile the review checklist to SUBTASK_TITLES: append what is
         # missing, retire "Earnings call" (carrying its tick to "Read
@@ -913,10 +988,20 @@ def mark_task_reported(
     tags: list[str] | None = None,
 ) -> bool:
     """
-    Mark a TickTick task as reported: prepend "[REPORTED]" to the title, embed
-    actuals (beat/miss) in the content, and correct the due date to the actual
-    report `event_date` (projected dates are routinely wrong — this is the same
-    write that fixes the stale date).
+    Mark a TickTick task as reported: attach the `Reported` TAG, embed actuals
+    (beat/miss) in the content, and correct the due date to the actual report
+    `event_date` (projected dates are routinely wrong — this is the same write
+    that fixes the stale date).
+
+    **The title no longer carries a `[REPORTED] ` prefix** (JP 2026-08-12).
+    Reported-ness is a tag, so it sorts and filters natively instead of being a
+    string every reader has to parse back off the front of the title — which is
+    what `_ticker_from_task_title` existed to undo. Legacy tasks keep the
+    prefix until the reconcile reaches them; `task_is_reported` reads both.
+
+    `tags` are ENSURED (merged), never assigned — `main.py`'s `notify_results`
+    call passes none at all, so assigning would strip the sector and position
+    tags off every task it touched.
 
     `list_id` is the project the task actually lives in. When known (the caller
     located the task by scanning the quarter's lists), pass it so we fetch the
@@ -935,7 +1020,7 @@ def mark_task_reported(
             logger.warning(f"  Could not resolve TickTick list '{list_name}' — task {task_id} not updated")
             return False
 
-    new_title = "[REPORTED] " + build_task_title(ticker, event_date, hour)
+    new_title = build_task_title(ticker, event_date, hour)
     new_content = build_task_content(
         ticker=ticker,
         hour=hour,
@@ -955,7 +1040,10 @@ def mark_task_reported(
 
     return update_task_content(
         token, list_id, task_id, new_content, new_title=new_title,
-        new_date=event_date, new_tags=tags, ensure_subtasks=True,
+        new_date=event_date, ensure_subtasks=True,
+        # Caller's tags lead so sector/Position keep their natural order;
+        # REPORTED_TAG trails and is deduped if the caller already included it.
+        ensure_tags=[*(tags or []), REPORTED_TAG],
     )
 
 
@@ -1144,12 +1232,17 @@ def sync_ticktick_tasks(
                 stats["skipped"] += 1
                 continue
 
-            tag = sector_tag(event.get("sector"))
+            # Sector + Position from birth, so a task is sortable the moment it
+            # exists rather than only after the next reconcile touches it.
+            # `Reported` is deliberately NOT set here: the creation query is
+            # forward-dated, so a task minted by this path has not reported yet.
+            tags = [t for t in (sector_tag(event.get("sector")),
+                                position_tag(event.get("position"))) if t]
             try:
                 task_id = create_task(
                     token, list_id, title, content,
                     event_date if confirmed else None,
-                    tags=[tag] if tag else None,
+                    tags=tags or None,
                 )
             except TickTickTokenExpired:
                 logger.error(
@@ -1190,6 +1283,7 @@ def reconcile_ticktick_tasks(
     today,
     *,
     sector_by_ticker: dict | None = None,
+    position_by_ticker: dict | None = None,
     lookback_days: int = 14,
     lookahead_days: int = 45,
     max_db_staleness_days: int = 4,
@@ -1250,6 +1344,7 @@ def reconcile_ticktick_tasks(
         "errors": 0,
     }
     sector_by_ticker = sector_by_ticker or {}
+    position_by_ticker = position_by_ticker or {}
     from storage import find_reported_event_for_quarter
 
     config = get_ticktick_config()
@@ -1507,9 +1602,17 @@ def reconcile_ticktick_tasks(
             continue
 
         title = task.get("title", "") or ""
-        # Sector tag to ensure (merged in without clobbering the user's tags).
-        want_tag = sector_tag(sector_by_ticker.get(ticker))
-        merged_tags = _merge_tags(task.get("tags"), want_tag) if want_tag else None
+        # Tags to ensure (merged in without clobbering the user's own tags):
+        # sector, Position, and — once the row has reported — `Reported`, which
+        # replaced the old `[REPORTED] ` title prefix.
+        want_tags = [
+            t for t in (
+                sector_tag(sector_by_ticker.get(ticker)),
+                position_tag(position_by_ticker.get(ticker)),
+                REPORTED_TAG if reported else None,
+            ) if t
+        ]
+        merged_tags = _merge_tags(task.get("tags"), *want_tags)
         # Standard review sub-items to ensure (appended in the same write).
         items_missing = _merge_subtasks(task.get("items")) is not None
 
@@ -1538,7 +1641,7 @@ def reconcile_ticktick_tasks(
                         f"(list='{pname}')"
                     )
                 if merged_tags is not None:
-                    logger.info(f"  {prefix}add tag {want_tag!r}: {ticker} (list='{pname}')")
+                    logger.info(f"  {prefix}add tags {want_tags!r}: {ticker} (list='{pname}')")
                 if items_missing:
                     logger.info(
                         f"  {prefix}add review sub-items: {ticker} (list='{pname}')"
@@ -1548,7 +1651,7 @@ def reconcile_ticktick_tasks(
                         ok = update_task_content(
                             token, pid, task_id,
                             new_title=expected_title if title_stale else None,
-                            new_tags=merged_tags,
+                            ensure_tags=want_tags,
                             ensure_subtasks=True,
                             clear_date=True,
                         )
@@ -1610,16 +1713,16 @@ def reconcile_ticktick_tasks(
         # unconfirmed.
         date_stale = _task_date_stale(task, event_date)
         try:
-            if reported and "[REPORTED]" not in title:
-                # Transition to reported in ONE write: title + date + actuals body
-                # + sector tag together. Splitting the tag into a second write
-                # would re-read /project/data and, if that read lags, clobber the
-                # just-posted [REPORTED] repair with a stale object.
+            if reported and not task_is_reported(task):
+                # Transition to reported in ONE write: title + date + actuals
+                # body + tags together. Splitting the tags into a second write
+                # would re-read /project/data and, if that read lags, clobber
+                # the just-posted repair with a stale object.
                 logger.info(
                     f"  {prefix}mark reported: {ticker} {event_date} (list='{pname}')"
                 )
                 if merged_tags is not None:
-                    logger.info(f"  {prefix}add tag {want_tag!r}: {ticker} (list='{pname}')")
+                    logger.info(f"  {prefix}add tags {want_tags!r}: {ticker} (list='{pname}')")
                 if not dry_run:
                     ok = mark_task_reported(
                         token, task_id,
@@ -1627,7 +1730,7 @@ def reconcile_ticktick_tasks(
                         tier=tier, company_name=company_name,
                         eps_estimate=eps_est, eps_actual=eps_act,
                         revenue_estimate=rev_est, revenue_actual=rev_act,
-                        list_id=pid, tags=merged_tags,
+                        list_id=pid, tags=want_tags,
                     )
                     if not ok:
                         stats["errors"] += 1
@@ -1645,15 +1748,17 @@ def reconcile_ticktick_tasks(
                 expected_title = build_task_title(
                     ticker, event_date, event_hour, confirmed=True,
                 )
-                if reported and "[REPORTED]" in title:
-                    expected_title = "[REPORTED] " + expected_title
+                # No `[REPORTED] ` branch any more: the clean title IS the
+                # expected form for a reported task too, so a legacy prefixed
+                # title reads as stale and this same write strips it while
+                # `merged_tags` adds `Reported`. That is the whole migration —
+                # no separate backfill for anything the reconcile reaches.
                 title_stale = title != expected_title
                 if date_stale or title_stale or merged_tags is not None \
                         or items_missing:
-                    # Title/date fix + tag in ONE write, for BOTH pre-report tasks
-                    # and already-[REPORTED] tasks whose date is stale. Body
-                    # (checklist / actuals) is left untouched. On an already-
-                    # reported task the title keeps its "[REPORTED] " prefix.
+                    # Title/date fix + tags in ONE write, for BOTH pre-report
+                    # tasks and already-reported tasks whose date is stale. Body
+                    # (checklist / actuals) is left untouched.
                     new_title = expected_title if (date_stale or title_stale) else None
                     if date_stale:
                         logger.info(
@@ -1665,7 +1770,7 @@ def reconcile_ticktick_tasks(
                             f"(list='{pname}')"
                         )
                     if merged_tags is not None:
-                        logger.info(f"  {prefix}add tag {want_tag!r}: {ticker} (list='{pname}')")
+                        logger.info(f"  {prefix}add tags {want_tags!r}: {ticker} (list='{pname}')")
                     if items_missing:
                         logger.info(
                             f"  {prefix}add review sub-items: {ticker} (list='{pname}')"
@@ -1675,7 +1780,7 @@ def reconcile_ticktick_tasks(
                             token, pid, task_id,
                             new_title=new_title,
                             new_date=event_date if date_stale else None,
-                            new_tags=merged_tags,
+                            ensure_tags=want_tags,
                             ensure_subtasks=True,
                         )
                         if not ok:
