@@ -3,7 +3,9 @@ Coverage Manager integration — reads the canonical ticker universe and
 resolves each ticker to a service tier.
 
 Tier 1 (Top priority — held + actively researched + trigger-ready):
-    - Portfolio + Researching ∩ Core (held names + active thesis work)
+    - Portfolio (any; Core filter dropped 2026-08-12 — owning it is the
+      commitment, see the note on `portfolio_t1` in load_coverage)
+    - Researching ∩ Core (active thesis work)
     - Ready to Buy + Ready to Short (trigger-ready; Core filter dropped
       because user explicitly committed by completing the thesis)
 Tier 2 (HC Services + MedTech): universe tickers in those sectors, excluding Tier 1
@@ -258,7 +260,8 @@ def _read_position_lists(exports_path: Path) -> dict[str, dict[str, dict]]:
     labels stay empty.
 
     Tier-1 promotion rules are applied by the caller, not here:
-      - Portfolio + Researching require Core=Y for Tier 1 (legacy rule).
+      - Researching requires Core=Y for Tier 1; Portfolio does not
+        (gate dropped 2026-08-12 — owning it is the commitment).
       - Ready to Buy + Ready to Short are Tier 1 unconditionally
         (trigger-ready ⇒ user committed).
       - Following for Interest is NOT auto-promoted; falls through to
@@ -376,8 +379,8 @@ def load_coverage() -> list[TickerInfo]:
     metadata = _read_universe_metadata(exports_path)
     universe_tickers = _read_universe_tickers(exports_path)
 
-    # Tier 1 promotion rule (expanded 2026-05-11):
-    #   - Portfolio ∩ Core
+    # Tier 1 promotion rule (expanded 2026-05-11, Portfolio gate dropped 2026-08-12):
+    #   - Portfolio     (any; see below)
     #   - Researching ∩ Core
     #   - Ready to Buy   (any; Core filter dropped — trigger-ready ⇒ committed)
     #   - Ready to Short (any; same reason)
@@ -390,7 +393,25 @@ def load_coverage() -> list[TickerInfo]:
     ready_to_buy = position_lists["Ready to Buy"]
     ready_to_short = position_lists["Ready to Short"]
 
-    portfolio_t1 = {t for t, row in portfolio.items() if (row.get("Core") or "").strip().upper() == "Y"}
+    # A HELD name is Tier 1 whether or not Coverage Manager flags it Core.
+    # `Core` is an editorial marker on the coverage universe; ownership is a
+    # fact about the book, and the two drift. JP 2026-08-12, on finding LLY in
+    # none of the 2Q26 TickTick lists: "I own LLY so it should be in positions
+    # & researching TickTick regardless of how it's categorized on coverage
+    # manager". LLY sat at `Core=''` in portfolio.json until 2026-08-06 and was
+    # therefore Tier 3 — no calendar event, no TickTick task, no digest detail —
+    # for the whole 2Q26 season, on a name he owns.
+    #
+    # `ir_ticktick.load_universe` reached the same conclusion on 2026-08-05 from
+    # the other direction ("Scope is Core=Y ∪ Portfolio, not Core alone... Owning
+    # a company is the strongest possible reason to be on its list") and names
+    # the same 11 held-but-not-Core tickers, LLY among them. This makes the two
+    # lanes agree instead of disagreeing by one editorial flag.
+    #
+    # Researching KEEPS its Core gate — being interested in a name is a weaker
+    # signal than owning it, and dropping that one too would add 11 more names
+    # nobody asked for. Deliberately a separate decision.
+    portfolio_t1 = set(portfolio.keys())
     researching_t1 = {t for t, row in researching.items() if (row.get("Core") or "").strip().upper() == "Y"}
     ready_to_buy_t1 = set(ready_to_buy.keys())
     ready_to_short_t1 = set(ready_to_short.keys())

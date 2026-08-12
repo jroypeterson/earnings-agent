@@ -522,6 +522,95 @@ def close_departed_events(
     return departed
 
 
+def restamp_tiers_from_coverage(
+    conn: sqlite3.Connection,
+    tier_by_ticker: dict[str, int],
+    today: str,
+) -> list[tuple[str, str, int, int]]:
+    """Re-derive `events.tier` from live coverage for FUTURE-dated rows.
+
+    Returns `(ticker, event_date, old_tier, new_tier)` for every row changed,
+    so the caller can report them — never a silent mutation.
+
+    **The defect this closes.** `tier` is stamped by `upsert_event`, which only
+    runs for a row when a provider re-emits that ticker+date in the fetch
+    window. Providers re-emit a small, unpredictable subset each run (123 of
+    ~850 in-window rows on 2026-08-11), so a row whose date is already settled
+    can keep a tier assigned months ago while coverage says otherwise. Every
+    consumer gates on `tier <= 2` — TickTick creation, calendar, digest detail,
+    cross-check, the consensus preview — so a row frozen at 3 is invisible to
+    all of them, and nothing reports the gap because the row looks fine.
+
+    Measured 2026-08-12, the day Coverage Manager flagged 31 large-cap
+    biopharma names `Core=Y`: **37 open 3Q26 rows** (LLY, AMGN, GILD, VRTX,
+    ARGX, BBIO, ...) sat at tier 3 with no TickTick task and no way to get one.
+    LLY had already lost the whole 2Q26 season the same way.
+
+    **FUTURE-dated only, and that bound is load-bearing in two directions.**
+
+    Forward is where a stale tier still costs something: the task, the calendar
+    entry and the alerts are all still ahead. A past row's tier is spent.
+
+    And restamping backwards would rewrite history two ways. `compute_season_stats`
+    counts `quarter = ? AND tier <= 2`, so re-tiering closed seasons silently
+    restates how many names a past season was tracking. Worse, coverage churn
+    means some past rows would be *demoted*: on the 2026-08-12 snapshot exactly
+    3 rows (CAT, CVNA, ACVA — all 1Q26) would go 1 -> 3, and ACVA has a live
+    TickTick task that the reconcile would then stop seeing, stranding it
+    overdue forever. Scoping forward means demotions can still happen, but only
+    on rows whose event has not occurred, where a demotion is a real coverage
+    decision rather than an artefact of reading today's universe against last
+    quarter's book.
+
+    **Skips closed rows.** A closed event is terminal; its tier decides nothing.
+
+    **Refuses an empty coverage map.** Empty means the exports read failed, and
+    demoting every future row to 3 on that basis would silently switch off
+    TickTick, the calendar and the digest for the entire universe — the
+    2026-07-26 BOM incident with a different blast radius. Same reasoning as
+    `close_departed_events`. The caller must also run this AFTER
+    `_assert_coverage_not_collapsed` so a partial read cannot get this far.
+    """
+    if not tier_by_ticker:
+        logger.warning(
+            "restamp_tiers_from_coverage: empty coverage map — refusing to "
+            "restamp (an empty universe is a failed read, not a real edit)"
+        )
+        return []
+
+    rows = conn.execute(
+        f"SELECT ticker, event_date, tier FROM events "
+        f"WHERE closed_reason IS NULL AND event_date >= ?",
+        (today,),
+    ).fetchall()
+
+    changed = [
+        (t, d, old, tier_by_ticker[t])
+        for t, d, old in rows
+        if t in tier_by_ticker and tier_by_ticker[t] != old
+    ]
+    if not changed:
+        return []
+
+    conn.executemany(
+        "UPDATE events SET tier = ?, updated_at = datetime('now') "
+        "WHERE ticker = ? AND event_date = ?",
+        [(new, t, d) for t, d, _old, new in changed],
+    )
+    conn.commit()
+
+    promoted = [c for c in changed if c[3] <= 2 < c[2]]
+    demoted = [c for c in changed if c[2] <= 2 < c[3]]
+    logger.info(
+        "Restamped tier on %d future event(s) from coverage "
+        "(%d newly Tier 1/2, %d dropped out of Tier 1/2): %s",
+        len(changed), len(promoted), len(demoted),
+        ", ".join(f"{t}@{d} {old}->{new}" for t, d, old, new in changed[:10])
+        + (" ..." if len(changed) > 10 else ""),
+    )
+    return changed
+
+
 def find_reported_event_for_quarter(
     conn: sqlite3.Connection, ticker: str, quarter: str
 ) -> dict | None:

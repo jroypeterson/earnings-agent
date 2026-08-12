@@ -65,6 +65,7 @@ from storage import (
     kv_set,
     kv_delete,
     close_departed_events,
+    restamp_tiers_from_coverage,
     OPEN_EVENT_SQL,
 )
 from finnhub_client import get_client as get_finnhub_client, fetch_earnings, FinnhubError
@@ -886,6 +887,16 @@ def run(
         conn, {t.ticker for t in coverage}, date.today().isoformat())
     if _departed:
         logger.info("Closed %d departed-ticker event(s) as delisted", len(_departed))
+
+    # Re-derive tier on future rows from live coverage. Same ordering rule as
+    # close_departed_events and for the same reason: it runs AFTER the collapse
+    # guard, so a broken exports read aborts before it can demote the universe
+    # out of Tier 1/2. It must also run BEFORE the TickTick creation query and
+    # every other `tier <= 2` gate below, which is the whole point — a row
+    # promoted here gets its task in this same run. See the docstring for the
+    # class of bug it closes (LLY, 2Q26).
+    _restamped = restamp_tiers_from_coverage(
+        conn, {t.ticker: t.tier for t in coverage}, date.today().isoformat())
 
     cal_service = None
     if not dry_run:
