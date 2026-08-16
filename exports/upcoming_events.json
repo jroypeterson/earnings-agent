@@ -1,78 +1,15 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-08-15T11:34:50Z",
+  "generated_at": "2026-08-16T11:35:15Z",
   "window": {
-    "start": "2026-08-13",
-    "end": "2026-08-29"
+    "start": "2026-08-14",
+    "end": "2026-08-30"
   },
   "counts": {
-    "events": 62
+    "events": 56
   },
   "events": [
-    {
-      "ticker": "BLRX",
-      "event_date": "2026-08-13",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "BioLine RX Ltd - ADR"
-    },
-    {
-      "ticker": "CVAC",
-      "event_date": "2026-08-13",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "CureVac N.V."
-    },
-    {
-      "ticker": "MENS",
-      "event_date": "2026-08-13",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Jyong Biotech Ltd. Ordinary Shares"
-    },
-    {
-      "ticker": "POM",
-      "event_date": "2026-08-13",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "POMDOCTOR Ltd"
-    },
-    {
-      "ticker": "SLGL",
-      "event_date": "2026-08-13",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Sol Gel Technologies Ltd"
-    },
-    {
-      "ticker": "XRTX",
-      "event_date": "2026-08-13",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "XORTX Therapeutics Inc."
-    },
-    {
-      "ticker": "ANL",
-      "event_date": "2026-08-14",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Adlai Nortye Ltd"
-    },
     {
       "ticker": "CIRC",
       "event_date": "2026-08-14",
@@ -189,6 +126,15 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Vaccinex Inc"
+    },
+    {
+      "ticker": "XRTX",
+      "event_date": "2026-08-17",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "XORTX Therapeutics Inc."
     },
     {
       "ticker": "AUNA",
