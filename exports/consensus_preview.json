@@ -1,95 +1,13 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-08-16T11:35:15Z",
+  "generated_at": "2026-08-17T11:40:04Z",
   "window": {
-    "start": "2026-08-16",
-    "end": "2026-08-19"
+    "start": "2026-08-17",
+    "end": "2026-08-20"
   },
   "counts": {
-    "previews": 1
+    "previews": 0
   },
-  "previews": [
-    {
-      "ticker": "ADI",
-      "company_name": "Analog Devices Inc",
-      "tier": 1,
-      "event_date": "2026-08-19",
-      "event_hour": "bmo",
-      "call_datetime_utc": "2026-08-19T20:00:00+00:00",
-      "last_price": 389.3900146484375,
-      "day_change_pct": 2.1565183333241262,
-      "consensus": {
-        "eps": {
-          "mean": 3.3703,
-          "count": null,
-          "low": null,
-          "high": null
-        },
-        "revenue": {
-          "mean": 3956507754.0,
-          "count": null,
-          "low": null,
-          "high": null
-        }
-      },
-      "qtd": {
-        "since": "2026-06-30",
-        "ticker_pct": -1.9588585533314578,
-        "spx_pct": 3.9597207374205974,
-        "sector_etf": null,
-        "sector_etf_pct": null
-      },
-      "implied_move": {
-        "pct": 6.3,
-        "expiry": "2026-08-21",
-        "method": "ATM straddle",
-        "notes": []
-      },
-      "post_earnings_moves": [
-        {
-          "event_date": "2026-05-20",
-          "move_pct": -3.9245957519097567,
-          "window_label": "earnings-day close vs prior close"
-        },
-        {
-          "event_date": "2026-02-18",
-          "move_pct": 2.6251010583006233,
-          "window_label": "earnings-day close vs prior close"
-        },
-        {
-          "event_date": "2025-11-25",
-          "move_pct": 5.271520242232911,
-          "window_label": "earnings-day close vs prior close"
-        },
-        {
-          "event_date": "2025-08-20",
-          "move_pct": 6.261933321366319,
-          "window_label": "earnings-day close vs prior close"
-        }
-      ],
-      "beat_rates": {
-        "eps": {
-          "beats": 18,
-          "total": 20,
-          "source": "yfinance"
-        },
-        "revenue": {
-          "beats": 17,
-          "total": 20,
-          "source": "fmp"
-        }
-      },
-      "na_fields": [
-        {
-          "field": "qtd.sector_etf",
-          "reason": "no mapped ETF for sector 'Tech'"
-        },
-        {
-          "field": "consensus.eps.range",
-          "reason": "estimate range not available on FMP Starter plan"
-        }
-      ]
-    }
-  ]
+  "previews": []
 }
