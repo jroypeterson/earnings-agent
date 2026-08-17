@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-08-17T11:40:05Z",
+  "generated_at": "2026-08-17T19:48:42Z",
   "window": {
     "start": "2026-08-15",
     "end": "2026-08-31"
   },
   "counts": {
-    "events": 56
+    "events": 55
   },
   "events": [
     {
@@ -126,15 +126,6 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Vaccinex Inc"
-    },
-    {
-      "ticker": "XRTX",
-      "event_date": "2026-08-17",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "XORTX Therapeutics Inc."
     },
     {
       "ticker": "AUNA",
