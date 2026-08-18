@@ -1,33 +1,15 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-08-18T11:39:23Z",
+  "generated_at": "2026-08-18T19:47:53Z",
   "window": {
     "start": "2026-08-16",
     "end": "2026-09-01"
   },
   "counts": {
-    "events": 61
+    "events": 58
   },
   "events": [
-    {
-      "ticker": "AMPE",
-      "event_date": "2026-08-17",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Ampio Pharmaceuticals Inc"
-    },
-    {
-      "ticker": "DCGO",
-      "event_date": "2026-08-17",
-      "event_hour": "amc",
-      "tier": 2,
-      "date_confirmed": true,
-      "call_datetime_utc": "2026-08-17T21:00:00+00:00",
-      "company_name": "DocGo Inc"
-    },
     {
       "ticker": "ERNAW",
       "event_date": "2026-08-17",
@@ -38,15 +20,6 @@
       "company_name": "Ernexa Therapeutics Inc. Warrants"
     },
     {
-      "ticker": "FN",
-      "event_date": "2026-08-17",
-      "event_hour": "amc",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Fabrinet"
-    },
-    {
       "ticker": "ADAPY",
       "event_date": "2026-08-18",
       "event_hour": "",
@@ -54,6 +27,15 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Adaptimmune Therapeutics PLC"
+    },
+    {
+      "ticker": "AMPE",
+      "event_date": "2026-08-18",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Ampio Pharmaceuticals Inc"
     },
     {
       "ticker": "AUNA",
@@ -99,24 +81,6 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Eagle Pharmaceuticals Inc"
-    },
-    {
-      "ticker": "EVGN",
-      "event_date": "2026-08-18",
-      "event_hour": "bmo",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Evogene Ltd."
-    },
-    {
-      "ticker": "IMTX",
-      "event_date": "2026-08-18",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Immatics NV"
     },
     {
       "ticker": "NNOX",
@@ -207,6 +171,15 @@
       "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "BILL Holdings Inc"
+    },
+    {
+      "ticker": "BLRX",
+      "event_date": "2026-08-20",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "BioLine RX Ltd - ADR"
     },
     {
       "ticker": "CLGN",
