@@ -1,24 +1,15 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-08-19T19:46:55Z",
+  "generated_at": "2026-08-20T11:43:38Z",
   "window": {
-    "start": "2026-08-17",
-    "end": "2026-09-02"
+    "start": "2026-08-18",
+    "end": "2026-09-03"
   },
   "counts": {
-    "events": 74
+    "events": 77
   },
   "events": [
-    {
-      "ticker": "ERNAW",
-      "event_date": "2026-08-17",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Ernexa Therapeutics Inc. Warrants"
-    },
     {
       "ticker": "EGRX",
       "event_date": "2026-08-18",
@@ -56,29 +47,11 @@
       "company_name": "Shuttle Pharmaceuticals Holdings, Inc."
     },
     {
-      "ticker": "AAPG",
-      "event_date": "2026-08-19",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Ascentage Pharma Group International"
-    },
-    {
-      "ticker": "ADAPY",
-      "event_date": "2026-08-19",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Adaptimmune Therapeutics PLC"
-    },
-    {
       "ticker": "ALVO",
       "event_date": "2026-08-19",
-      "event_hour": "",
+      "event_hour": "amc",
       "tier": 3,
-      "date_confirmed": false,
+      "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "Alvotech SA"
     },
@@ -101,24 +74,6 @@
       "company_name": "BILL Holdings Inc"
     },
     {
-      "ticker": "CALA",
-      "event_date": "2026-08-19",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Calithera Biosciences Inc"
-    },
-    {
-      "ticker": "CIRC",
-      "event_date": "2026-08-19",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Circle8 Group, Inc."
-    },
-    {
       "ticker": "EFTR",
       "event_date": "2026-08-19",
       "event_hour": "",
@@ -126,24 +81,6 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "eFFECTOR Therapeutics Inc"
-    },
-    {
-      "ticker": "SYRS",
-      "event_date": "2026-08-19",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Syros Pharmaceuticals Inc"
-    },
-    {
-      "ticker": "TRVN",
-      "event_date": "2026-08-19",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Trevena Inc"
     },
     {
       "ticker": "VAXX",
@@ -164,6 +101,15 @@
       "company_name": "Vaccinex Inc"
     },
     {
+      "ticker": "ADAPY",
+      "event_date": "2026-08-20",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Adaptimmune Therapeutics PLC"
+    },
+    {
       "ticker": "BLRX",
       "event_date": "2026-08-20",
       "event_hour": "",
@@ -171,6 +117,15 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "BioLine RX Ltd - ADR"
+    },
+    {
+      "ticker": "CALA",
+      "event_date": "2026-08-20",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Calithera Biosciences Inc"
     },
     {
       "ticker": "CLGN",
@@ -218,6 +173,24 @@
       "company_name": "Scinai Immunotherapeutics Ltd."
     },
     {
+      "ticker": "SYRS",
+      "event_date": "2026-08-20",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Syros Pharmaceuticals Inc"
+    },
+    {
+      "ticker": "TRVN",
+      "event_date": "2026-08-20",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Trevena Inc"
+    },
+    {
       "ticker": "WMT",
       "event_date": "2026-08-20",
       "event_hour": "bmo",
@@ -252,15 +225,6 @@
       "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "Box Inc"
-    },
-    {
-      "ticker": "FIVE",
-      "event_date": "2026-08-25",
-      "event_hour": "",
-      "tier": 1,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Five Below Inc"
     },
     {
       "ticker": "MOLN",
@@ -310,9 +274,9 @@
     {
       "ticker": "CRWD",
       "event_date": "2026-08-26",
-      "event_hour": "",
+      "event_hour": "amc",
       "tier": 1,
-      "date_confirmed": false,
+      "date_confirmed": true,
       "call_datetime_utc": "2026-08-26T21:00:00+00:00",
       "company_name": "CrowdStrike Holdings, Inc."
     },
@@ -328,9 +292,9 @@
     {
       "ticker": "OKTA",
       "event_date": "2026-08-26",
-      "event_hour": "",
+      "event_hour": "amc",
       "tier": 3,
-      "date_confirmed": false,
+      "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "Okta, Inc."
     },
@@ -551,6 +515,15 @@
       "company_name": "Sprinklr Inc"
     },
     {
+      "ticker": "FIVE",
+      "event_date": "2026-09-02",
+      "event_hour": "",
+      "tier": 1,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Five Below Inc"
+    },
+    {
       "ticker": "FPS",
       "event_date": "2026-09-02",
       "event_hour": "",
@@ -675,6 +648,60 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Standard Nuclear Inc."
+    },
+    {
+      "ticker": "ASAN",
+      "event_date": "2026-09-03",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Asana Inc"
+    },
+    {
+      "ticker": "CIEN",
+      "event_date": "2026-09-03",
+      "event_hour": "bmo",
+      "tier": 3,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Ciena Corporation"
+    },
+    {
+      "ticker": "DOCU",
+      "event_date": "2026-09-03",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Docusign Inc"
+    },
+    {
+      "ticker": "IBIO",
+      "event_date": "2026-09-03",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Ibio Inc"
+    },
+    {
+      "ticker": "TTAN",
+      "event_date": "2026-09-03",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "ServiceTitan Inc"
+    },
+    {
+      "ticker": "ZS",
+      "event_date": "2026-09-03",
+      "event_hour": "amc",
+      "tier": 3,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Zscaler, Inc."
     }
   ]
 }
