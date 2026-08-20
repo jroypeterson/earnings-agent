@@ -1,24 +1,15 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-08-20T11:43:38Z",
+  "generated_at": "2026-08-20T19:53:53Z",
   "window": {
     "start": "2026-08-18",
     "end": "2026-09-03"
   },
   "counts": {
-    "events": 77
+    "events": 73
   },
   "events": [
-    {
-      "ticker": "EGRX",
-      "event_date": "2026-08-18",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Eagle Pharmaceuticals Inc"
-    },
     {
       "ticker": "NNOX",
       "event_date": "2026-08-18",
@@ -27,15 +18,6 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Nano-X Imaging Ltd."
-    },
-    {
-      "ticker": "OBX",
-      "event_date": "2026-08-18",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Obsidian Therapeutics Inc."
     },
     {
       "ticker": "SHPH",
@@ -47,60 +29,6 @@
       "company_name": "Shuttle Pharmaceuticals Holdings, Inc."
     },
     {
-      "ticker": "ALVO",
-      "event_date": "2026-08-19",
-      "event_hour": "amc",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Alvotech SA"
-    },
-    {
-      "ticker": "AMPE",
-      "event_date": "2026-08-19",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Ampio Pharmaceuticals Inc"
-    },
-    {
-      "ticker": "BILL",
-      "event_date": "2026-08-19",
-      "event_hour": "amc",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "BILL Holdings Inc"
-    },
-    {
-      "ticker": "EFTR",
-      "event_date": "2026-08-19",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "eFFECTOR Therapeutics Inc"
-    },
-    {
-      "ticker": "VAXX",
-      "event_date": "2026-08-19",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Vaxxinity Inc"
-    },
-    {
-      "ticker": "VCNX",
-      "event_date": "2026-08-19",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Vaccinex Inc"
-    },
-    {
       "ticker": "ADAPY",
       "event_date": "2026-08-20",
       "event_hour": "",
@@ -108,6 +36,15 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Adaptimmune Therapeutics PLC"
+    },
+    {
+      "ticker": "AMPE",
+      "event_date": "2026-08-20",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Ampio Pharmaceuticals Inc"
     },
     {
       "ticker": "BLRX",
@@ -146,13 +83,22 @@
       "company_name": "Domo Inc"
     },
     {
-      "ticker": "EVAX",
+      "ticker": "EFTR",
       "event_date": "2026-08-20",
-      "event_hour": "bmo",
+      "event_hour": "",
       "tier": 3,
-      "date_confirmed": true,
+      "date_confirmed": false,
       "call_datetime_utc": null,
-      "company_name": "Evaxion Biotech A/S"
+      "company_name": "eFFECTOR Therapeutics Inc"
+    },
+    {
+      "ticker": "EGRX",
+      "event_date": "2026-08-20",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Eagle Pharmaceuticals Inc"
     },
     {
       "ticker": "RDHL",
@@ -191,13 +137,22 @@
       "company_name": "Trevena Inc"
     },
     {
-      "ticker": "WMT",
+      "ticker": "VAXX",
       "event_date": "2026-08-20",
-      "event_hour": "bmo",
+      "event_hour": "",
       "tier": 3,
-      "date_confirmed": true,
+      "date_confirmed": false,
       "call_datetime_utc": null,
-      "company_name": "Walmart Inc"
+      "company_name": "Vaxxinity Inc"
+    },
+    {
+      "ticker": "VCNX",
+      "event_date": "2026-08-20",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Vaccinex Inc"
     },
     {
       "ticker": "VCRE",
@@ -630,6 +585,15 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Kuvatris Therapeutics Inc"
+    },
+    {
+      "ticker": "SCTX",
+      "event_date": "2026-09-02",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Scribe Therapeutics Inc."
     },
     {
       "ticker": "SNOW",
