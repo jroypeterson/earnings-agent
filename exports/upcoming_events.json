@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-08-21T11:40:50Z",
+  "generated_at": "2026-08-21T19:45:07Z",
   "window": {
     "start": "2026-08-19",
     "end": "2026-09-04"
@@ -36,15 +36,6 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "RedHill Biopharma Ltd"
-    },
-    {
-      "ticker": "SCNI",
-      "event_date": "2026-08-20",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Scinai Immunotherapeutics Ltd."
     },
     {
       "ticker": "ADAPY",
@@ -99,6 +90,15 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Eagle Pharmaceuticals Inc"
+    },
+    {
+      "ticker": "SCNI",
+      "event_date": "2026-08-21",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Scinai Immunotherapeutics Ltd."
     },
     {
       "ticker": "SYRS",
