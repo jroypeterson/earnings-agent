@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-08-21T19:45:07Z",
+  "generated_at": "2026-08-22T11:35:28Z",
   "window": {
-    "start": "2026-08-19",
-    "end": "2026-09-04"
+    "start": "2026-08-20",
+    "end": "2026-09-05"
   },
   "counts": {
     "events": 73
@@ -29,114 +29,6 @@
       "company_name": "Domo Inc"
     },
     {
-      "ticker": "RDHL",
-      "event_date": "2026-08-20",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "RedHill Biopharma Ltd"
-    },
-    {
-      "ticker": "ADAPY",
-      "event_date": "2026-08-21",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Adaptimmune Therapeutics PLC"
-    },
-    {
-      "ticker": "AMPE",
-      "event_date": "2026-08-21",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Ampio Pharmaceuticals Inc"
-    },
-    {
-      "ticker": "BLRX",
-      "event_date": "2026-08-21",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "BioLine RX Ltd - ADR"
-    },
-    {
-      "ticker": "CALA",
-      "event_date": "2026-08-21",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Calithera Biosciences Inc"
-    },
-    {
-      "ticker": "EFTR",
-      "event_date": "2026-08-21",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "eFFECTOR Therapeutics Inc"
-    },
-    {
-      "ticker": "EGRX",
-      "event_date": "2026-08-21",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Eagle Pharmaceuticals Inc"
-    },
-    {
-      "ticker": "SCNI",
-      "event_date": "2026-08-21",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Scinai Immunotherapeutics Ltd."
-    },
-    {
-      "ticker": "SYRS",
-      "event_date": "2026-08-21",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Syros Pharmaceuticals Inc"
-    },
-    {
-      "ticker": "TRVN",
-      "event_date": "2026-08-21",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Trevena Inc"
-    },
-    {
-      "ticker": "VAXX",
-      "event_date": "2026-08-21",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Vaxxinity Inc"
-    },
-    {
-      "ticker": "VCNX",
-      "event_date": "2026-08-21",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Vaccinex Inc"
-    },
-    {
       "ticker": "VCRE",
       "event_date": "2026-08-21",
       "event_hour": "",
@@ -146,6 +38,15 @@
       "company_name": "Vicore Pharma Holding AB"
     },
     {
+      "ticker": "ADAPY",
+      "event_date": "2026-08-24",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Adaptimmune Therapeutics PLC"
+    },
+    {
       "ticker": "ADXN",
       "event_date": "2026-08-24",
       "event_hour": "",
@@ -153,6 +54,96 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Addex Therapeutics Ltd - ADR"
+    },
+    {
+      "ticker": "AMPE",
+      "event_date": "2026-08-24",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Ampio Pharmaceuticals Inc"
+    },
+    {
+      "ticker": "CALA",
+      "event_date": "2026-08-24",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Calithera Biosciences Inc"
+    },
+    {
+      "ticker": "EFTR",
+      "event_date": "2026-08-24",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "eFFECTOR Therapeutics Inc"
+    },
+    {
+      "ticker": "EGRX",
+      "event_date": "2026-08-24",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Eagle Pharmaceuticals Inc"
+    },
+    {
+      "ticker": "RDHL",
+      "event_date": "2026-08-24",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "RedHill Biopharma Ltd"
+    },
+    {
+      "ticker": "SCNI",
+      "event_date": "2026-08-24",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Scinai Immunotherapeutics Ltd."
+    },
+    {
+      "ticker": "SYRS",
+      "event_date": "2026-08-24",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Syros Pharmaceuticals Inc"
+    },
+    {
+      "ticker": "TRVN",
+      "event_date": "2026-08-24",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Trevena Inc"
+    },
+    {
+      "ticker": "VAXX",
+      "event_date": "2026-08-24",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Vaxxinity Inc"
+    },
+    {
+      "ticker": "VCNX",
+      "event_date": "2026-08-24",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Vaccinex Inc"
     },
     {
       "ticker": "BOX",
@@ -279,6 +270,15 @@
       "date_confirmed": true,
       "call_datetime_utc": "2026-08-27T21:00:00+00:00",
       "company_name": "Affirm Holdings Inc"
+    },
+    {
+      "ticker": "BLRX",
+      "event_date": "2026-08-27",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "BioLine RX Ltd - ADR"
     },
     {
       "ticker": "CANF",
