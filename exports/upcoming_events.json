@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-08-24T11:43:54Z",
+  "generated_at": "2026-08-24T19:58:55Z",
   "window": {
     "start": "2026-08-22",
     "end": "2026-09-07"
@@ -90,15 +90,6 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "RedHill Biopharma Ltd"
-    },
-    {
-      "ticker": "SCNI",
-      "event_date": "2026-08-24",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Scinai Immunotherapeutics Ltd."
     },
     {
       "ticker": "SYRS",
@@ -196,7 +187,7 @@
       "event_hour": "amc",
       "tier": 1,
       "date_confirmed": true,
-      "call_datetime_utc": "2026-08-26T21:00:00+00:00",
+      "call_datetime_utc": "2026-08-26T20:00:00+00:00",
       "company_name": "CrowdStrike Holdings, Inc."
     },
     {
@@ -223,7 +214,7 @@
       "event_hour": "amc",
       "tier": 2,
       "date_confirmed": true,
-      "call_datetime_utc": "2026-08-27T13:00:00+00:00",
+      "call_datetime_utc": "2026-08-27T20:00:00+00:00",
       "company_name": "Phibro Animal Health Corp"
     },
     {
@@ -232,7 +223,7 @@
       "event_hour": "amc",
       "tier": 1,
       "date_confirmed": true,
-      "call_datetime_utc": "2026-08-26T21:00:00+00:00",
+      "call_datetime_utc": "2026-08-26T20:00:00+00:00",
       "company_name": "Veeva Systems Inc."
     },
     {
@@ -259,7 +250,7 @@
       "event_hour": "amc",
       "tier": 1,
       "date_confirmed": true,
-      "call_datetime_utc": "2026-08-27T21:00:00+00:00",
+      "call_datetime_utc": "2026-08-27T20:00:00+00:00",
       "company_name": "Affirm Holdings Inc"
     },
     {
@@ -459,6 +450,15 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Forgent Power Solutions, Inc."
+    },
+    {
+      "ticker": "GENB",
+      "event_date": "2026-09-02",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Generate Biomedicines Inc"
     },
     {
       "ticker": "GNTA",
