@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-08-25T18:06:03Z",
+  "generated_at": "2026-08-25T19:52:57Z",
   "window": {
     "start": "2026-08-23",
     "end": "2026-09-08"
@@ -54,15 +54,6 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "AnaptysBio Inc"
-    },
-    {
-      "ticker": "BLRX",
-      "event_date": "2026-08-25",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "BioLine RX Ltd - ADR"
     },
     {
       "ticker": "BOX",
@@ -279,6 +270,15 @@
       "date_confirmed": true,
       "call_datetime_utc": "2026-08-27T20:00:00+00:00",
       "company_name": "Affirm Holdings Inc"
+    },
+    {
+      "ticker": "BLRX",
+      "event_date": "2026-08-27",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "BioLine RX Ltd - ADR"
     },
     {
       "ticker": "CANF",
