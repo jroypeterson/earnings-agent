@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-08-25T19:52:57Z",
+  "generated_at": "2026-08-25T21:57:23Z",
   "window": {
     "start": "2026-08-23",
     "end": "2026-09-08"
@@ -461,6 +461,15 @@
       "company_name": "Sprinklr Inc"
     },
     {
+      "ticker": "FDXF",
+      "event_date": "2026-09-02",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "FedEx Freight Corporation"
+    },
+    {
       "ticker": "FIVE",
       "event_date": "2026-09-02",
       "event_hour": "",
@@ -729,15 +738,6 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Chewy, Inc."
-    },
-    {
-      "ticker": "FDXF",
-      "event_date": "2026-09-08",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "FedEx Freight Corporation"
     }
   ]
 }
