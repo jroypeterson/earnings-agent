@@ -182,14 +182,18 @@ class TestNoResultIsSilentlyDropped:
         tests vacuous — they passed against the pre-fix implementation too.
         """
         flat = "\n".join(self._texts(blocks))
-        tickers = {r.ticker for r in rows}
-        missing = {t for t in tickers if t not in flat}
-        if not missing:
+        # Count in ROWS, not in a deduped ticker set. Reducing inputs to a set
+        # here is exactly what masked the unit mismatch that shipped a
+        # "+54 more not shown" covering 55 rows: a ticker may legitimately
+        # appear on two rows (the Finnhub/FMP merge permits single-source
+        # duplicates), and the caller marks reported=1 per ROW.
+        missing_rows = [r for r in rows if r.ticker not in flat]
+        if not missing_rows:
             return
         m = re.search(r"\+(\d+) more not shown", flat)
-        assert m, f"{len(missing)} ticker(s) vanished with no count stated"
-        assert int(m.group(1)) == len(missing), (
-            f"count says {m.group(1)} unnamed but {len(missing)} are actually missing"
+        assert m, f"{len(missing_rows)} row(s) vanished with no count stated"
+        assert int(m.group(1)) == len(missing_rows), (
+            f"count says {m.group(1)} unnamed but {len(missing_rows)} rows are missing"
         )
 
     def _assert_slack_limits(self, blocks):
@@ -276,6 +280,43 @@ class TestNoResultIsSilentlyDropped:
         )
         assert len(blocks) >= SLACK_MAX_BLOCKS - 4, (
             f"only {len(blocks)} blocks used of {SLACK_MAX_BLOCKS}; budget left idle"
+        )
+
+    def test_duplicate_tickers_are_counted_as_rows_not_deduped(self):
+        """Codex round-4 Medium, verbatim shape: 2,001 rows over 2,000 unique
+        tickers. Overflow deduped by ticker while headers and the caller's
+        reported=1 loop count rows, so the stated count was one short.
+        """
+        # Sized so the overflow list itself must TRUNCATE. At 2,001 rows every
+        # overflow ticker still fits, no "+N more" suffix is emitted, and the
+        # accounting assertion returns early — i.e. the obvious fixture for
+        # this bug is vacuous. Checked: this one does emit the suffix.
+        rows = [
+            _row(f"BIO{i:05d}", sector="Biopharma", subsector="Biotech", tier=1)
+            for i in range(3000)
+        ]
+        # Duplicate a LATE ticker on purpose. Tickers are named in sorted order
+        # and truncation keeps the first K, so duplicating an early one puts
+        # the extra row in the NAMED set where ticker-counting and row-counting
+        # happen to agree — and the test proves nothing.
+        rows.append(_row("BIO02999", sector="Biopharma", subsector="Biotech", tier=1))
+        assert len(rows) == 3001 and len({r.ticker for r in rows}) == 3000
+        blocks = build_results_slack_blocks(rows, date(2026, 8, 26))
+        self._assert_slack_limits(blocks)
+        flat = "\n".join(self._texts(blocks))
+        assert re.search(r"\+\d+ more not shown", flat), (
+            "fixture no longer truncates — this test would pass vacuously"
+        )
+        self._assert_all_accounted_for(rows, blocks)
+
+    def test_overflow_header_counts_rows(self):
+        from notifications import _overflow_blocks
+
+        rows = [_row("AAA", sector="Tech"), _row("AAA", sector="Tech"),
+                _row("BBB", sector="Tech")]
+        flat = "\n".join(b["text"]["text"] for b in _overflow_blocks(rows, budget=40))
+        assert "Also reported (3)" in flat, (
+            "header counted 2 unique tickers instead of 3 rows"
         )
 
     def test_small_card_has_no_overflow_notice(self):

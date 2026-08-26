@@ -905,8 +905,19 @@ def _overflow_blocks(rows: list[ResultRow], budget: int = _OVERFLOW_RESERVE) -> 
     """
     if not rows:
         return []
+    # COUNT ROWS, DISPLAY TICKERS. The unit matters: a ticker can legitimately
+    # appear on two rows (the Finnhub/FMP merge allows single-source duplicates,
+    # fmp_client.py), while the tier headers and the caller's reported=1 loop
+    # both work in rows. Counting a deduped ticker set here made the card say
+    # "+54 more not shown" while 55 rows were actually unrendered.
     tickers = sorted({r.ticker for r in rows})
-    header = f"    _Also reported ({len(tickers)}) — condensed to fit Slack's block limit_"
+    rows_for: dict[str, int] = {}
+    for r in rows:
+        rows_for[r.ticker] = rows_for.get(r.ticker, 0) + 1
+
+    header = (
+        f"    _Also reported ({len(rows)}) — condensed to fit Slack's block limit_"
+    )
 
     # Chunk the tickers across several SHORT lines. One giant comma-joined line
     # would blow Slack's 3000-char section limit (2,000 tickers measured at
@@ -927,11 +938,15 @@ def _overflow_blocks(rows: list[ResultRow], budget: int = _OVERFLOW_RESERVE) -> 
         return blocks
 
     # Too many to name within the reserve. Name as many as fit and state
-    # explicitly how many are unnamed — a count is never dropped.
+    # explicitly how many ROWS are unnamed — a count is never dropped, and it
+    # is a row count so it reconciles with everything else on the card.
+    def _unnamed_rows(k: int) -> int:
+        return sum(rows_for[t] for t in tickers[k:])
+
     lo, hi, best = 0, len(tickers), None
     while lo <= hi:
         mid = (lo + hi) // 2
-        cand = _build(tickers[:mid], f"_+{len(tickers) - mid} more not shown_")
+        cand = _build(tickers[:mid], f"_+{_unnamed_rows(mid)} more not shown_")
         if len(cand) <= budget:
             best, lo = cand, mid + 1
         else:
@@ -943,7 +958,7 @@ def _overflow_blocks(rows: list[ResultRow], budget: int = _OVERFLOW_RESERVE) -> 
         "text": {
             "type": "mrkdwn",
             "text": (
-                f"    _{len(tickers)} further result(s) not shown — "
+                f"    _{len(rows)} further result(s) not shown — "
                 f"Slack block limit reached_"
             ),
         },
