@@ -108,6 +108,33 @@ class ImpliedMove:
 
 
 @dataclass
+class AnnualConsensus:
+    """Forward ANNUAL Street consensus for one fiscal period.
+
+    Keyed on `fiscal_period_end`, never a calendar year: MCK's fiscal year ends
+    2029-03-31, so calendar stamping mislabels it. `currency` is the company's
+    REPORTED currency and may be None — when it is, a guidance comparison must
+    abstain rather than assume USD (NVO reports in DKK).
+
+    `eps_*` is ADJUSTED / normalized EPS, not GAAP. UNH FY2024 adjusted was
+    27.66 against 15.51 GAAP diluted, so comparing GAAP guidance to this
+    manufactures a ~44% false miss.
+    """
+    ticker: str
+    fiscal_period_end: str
+    currency: Optional[str]
+    revenue_avg: Optional[float]
+    revenue_low: Optional[float]
+    revenue_high: Optional[float]
+    revenue_analysts: Optional[int]
+    eps_avg: Optional[float]
+    eps_low: Optional[float]
+    eps_high: Optional[float]
+    eps_analysts: Optional[int]
+    source: str = "FMP:stable/analyst-estimates?period=annual"
+
+
+@dataclass
 class EstimateRange:
     """FMP analyst-estimate spread (count + low/high). All None => n/a."""
     count: Optional[int]
@@ -693,6 +720,90 @@ def fetch_fmp_estimate_range(
     future plan upgrade can restore quarterly estimate ranges here.
     """
     return EstimateRange(None, None, None)
+
+
+def fetch_fmp_reported_currency(ticker: str, api_key: str) -> Optional[str]:
+    """The currency the company REPORTS in, for FY consensus comparisons.
+
+    ⚠ Do NOT use `/stable/profile`'s `currency` field. For NVO it returns
+    **USD** — the ADR's TRADING currency — while the company reports in
+    **DKK**. A field literally named `currency` giving the wrong answer is the
+    whole trap: consensus would be labelled USD and compared against DKK
+    guidance with nothing flagging it. `income-statement.reportedCurrency`
+    is the one that agrees with the figures (NVO revenue 309,064,000,000 DKK).
+
+    Returns None on any failure — the caller must abstain rather than assume
+    USD, because assuming is exactly how the DKK/USD mix ships silently.
+    """
+    try:
+        rows = _fmp_get_json(
+            f"https://financialmodelingprep.com/stable/income-statement"
+            f"?symbol={ticker}&limit=1&apikey={api_key}"
+        )
+    except Exception as exc:  # noqa: BLE001 — module convention: never raise
+        logger.warning("FMP reportedCurrency failed for %s: %s", ticker, exc)
+        return None
+    if not isinstance(rows, list) or not rows:
+        return None
+    cur = rows[0].get("reportedCurrency")
+    return cur or None
+
+
+def fetch_fmp_annual_estimates(
+    ticker: str, api_key: str, currency: Optional[str] = None
+) -> list[AnnualConsensus]:
+    """Forward ANNUAL Street consensus from FMP Starter.
+
+    The quarterly sibling (`fetch_fmp_estimate_range`) is 402-gated on this
+    plan; the ANNUAL period is not, and is the figure a full-year guidance
+    range must be compared against. Measured 2026-08-26: 12/12 healthcare
+    names, 5-6 forward years, off-calendar fiscal years correct
+    (MCK 2031-03-31, COR 2030-09-30, CAH 2031-06-30).
+
+    Periods are keyed on the fiscal PERIOD END date. There is deliberately no
+    calendar-year field on the result: MCK's FY ends 2029-03-31, so a calendar
+    stamp is not the fiscal label and inviting that comparison is a bug.
+
+    Never raises; returns [] on any failure.
+    """
+    try:
+        rows = _fmp_get_json(
+            f"https://financialmodelingprep.com/stable/analyst-estimates"
+            f"?symbol={ticker}&period=annual&apikey={api_key}"
+        )
+    except Exception as exc:  # noqa: BLE001 — module convention: never raise
+        logger.warning("FMP annual estimates failed for %s: %s", ticker, exc)
+        return []
+    if not isinstance(rows, list):
+        return []
+
+    def _num(v):
+        return v if isinstance(v, (int, float)) else None
+
+    def _count(v):
+        # An analyst count of 0 is "no coverage", not a measured zero.
+        return int(v) if isinstance(v, (int, float)) and v > 0 else None
+
+    out: list[AnnualConsensus] = []
+    for r in rows:
+        period_end = r.get("date")
+        if not period_end:
+            continue
+        out.append(AnnualConsensus(
+            ticker=ticker,
+            fiscal_period_end=str(period_end),
+            currency=currency,
+            revenue_avg=_num(r.get("revenueAvg")),
+            revenue_low=_num(r.get("revenueLow")),
+            revenue_high=_num(r.get("revenueHigh")),
+            revenue_analysts=_count(r.get("numAnalystsRevenue")),
+            eps_avg=_num(r.get("epsAvg")),
+            eps_low=_num(r.get("epsLow")),
+            eps_high=_num(r.get("epsHigh")),
+            eps_analysts=_count(r.get("numAnalystsEps")),
+        ))
+    out.sort(key=lambda a: a.fiscal_period_end)
+    return out
 
 
 def fetch_fmp_rev_beat_history(
