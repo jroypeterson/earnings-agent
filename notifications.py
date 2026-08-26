@@ -21,6 +21,7 @@ except ImportError:  # pragma: no cover - py<3.9 fallback
 
 import requests
 
+import config
 from digest import DigestData, EventRow
 from market_data import PostEarningsMove
 
@@ -494,7 +495,18 @@ def _fmt_move(move: PostEarningsMove | None) -> str:
 
 
 def _results_tier_label(tier: int) -> str:
-    return {1: "Core Watchlist", 2: "HC Services + MedTech"}.get(tier, "Other")
+    """Tier label for results headers, read from config — never re-spelled here.
+
+    This used to hardcode "HC Services + MedTech" while `config.TIER_2_LABEL`
+    had already become "HC Services + MedTech + Core Biopharma" (2026-08-06).
+    A results card can therefore print a Biopharma subgroup under a header
+    asserting Biopharma is absent. Sourcing the label from config makes that
+    class of drift impossible rather than merely fixed once.
+    """
+    return {
+        1: config.TIER_1_LABEL,
+        2: config.TIER_2_LABEL,
+    }.get(tier, config.TIER_3_LABEL)
 
 
 # Subgroup membership for results (mirrors sigma-alert SUBCATEGORIES).
@@ -536,6 +548,13 @@ def _results_subcategory(r: ResultRow) -> str:
         return "MedTech"
     if r.subsector == "Large Pharma":
         return "Large Pharma"
+    # Biopharma is checked AFTER Large Pharma on purpose: LLY is sector
+    # Biopharma / subsector Large Pharma, and board #298 asked only that
+    # biopharma stop falling into "Other" — not that large-cap pharma move
+    # out of the bucket it already has. Checking sector first would silently
+    # relocate every Large Pharma name.
+    if r.sector == "Biopharma":
+        return "Biopharma"
     if r.sector in SECTORS_GROUPED_AS_OTHER:
         return "Other"
     return "Other"
@@ -550,6 +569,7 @@ _SUBCATEGORY_ORDER = (
     "Healthcare Services",
     "MedTech",
     "Large Pharma",
+    "Biopharma",
     "Other",
 )
 
@@ -642,6 +662,39 @@ def _move_marker(move: PostEarningsMove | None) -> str:
     return "\U0001F7E9" if move.move_pct >= 0 else "\U0001F7E5"
 
 
+# Ordered marker slots for the results line. The rendered line AND the legend
+# are both generated from this one tuple, so they cannot drift apart — a legend
+# that mislabels the squares is worse than having no legend at all. Adding a
+# slot here makes it appear in both places automatically (board #298).
+_RESULT_MARKER_SLOTS: tuple[tuple[str, object], ...] = (
+    ("EPS vs est.", lambda r: _beat_marker(r.eps_actual, r.eps_estimate)),
+    ("Revenue vs est.", lambda r: _beat_marker(r.rev_actual, r.rev_estimate)),
+    ("Stock reaction", lambda r: _move_marker(r.move)),
+)
+
+# Colour key. Kept beside the slots because both halves of the legend have to
+# stay true to _beat_marker()/_move_marker() above.
+_MARKER_COLOUR_KEY = (
+    "\U0001F7E9 beat/up · \U0001F7E5 miss/down · ⬜ n/a · ⚠️ no data"
+)
+
+
+def _render_result_markers(r: ResultRow) -> str:
+    """The marker prefix for one results line, in _RESULT_MARKER_SLOTS order."""
+    return " ".join(fn(r) for _, fn in _RESULT_MARKER_SLOTS)
+
+
+def build_results_legend_text() -> str:
+    """Legend naming each square, in the exact order the line renders them.
+
+    Board #298 asked for a legend labelling the squares. It is generated from
+    _RESULT_MARKER_SLOTS rather than written out, so it cannot describe an
+    order the renderer no longer uses.
+    """
+    names = " · ".join(label for label, _ in _RESULT_MARKER_SLOTS)
+    return f"Squares, left to right: {names}  |  {_MARKER_COLOUR_KEY}"
+
+
 def _fmt_call_compact(earnings_date: str | None, call_dt_iso: str | None) -> str | None:
     """Compact conference-call segment for the results line.
 
@@ -699,11 +752,7 @@ def _fmt_results_timing(r: ResultRow) -> str:
 def _format_results_line(r: ResultRow) -> str:
     short = _short_company_name(r.company_name)
     name_part = f" {short}" if short else ""
-    markers = (
-        f"{_beat_marker(r.eps_actual, r.eps_estimate)} "
-        f"{_beat_marker(r.rev_actual, r.rev_estimate)} "
-        f"{_move_marker(r.move)}"
-    )
+    markers = _render_result_markers(r)
     return (
         f"{markers}  `{r.ticker}`{name_part} · "
         f"{_fmt_results_timing(r)} · "
@@ -713,16 +762,44 @@ def _format_results_line(r: ResultRow) -> str:
     )
 
 
-def _append_section_chunked(
-    blocks: list[dict], header: str, lines: list[str], max_len: int = 2900
-) -> None:
-    """Append section block(s) for a header + lines, splitting at Slack's 3000-char cap."""
+def _chunk_result_section(
+    header: str, lines: list[str], max_len: int = 2900
+) -> list[dict]:
+    """Build section block(s) for a header + lines, splitting at Slack's 3000-char cap.
+
+    Pure — returns the blocks instead of appending, so a caller can check
+    whether they fit within its block budget BEFORE committing to them.
+    """
+    out: list[dict] = []
     chunk = [header]
     chunk_len = len(header) + 1
+    # A single line longer than the budget can never be split by the loop below
+    # (its guard requires an existing content line), so an oversized line would
+    # ride through and Slack would reject the whole message on the 3000-char
+    # section limit. Split such lines up front.
+    room = max(1, max_len - len(header) - 1)
+    split_lines: list[str] = []
+    for line in lines:
+        if len(line) <= room:
+            split_lines.append(line)
+            continue
+        for i in range(0, len(line), room):
+            split_lines.append(line[i:i + room])
+    lines = split_lines
+    # `has_content` instead of `len(chunk) > 1`: the chunk starts as [header],
+    # but AFTER a flush it is [line] — also length 1 — so the old length test
+    # read a content-only chunk as header-only and appended unconditionally.
+    # Measured on a 10,000-char line: pre-splitting with the old guard gave
+    # [2900, 5787, 1321]; this guard gives [2900, 2893, 2893, 1321].
+    # NOTE on provenance: ordinary ~120-char result lines were byte-identical
+    # under both guards (max section 2786), so this did NOT affect real cards.
+    # The pre-existing helper's actual flaw was different — it emitted a single
+    # 10,007-char block for an oversized line, unreachable in production.
+    has_content = False
     for line in lines:
         line_len = len(line) + 1
-        if chunk_len + line_len > max_len and len(chunk) > 1:
-            blocks.append({
+        if has_content and chunk_len + line_len > max_len:
+            out.append({
                 "type": "section",
                 "text": {"type": "mrkdwn", "text": "\n".join(chunk)},
             })
@@ -731,11 +808,20 @@ def _append_section_chunked(
         else:
             chunk.append(line)
             chunk_len += line_len
+        has_content = True
     if chunk:
-        blocks.append({
+        out.append({
             "type": "section",
             "text": {"type": "mrkdwn", "text": "\n".join(chunk)},
         })
+    return out
+
+
+def _append_section_chunked(
+    blocks: list[dict], header: str, lines: list[str], max_len: int = 2900
+) -> None:
+    """Append section block(s) for a header + lines (thin wrapper on _chunk_result_section)."""
+    blocks.extend(_chunk_result_section(header, lines, max_len))
 
 
 def _season_pct(n: int, d: int) -> int:
@@ -803,6 +889,67 @@ def build_season_funnel_elements(stats: dict | None) -> list[dict]:
     return elements
 
 
+# Blocks held back so an overflow notice can always be rendered. Two is enough
+# for a header plus one compact ticker list; the final slice guarantees the
+# payload never exceeds SLACK_MAX_BLOCKS even in the pathological case.
+_OVERFLOW_RESERVE = 2
+
+
+def _overflow_blocks(rows: list[ResultRow], budget: int = _OVERFLOW_RESERVE) -> list[dict]:
+    """Compact, ticker-only rendering for rows that did not fit in full detail.
+
+    Truncation used to be silent: the builder returned early at the block cap
+    while both callers went on to mark every input row reported=1, so omitted
+    rows were never rendered again. Naming them costs a few characters each and
+    keeps the card honest about what it could not show.
+    """
+    if not rows:
+        return []
+    tickers = sorted({r.ticker for r in rows})
+    header = f"    _Also reported ({len(tickers)}) — condensed to fit Slack's block limit_"
+
+    # Chunk the tickers across several SHORT lines. One giant comma-joined line
+    # would blow Slack's 3000-char section limit (2,000 tickers measured at
+    # 14,064 chars) and the block count alone would not reveal it.
+    per_line = 40
+
+    def _build(names: list[str], suffix: str = "") -> list[dict]:
+        lines = [
+            ", ".join(names[i:i + per_line])
+            for i in range(0, len(names), per_line)
+        ]
+        if suffix:
+            lines.append(suffix)
+        return _chunk_result_section(header, lines)
+
+    blocks = _build(tickers)
+    if len(blocks) <= budget:
+        return blocks
+
+    # Too many to name within the reserve. Name as many as fit and state
+    # explicitly how many are unnamed — a count is never dropped.
+    lo, hi, best = 0, len(tickers), None
+    while lo <= hi:
+        mid = (lo + hi) // 2
+        cand = _build(tickers[:mid], f"_+{len(tickers) - mid} more not shown_")
+        if len(cand) <= budget:
+            best, lo = cand, mid + 1
+        else:
+            hi = mid - 1
+    if best is not None:
+        return best
+    return [{
+        "type": "section",
+        "text": {
+            "type": "mrkdwn",
+            "text": (
+                f"    _{len(tickers)} further result(s) not shown — "
+                f"Slack block limit reached_"
+            ),
+        },
+    }]
+
+
 def build_results_slack_blocks(
     results: list[ResultRow], as_of: date, season_stats: dict | None = None
 ) -> list[dict]:
@@ -815,7 +962,16 @@ def build_results_slack_blocks(
                 {
                     "type": "mrkdwn",
                     "text": f"{len(results)} reported",
-                }
+                },
+                # The legend lives in this FIRST context block deliberately.
+                # The builder is budget-bounded and drops detail when the card
+                # is crowded, so a legend appended at the END would be the
+                # first thing squeezed out — exactly on the busy days when the
+                # card is most crowded and the legend matters most.
+                {
+                    "type": "mrkdwn",
+                    "text": build_results_legend_text(),
+                },
             ],
         },
     ]
@@ -826,6 +982,10 @@ def build_results_slack_blocks(
 
     blocks.append({"type": "divider"})
 
+    # Rows that do not fit the block budget in full detail. They are rendered
+    # compactly rather than dropped — see the note by the overflow section.
+    overflow: list[ResultRow] = []
+
     # Group by tier, then by mutually-exclusive subcategory within tier.
     by_tier: dict[int, list[ResultRow]] = {}
     for r in results:
@@ -835,10 +995,6 @@ def build_results_slack_blocks(
 
     first_tier = True
     for tier in sorted(by_tier.keys()):
-        if not first_tier:
-            blocks.append({"type": "divider"})
-        first_tier = False
-
         tier_rows = by_tier[tier]
         emoji = tier_emojis.get(tier, "")
         tier_header = (
@@ -850,32 +1006,99 @@ def build_results_slack_blocks(
         for r in tier_rows:
             by_sub.setdefault(_results_subcategory(r), []).append(r)
 
-        # Tier header on its own line so subgroup headers can follow.
-        _append_section_chunked(blocks, tier_header, [])
+        # Build this tier into a PENDING list and only commit it if something
+        # actually rendered. The divider used to be appended before the fit
+        # check, so skipped tiers still burned budget — two skipped tiers ate
+        # the overflow reserve and the final slice then removed the overflow
+        # notice itself, silently losing rows again.
+        divider_cost = 0 if first_tier else 1
+        header_blocks = _chunk_result_section(tier_header, [])
+        if (len(blocks) + divider_cost + len(header_blocks)
+                + _OVERFLOW_RESERVE > SLACK_MAX_BLOCKS):
+            overflow.extend(tier_rows)
+            continue
+
+        pending: list[dict] = []
+        if not first_tier:
+            pending.append({"type": "divider"})
+        pending.extend(header_blocks)
+        rendered_any = False
 
         for sub_label in _SUBCATEGORY_ORDER:
             members = by_sub.get(sub_label)
             if not members:
                 continue
             members_sorted = sorted(members, key=lambda r: r.ticker)
+            lines = [_format_results_line(r) for r in members_sorted]
             sub_header = f"    _{sub_label} ({len(members)})_"
-            _append_section_chunked(
-                blocks, sub_header, [_format_results_line(r) for r in members_sorted]
-            )
-            if len(blocks) >= SLACK_MAX_BLOCKS:
-                return blocks
-    return blocks
+            candidate = _chunk_result_section(sub_header, lines)
+            # Check the budget BEFORE committing. The old code appended every
+            # chunk for a subgroup and only then tested the cap, so one large
+            # subgroup could push the payload past Slack's hard 50-block limit
+            # and fail the entire post.
+            avail = (SLACK_MAX_BLOCKS - _OVERFLOW_RESERVE
+                     - len(blocks) - len(pending))
+            if len(candidate) <= avail:
+                pending.extend(candidate)
+                rendered_any = True
+                continue
+            # Does not fit whole. Render as MANY members as the remaining
+            # budget allows rather than discarding the subgroup outright: an
+            # all-or-nothing check let a huge Tier-1 subgroup collapse to
+            # nothing while Tier 2 rendered in full and 41 blocks sat unused —
+            # a priority inversion, since Tier 1 is the tier that matters most.
+            best_k, best_blocks = 0, None
+            lo, hi = 1, len(members_sorted)
+            while lo <= hi:
+                mid = (lo + hi) // 2
+                trial = _chunk_result_section(
+                    f"    _{sub_label} ({mid} of {len(members)} shown)_",
+                    lines[:mid],
+                )
+                if len(trial) <= avail:
+                    best_k, best_blocks = mid, trial
+                    lo = mid + 1
+                else:
+                    hi = mid - 1
+            if best_blocks:
+                pending.extend(best_blocks)
+                rendered_any = True
+                overflow.extend(members_sorted[best_k:])
+            else:
+                overflow.extend(members_sorted)
+
+        if rendered_any:
+            blocks.extend(pending)
+            first_tier = False
+        # If nothing rendered, every member is already in `overflow` from the
+        # subgroup loop — do not re-add, and do not commit an orphan header.
+
+    # Nothing is dropped silently. Rows that did not fit are still named, in a
+    # compact ticker-only list, because both callers mark EVERY input row
+    # reported=1 once the post succeeds — a row omitted here would never be
+    # rendered again. Degrading to a compact list keeps that bookkeeping honest.
+    if overflow:
+        blocks.extend(_overflow_blocks(overflow))
+    # The budget checks above reserve room for the overflow notice, so this
+    # slice is a belt-and-braces no-op. It must never be the thing that drops
+    # the overflow notice — a test asserts the notice survives.
+    return blocks[:SLACK_MAX_BLOCKS]
 
 
 def build_results_fallback_text(results: list[ResultRow], as_of: date) -> str:
-    beats = sum(
-        1 for r in results
-        if (_beat_miss_pct(r.eps_actual, r.eps_estimate) or 0) >= 0
-    )
-    misses = len(results) - beats
+    # `or 0` used to turn "no EPS comparison available" into 0.0 and count it
+    # as a beat: a revenue-only row renders ⬜/n-a in the card while the
+    # fallback claimed "1 beat, 0 miss on EPS". Ingestion admits a row when
+    # EITHER actual is present, so revenue-only rows are normal, not exotic.
+    pcts = [_beat_miss_pct(r.eps_actual, r.eps_estimate) for r in results]
+    comparable = [p for p in pcts if p is not None]
+    beats = sum(1 for p in comparable if p >= 0)
+    misses = len(comparable) - beats
+    n_a = len(pcts) - len(comparable)
+    tail = f", {n_a} n/a" if n_a else ""
     return (
         f"Earnings results {_fmt_date_safe(as_of.isoformat())}: "
-        f"{len(results)} reported ({beats} beat, {misses} miss on EPS)"
+        f"{len(results)} reported ({beats} beat, {misses} miss{tail} on EPS)"
     )
 
 
