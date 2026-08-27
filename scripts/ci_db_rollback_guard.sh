@@ -191,7 +191,18 @@ for aid in "${ids[@]}"; do
   read -r a_total a_actuals a_overdue <<<"$(db_stats ".db_cand/earnings_events.db")"
   if [ -z "${a_total:-}" ]; then log "  artifact $aid: unreadable"; continue; fi
   log "  artifact $aid: events=$a_total actuals=$a_actuals past-due-without-actuals=$a_overdue"
-  if [ "$a_actuals" -gt "$(( best_actuals + MIN_ACTUALS_GAIN ))" ]; then
+  # A candidate must be strictly richer on BOTH axes before it is allowed to overwrite
+  # what is on disk. Actuals alone is not a safe ranking: overwriting the working copy
+  # discards date locks, kv_store watermarks, Slack thread state and ticktick_task_id
+  # pointers, and this repo documents that state as unrecoverable. The dangerous case is
+  # a PROVIDER OUTAGE - past-due-without-actuals climbs above the threshold with no
+  # rollback at all, and healing to an older artifact would then destroy real state to
+  # "fix" a problem that was never a rollback. In an outage the live DB still has MORE
+  # events than any older artifact, so requiring a higher event count too refuses the
+  # trade. In a genuine rollback, as measured today, the good artifact wins on both
+  # (2912 events / 1680 actuals against 1735 / 763).
+  if [ "$a_actuals" -gt "$(( best_actuals + MIN_ACTUALS_GAIN ))" ] \
+     && [ "$a_total" -gt "$cur_total" ]; then
     best_actuals="$a_actuals"; best_id="$aid"; best_overdue="$a_overdue"
     cp ".db_cand/earnings_events.db" ".db_best" || true
   fi
@@ -203,7 +214,15 @@ if [ -n "$best_id" ] && [ -f ".db_best" ]; then
 fi
 
 if [ "$best_overdue" -gt "$MAX_OVERDUE" ]; then
-  alarm "Every available \`earnings-db\` artifact looks rolled back - best has $best_actuals actuals and still $best_overdue tracked events past due with no actuals (threshold $MAX_OVERDUE). Refusing to write. Recover by dispatching with \`EA_DB_RESTORE_ARTIFACT_ID\` set to a known-good artifact id."
+  # State the OBSERVATION, not a cause. Two very different situations produce this exact
+  # reading - an artifact rollback, and a provider outage where actuals simply never
+  # arrived - and they are indistinguishable from here. Naming one of them in the alarm
+  # would send the reader to the wrong fix half the time.
+  healed_note="the working copy was left untouched"
+  if [ -n "$best_id" ]; then
+    healed_note="the working copy was replaced from artifact $best_id, which was better but still short"
+  fi
+  alarm "$best_overdue tracked events are past due with no actuals (threshold $MAX_OVERDUE) and no available artifact clears it; best carries $best_actuals actuals. Refusing to write, and $healed_note. Two causes look identical here: an artifact ROLLBACK (check whether the restore step logged an old run date) or a PROVIDER OUTAGE where actuals never arrived (check Finnhub/FMP). If it is a rollback, recover by dispatching \`daily_earnings_check\` with \`restore_artifact_id\` set to a known-good artifact id."
   exit 1
 fi
 
