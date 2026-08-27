@@ -85,14 +85,26 @@ try:
     q = lambda s, *a: con.execute(s, a).fetchone()[0]
     total = q("SELECT COUNT(*) FROM events")
     actuals = q("SELECT COUNT(*) FROM events WHERE eps_actual IS NOT NULL")
-    overdue = q(
-        "SELECT COUNT(*) FROM events WHERE tier <= 2 AND event_date < ? "
-        "AND COALESCE(reported, 0) = 0 AND eps_actual IS NULL "
-        "AND closed_reason IS NULL", cut)
+
+    # The predicate is built from the columns this database ACTUALLY has. The whole
+    # point of the guard is to inspect OLD snapshots, and old snapshots have old
+    # schemas: closed_reason arrived in v13 (2026-08-07), so the 2026-07-27 artifact
+    # this guard exists to catch does not have it. Referencing it unconditionally
+    # made the query raise, which the guard reported as "unreadable or corrupt" - a
+    # true-sounding alarm for the wrong reason, on the exact input it was written for.
+    cols = {r[1] for r in con.execute("PRAGMA table_info(events)")}
+    where = ["event_date < ?", "COALESCE(reported, 0) = 0", "eps_actual IS NULL"]
+    if "tier" in cols:
+        where.append("tier <= 2")
+    if "closed_reason" in cols:
+        where.append("closed_reason IS NULL")
+    overdue = q(f"SELECT COUNT(*) FROM events WHERE {' AND '.join(where)}", cut)
+
     if total == 0:
         sys.exit(1)
     print(total, actuals, overdue)
-except Exception:
+except Exception as exc:
+    print(f"db_stats failed: {type(exc).__name__}: {exc}", file=sys.stderr)
     sys.exit(1)
 PY
 }
