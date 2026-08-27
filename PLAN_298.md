@@ -1,6 +1,6 @@
 # Board #298 — Biopharma category + guidance-vs-consensus square
 
-**Status: parts 1 and 3 SHIPPED (`378de01`). Part 2 (the square) is NOT built.**
+**Status: parts 1 and 3 SHIPPED (`5d11830`). Part 2 (the square) is NOT built.**
 Row logged `partial`, so it stays open.
 
 JP, 2026-08-06. Ease 3 × Impact 5 = 15 — his biggest earnings ask that week.
@@ -42,7 +42,7 @@ service called by BOTH result paths** — not as a dependency of the narrative m
   above a *reaffirmation*. It produces guidance **sentences for a narrative card**, not
   structured values.
 - `consensus_preview.py` — **`fetch_fmp_annual_estimates()`** and
-  **`fetch_fmp_reported_currency()`** (`1303504`). Forward annual revenue + adjusted EPS,
+  **`fetch_fmp_reported_currency()`** (`c2a965e`). Forward annual revenue + adjusted EPS,
   avg/low/high, analyst counts. 14 offline tests. **Nothing consumes them yet.**
 - `notifications.py` — `_RESULT_MARKER_SLOTS` is the single source for the marker row; adding
   a 4th slot makes it appear in the line *and* the legend automatically.
