@@ -113,6 +113,18 @@ jobs:
           fi
           exit 1
 
+      # Rollback guard. The abort step above proves the DB is PRESENT; this one proves it
+      # is not a rolled-back snapshot. Added 2026-08-27 after the artifact restore spent
+      # three days silently returning a 2026-07-27 database that every run then wrote to
+      # and re-uploaded as newest, taking 2026Q2 from 958 eps_actual to 256 while CI
+      # stayed green. See scripts/ci_db_rollback_guard.sh for the measurements.
+      - name: Guard against a rolled-back DB artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WEBHOOK_STATUS: ${{ secrets.SLACK_WEBHOOK_STATUS }}
+          WEBHOOK_EARNINGS: ${{ secrets.SLACK_WEBHOOK_EARNINGS }}
+        run: bash scripts/ci_db_rollback_guard.sh
+
       - name: Write Google credentials
         run: echo '${{ secrets.GOOGLE_CREDENTIALS_JSON }}' > credentials.json
         continue-on-error: true  # calendar updates are best-effort
