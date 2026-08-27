@@ -233,3 +233,19 @@ def test_strip_generated_only_normalises_the_timestamp_line():
     assert bcp._strip_generated(a) == bcp._strip_generated(b)
     c = '<p class="updated">Regenerated 2026-07-20 03:23 UTC &middot; 5 past</p><div>y</div>'
     assert bcp._strip_generated(a) != bcp._strip_generated(c)
+
+
+def test_season_page_h1_names_the_season():
+    """JP 2026-08-27: an artifact has to say which season it is measuring.
+
+    The season was already in <title> and the subtitle line, but the <h1> - the thing a
+    reader actually looks at - was bare, so the page's most prominent label said nothing
+    about which quarter it was showing.
+    """
+    import pathlib
+    src = (pathlib.Path(__file__).parent / "scripts" / "build_season_page.py").read_text(
+        encoding="utf-8")
+    h1 = [ln for ln in src.splitlines() if "<h1>" in ln]
+    assert h1, "no <h1> found in the season page builder"
+    assert any("p.season" in ln for ln in h1), (
+        "the season page <h1> must interpolate the season; found: " + " | ".join(h1))

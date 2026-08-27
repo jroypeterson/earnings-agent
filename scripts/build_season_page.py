@@ -284,7 +284,7 @@ def render(p: SeasonProgress, *, generated_at: str, db_asof: str | None) -> str:
 <style>{CSS}</style>
 </head>
 <body>
-<h1>Earnings Season Progress</h1>
+<h1>Earnings Season Progress &mdash; {html.escape(p.season)}</h1>
 <p class="updated">{html.escape(p.season)} &middot; regenerated {html.escape(generated_at)}
  &middot; <a href="./index.html">full earnings calendar &rarr;</a></p>
 {stale}
