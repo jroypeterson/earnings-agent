@@ -75,7 +75,8 @@ if [ -z "$PY_BIN" ]; then
   exit 1
 fi
 
-# "<total_events> <actuals> <past_due_without_actuals>", or empty if unreadable.
+# "<total_events> <actuals> <past_due_without_actuals> <kv_rows>", or empty if the
+# file fails an integrity check, lacks an events table, or is otherwise unreadable.
 db_stats() {
   "$PY_BIN" - "$1" "$OVERDUE_GRACE_DAYS" <<'PY' 2>/dev/null
 import sqlite3, sys, datetime
@@ -83,8 +84,27 @@ try:
     con = sqlite3.connect(f"file:{sys.argv[1]}?mode=ro", uri=True)
     cut = (datetime.date.today() - datetime.timedelta(days=int(sys.argv[2]))).isoformat()
     q = lambda s, *a: con.execute(s, a).fetchone()[0]
+
+    # Integrity BEFORE counting. Three successful queries against `events` say nothing
+    # about the rest of the file, and this script's output decides whether a candidate
+    # gets to overwrite the working copy. A database with an intact events B-tree and a
+    # corrupt kv_store page would rank fine here and then take the watermarks down with
+    # it. quick_check is a page-level scan and costs ~0.1s on a 10MB file.
+    if q("PRAGMA quick_check(1)") != "ok":
+        raise RuntimeError("PRAGMA quick_check failed")
+
+    tables = {r[0] for r in con.execute(
+        "SELECT name FROM sqlite_master WHERE type='table'")}
+    if "events" not in tables:
+        raise RuntimeError("no events table")
+
     total = q("SELECT COUNT(*) FROM events")
     actuals = q("SELECT COUNT(*) FROM events WHERE eps_actual IS NOT NULL")
+
+    # kv_store carries the settle watermarks, announced-set and dedup keys - durable
+    # state that no re-run reconstructs. It is reported so the caller can refuse to
+    # trade it away, and probed rather than assumed present: it arrived in schema v9.
+    kv = q("SELECT COUNT(*) FROM kv_store") if "kv_store" in tables else 0
 
     # The predicate is built from the columns this database ACTUALLY has. The whole
     # point of the guard is to inspect OLD snapshots, and old snapshots have old
@@ -102,7 +122,7 @@ try:
 
     if total == 0:
         sys.exit(1)
-    print(total, actuals, overdue)
+    print(total, actuals, overdue, kv)
 except Exception as exc:
     print(f"db_stats failed: {type(exc).__name__}: {exc}", file=sys.stderr)
     sys.exit(1)
@@ -145,12 +165,12 @@ if [ ! -f "$DB" ]; then
   exit 0
 fi
 
-read -r cur_total cur_actuals cur_overdue <<<"$(db_stats "$DB")"
+read -r cur_total cur_actuals cur_overdue cur_kv <<<"$(db_stats "$DB")"
 if [ -z "${cur_total:-}" ]; then
-  alarm "The restored \`earnings_events.db\` is unreadable or has no events - it may be truncated or corrupt."
+  alarm "The restored \`earnings_events.db\` failed its integrity check, has no events table, or is unreadable - it may be truncated or corrupt."
   exit 1
 fi
-log "restored DB: events=$cur_total actuals=$cur_actuals past-due-without-actuals=$cur_overdue"
+log "restored DB: events=$cur_total actuals=$cur_actuals past-due-without-actuals=$cur_overdue kv_store=$cur_kv"
 
 # ---- recovery lever ---------------------------------------------------------------
 if [ -n "$PINNED" ]; then
@@ -158,11 +178,11 @@ if [ -n "$PINNED" ]; then
   if ! fetch_artifact "$PINNED" ".db_pinned"; then
     alarm "Pinned artifact \`$PINNED\` could not be downloaded."; exit 1
   fi
-  read -r p_total p_actuals p_overdue <<<"$(db_stats ".db_pinned/earnings_events.db")"
+  read -r p_total p_actuals p_overdue p_kv <<<"$(db_stats ".db_pinned/earnings_events.db")"
   if [ -z "${p_total:-}" ]; then
     alarm "Pinned artifact \`$PINNED\` is unreadable."; exit 1
   fi
-  log "pinned artifact: events=$p_total actuals=$p_actuals past-due-without-actuals=$p_overdue"
+  log "pinned artifact: events=$p_total actuals=$p_actuals past-due-without-actuals=$p_overdue kv_store=$p_kv"
   cp ".db_pinned/earnings_events.db" "$DB" || exit 1
   log "restored from pinned artifact $PINNED."
   exit 0
@@ -188,9 +208,9 @@ fi
 best_actuals="$cur_actuals"; best_id=""; best_overdue="$cur_overdue"
 for aid in "${ids[@]}"; do
   fetch_artifact "$aid" ".db_cand" || { log "  artifact $aid: download failed"; continue; }
-  read -r a_total a_actuals a_overdue <<<"$(db_stats ".db_cand/earnings_events.db")"
+  read -r a_total a_actuals a_overdue a_kv <<<"$(db_stats ".db_cand/earnings_events.db")"
   if [ -z "${a_total:-}" ]; then log "  artifact $aid: unreadable"; continue; fi
-  log "  artifact $aid: events=$a_total actuals=$a_actuals past-due-without-actuals=$a_overdue"
+  log "  artifact $aid: events=$a_total actuals=$a_actuals past-due-without-actuals=$a_overdue kv_store=$a_kv"
   # A candidate must be strictly richer on BOTH axes before it is allowed to overwrite
   # what is on disk. Actuals alone is not a safe ranking: overwriting the working copy
   # discards date locks, kv_store watermarks, Slack thread state and ticktick_task_id
