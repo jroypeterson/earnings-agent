@@ -126,7 +126,43 @@ When sources disagree on the press-release date, the agent's tiebreaker order:
 - **`--dry-run` is NOT side-effect-free (clarified 2026-06-04).** It skips Calendar/TickTick/Slack writes and the `reported` flag, but DOES upsert events + estimate snapshots into SQLite — the daily/weekly CI jobs depend on this seeding. `--populate-db-only` is a self-documenting alias (folds to `dry_run=True` right after `parse_args`); the `weekly_digest.yml` + `post_earnings_check.yml` populate steps use it. `pip install -r requirements-dev.txt` for pytest.
 - **`run()` shares `notify_results()` with `run_check_results`** — the 6 AM daily sync also posts Slack alerts when it detects overnight AMC actuals. Don't re-post from a separate path.
 - **Stock-move deferral (added 2026-05-07).** `fetch_post_earnings_move` returns `None` when the comparison close hasn't posted yet — for AMC events that's close X+1, which only exists by the post_earnings_check 22:37 UTC sweep on day X+1 (NOT the same-day sweep at X 22:37 UTC, NOR the next-morning daily sync at X+1 11:13 UTC). `_should_defer_post()` (in `main.py`) holds the Slack post + `reported=1` flag back when move is None and event is ≤3 calendar days old; cap at 3 days covers Fri-AMC → Mon close. Both `run()` and `run_check_results` consult the helper. Crucially `run()` no longer marks `reported=True` in `--dry-run` mode (the populate step in `post_earnings_check.yml` was previously poisoning the well by silently flipping `reported=1` without posting). When deferral expires without ever computing a move (delisted ticker, yfinance broken), `_alert_move_unavailable()` posts a `:warning:` alert to `#status-reports` AND the inline line shows "Stock data unavailable ⚠️" — failures are visible, not silent. See `feedback_no_silent_fails.md` memory.
-- **Results Slack layout (refactored 2026-05-07; subgroups expanded 2026-05-11; markers moved to line prefix 2026-05-18; ticker chip switched 2026-05-27; report-timing segment added 2026-06-20).** Mirrors the sigma-alert `#stock-price-alerts` pattern: top-level **tier headers** (Tier 1 / Tier 2 / Tier 3 with emoji + count), **mutually-exclusive subgroup** sub-headers within each tier (priority: Portfolio > Researching > Ready to Buy > Ready to Short > Following for Interest > Healthcare Services > MedTech > Large Pharma > Other), and a **compact one-line per ticker** with three per-metric color markers (EPS · Rev · Stock) at the **start** of the line so they align in a fixed column: `` 🟩 🟩 🟥  `AAPL` Apple · Thu Jun 18 AMC · call Fri 8:00 AM ET · EPS $X/$Y +Z% · Rev $A/$B +C% · Stock -M% (1d) ``. The **report-timing segment** (right after the name, PROJECT_IDEAS #531) shows when the company reported (`_fmt_date_safe` date) + the BMO/AMC/DMH/TBD session + — when `call_datetime_utc` is known — the conference-call timing as either `call same day H:MM AM/PM ET` or `call <Wkd> H:MM AM/PM ET` (the next-morning-vs-same-day distinction JP wanted). Renderers: `_fmt_results_timing()` + `_fmt_call_compact()` in `notifications.py`; `ResultRow.call_datetime_utc` populated at both construction sites in `main.py` (the `_record_actuals` sync path and `run_check_results`). Ticker is rendered as a backtick-monospace chip — matches the weekly digest convention (`_row_line`) and the cross-project standard (sigma-alert switched at the same time). Markers: `🟩` beat/up, `🟥` miss/down, `⬜` N/A (EPS/Rev), `⚠️` stock-data unavailable. Marker helpers in `notifications.py`: `_beat_marker()` for EPS/Rev, `_move_marker()` for stock. Subgroups are mutually exclusive (vs sigma-alert's duplicated). `ResultRow` carries `sector`, `subsector`, `position` (populated at construction sites in `main.py` from `coverage_map`). The five Position-derived subgroups all rank above sector-derived ones, so a Following-for-Interest ticker in Tech still renders under its Position label rather than "Other". `_short_company_name()` strips corporate suffixes for compactness. S&P 500 subgroup intentionally skipped — earnings_agent doesn't load the S&P universe.
+- **Results Slack layout (refactored 2026-05-07; subgroups expanded 2026-05-11; markers moved to line prefix 2026-05-18; ticker chip switched 2026-05-27; report-timing segment added 2026-06-20; Biopharma subgroup + legend + overflow 2026-08-26).** Mirrors the sigma-alert `#stock-price-alerts` pattern: top-level **tier headers** (Tier 1 / Tier 2 / Tier 3 with emoji + count), **mutually-exclusive subgroup** sub-headers within each tier (priority: Portfolio > Researching > Ready to Buy > Ready to Short > Following for Interest > Healthcare Services > MedTech > Large Pharma > Biopharma > Other), and a **compact one-line per ticker** with three per-metric color markers (EPS · Rev · Stock) at the **start** of the line so they align in a fixed column: `` 🟩 🟩 🟥  `AAPL` Apple · Thu Jun 18 AMC · call Fri 8:00 AM ET · EPS $X/$Y +Z% · Rev $A/$B +C% · Stock -M% (1d) ``. The **report-timing segment** (right after the name, PROJECT_IDEAS #531) shows when the company reported (`_fmt_date_safe` date) + the BMO/AMC/DMH/TBD session + — when `call_datetime_utc` is known — the conference-call timing as either `call same day H:MM AM/PM ET` or `call <Wkd> H:MM AM/PM ET` (the next-morning-vs-same-day distinction JP wanted). Renderers: `_fmt_results_timing()` + `_fmt_call_compact()` in `notifications.py`; `ResultRow.call_datetime_utc` populated at both construction sites in `main.py` (the `_record_actuals` sync path and `run_check_results`). Ticker is rendered as a backtick-monospace chip — matches the weekly digest convention (`_row_line`) and the cross-project standard (sigma-alert switched at the same time). Markers: `🟩` beat/up, `🟥` miss/down, `⬜` N/A (EPS/Rev), `⚠️` stock-data unavailable. Marker helpers in `notifications.py`: `_beat_marker()` for EPS/Rev, `_move_marker()` for stock. Subgroups are mutually exclusive (vs sigma-alert's duplicated). `ResultRow` carries `sector`, `subsector`, `position` (populated at construction sites in `main.py` from `coverage_map`). The five Position-derived subgroups all rank above sector-derived ones, so a Following-for-Interest ticker in Tech still renders under its Position label rather than "Other". `_short_company_name()` strips corporate suffixes for compactness. S&P 500 subgroup intentionally skipped — earnings_agent doesn't load the S&P universe.
+
+  **Board #298, 2026-08-26 (parts 1 and 3 of the row; the guidance square is NOT built — see
+  `PLAN_298.md`).** Three changes, plus four defects found in adversarial review that the
+  447-test suite did not catch:
+
+  - **`Biopharma` is now its own subgroup**, checked in `_results_subcategory()` **AFTER** the
+    `Large Pharma` subsector check. That order is load-bearing: LLY is sector Biopharma /
+    subsector Large Pharma, and #298 asked only that biopharma stop falling into "Other" — a
+    sector-first check silently relocates every Large Pharma name.
+  - **A legend** names the squares, generated from `_RESULT_MARKER_SLOTS` — the same tuple that
+    renders the line, so the two cannot drift. Adding a 4th slot there makes it appear in both.
+    It lives in the **first context block**: a crowded card spends its budget on results, so a
+    legend appended last is the first thing squeezed off.
+  - **`_results_tier_label()` reads `config`** instead of respelling the labels. It said "HC
+    Services + MedTech" while `config.TIER_2_LABEL` had said "+ Core Biopharma" since
+    2026-08-06, so the card could print a Biopharma subgroup under a header denying Biopharma
+    existed.
+  - **The card NEVER drops a row.** It used to `return` at `SLACK_MAX_BLOCKS` from inside the
+    subgroup loop while both callers went on to mark every input row `reported=1` — omitted
+    rows were never rendered again. Budget is now checked BEFORE committing a subgroup; a
+    subgroup that does not fit renders its largest fitting prefix as `(K of N shown)` and the
+    remainder becomes a compact "Also reported" ticker list. **All overflow counts are ROW
+    counts, not deduped tickers** — the Finnhub/FMP merge permits duplicate rows, and counting
+    tickers made the card state "+54 more not shown" over 55 unrendered rows.
+  - `SLACK_MAX_BLOCKS` is now genuinely enforced (one 2,000-row subgroup produced **69** blocks
+    against Slack's hard 50, failing the whole post), and `_chunk_result_section()` splits a
+    line longer than the section budget rather than emitting an oversized block.
+  - `build_results_fallback_text()` no longer counts a **missing** EPS as a beat — a
+    revenue-only row read "1 beat, 0 miss on EPS" beside a ⬜ in the card.
+
+  ⚠ **Regression tests here must be mutation-checked.** The first set passed against the
+  pre-fix build. `test_results_legend_and_biopharma.py` now asserts a row-level accounting
+  invariant (every input row rendered, named, or covered by an exact `+N more not shown`) and
+  carries guard assertions that the fixture actually reaches the overflow path — two fixtures
+  were silently vacuous before that.
+
 - **DB artifact is shared across three workflows.** `daily_earnings_check`, `reconcile_calendar`, `post_earnings_check` all restore/upload the `earnings-db` artifact. They share the `concurrency: group: earnings-db-writer` setting so they serialize and don't clobber each other. `weekly_digest` doesn't persist the DB so it's not in the group.
 - **An event can now close WITHOUT reporting — `closed_reason` (v13, 2026-08-07).** `reported = 0` was the entire definition of "still waiting to happen", which stops being true the moment the universe churns: a company that has been **acquired** can never report, so its event sits unreported forever. Measured 2026-08-06: **51 of 160** past-dated unreported rows belonged to tickers that had left coverage — APLS→Biogen, EXAS→Abbott, FOLD→BioMarin, CFLT→IBM, SEMR→Adobe — the oldest **98 days**. Nothing flagged them, because every alerting loop skips a ticker absent from `coverage_map`. That guard is right on its own terms (dead names would otherwise alert forever) but its side effect is that **leaving the universe stops the only lane that would notice.**
   - **`storage.OPEN_EVENT_SQL` is the ONE definition of open** (`reported = 0 AND closed_reason IS NULL`), and every query goes through it — main.py, ticktick.py, storage.py, consensus_preview.py, scripts/export_upcoming_events.py. A terminal state only *some* call sites honour is worse than none: the digest would drop a closed event while TickTick kept nagging about it. Same shape as portfolio_daily's two account rosters, where editing one was a silent half-fix. `test_no_query_filters_on_a_bare_reported_flag` scans the live source so a query added later cannot skip it — **and it must match `COALESCE(reported, 0) = 0` too**, which is what the first draft of that scan missed: three real queries were written that way and a literal `reported = 0` search walks straight past them.
@@ -362,6 +398,18 @@ Same keys as above (minus the JSON-blob form of Google creds — local uses the 
 - `scripts/migrate_ticktick_tags.py` — one-shot: strip legacy `[REPORTED] ` title prefixes and apply sector / Position / `Reported` tags beyond the reconcile's window.
 - `season_progress.py` — portfolio season roster + post-earnings reaction (move / sigma / vs SPY) + the settle-on-reaction watermark. See the section below.
 - `season_render.py` — fixed-width Slack tables for the progress card and the Sunday forward calendar.
+- `consensus_preview.py` — the upcoming-reporters preview. **Also holds the forward ANNUAL
+  Street consensus fetchers added 2026-08-26 for board #298 part 2** (`AnnualConsensus`,
+  `fetch_fmp_annual_estimates`, `fetch_fmp_reported_currency`). **Nothing consumes them yet.**
+  Two traps they encode:
+  - `fetch_fmp_estimate_range()` (QUARTERLY) is a deliberate no-op — 402-gated on FMP Starter.
+    The **annual** period is NOT gated, which is why the new fetcher exists alongside it.
+  - **Never take currency from `/stable/profile`.** For NVO its `currency` field returns **USD**
+    — the ADR's *trading* currency — while the company reports in **DKK** (revenue
+    309,064,000,000 DKK). `income-statement.reportedCurrency` is the one that agrees with the
+    figures. `analyst-estimates` carries no currency at all, so it must be joined in, and it
+    defaults to `None` rather than USD: a comparison must **abstain**, never assume.
+
 
 ## Public earnings calendar page (`docs/index.html`)
 
