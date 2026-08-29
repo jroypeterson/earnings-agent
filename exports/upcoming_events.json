@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-08-28T21:23:19Z",
+  "generated_at": "2026-08-29T02:20:21Z",
   "window": {
-    "start": "2026-08-26",
-    "end": "2026-09-11"
+    "start": "2026-08-27",
+    "end": "2026-09-12"
   },
   "counts": {
-    "events": 66
+    "events": 65
   },
   "events": [
     {
@@ -297,15 +297,6 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Five Below Inc"
-    },
-    {
-      "ticker": "FPS",
-      "event_date": "2026-09-02",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Forgent Power Solutions, Inc."
     },
     {
       "ticker": "GNTA",
