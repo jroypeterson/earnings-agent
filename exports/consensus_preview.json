@@ -1,83 +1,13 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-08-29T02:20:21Z",
+  "generated_at": "2026-08-29T15:39:20Z",
   "window": {
     "start": "2026-08-29",
     "end": "2026-09-01"
   },
   "counts": {
-    "previews": 1
+    "previews": 0
   },
-  "previews": [
-    {
-      "ticker": "MMED",
-      "company_name": "MiniMed Group Inc",
-      "tier": 1,
-      "event_date": "2026-09-01",
-      "event_hour": "bmo",
-      "call_datetime_utc": "2026-09-01T20:00:00+00:00",
-      "last_price": 20.100000381469727,
-      "day_change_pct": 3.0240909567724024,
-      "consensus": {
-        "eps": {
-          "mean": 0.1008,
-          "count": null,
-          "low": null,
-          "high": null
-        },
-        "revenue": {
-          "mean": 842838648.0,
-          "count": null,
-          "low": null,
-          "high": null
-        }
-      },
-      "qtd": {
-        "since": "2026-06-30",
-        "ticker_pct": 34.44816480206856,
-        "spx_pct": 3.023682722139945,
-        "sector_etf": "IHI",
-        "sector_etf_pct": 11.698034400215866
-      },
-      "implied_move": {
-        "pct": 15.9,
-        "expiry": "2026-09-18",
-        "method": "ATM straddle",
-        "notes": [
-          "(includes 17 extra days of time value)"
-        ]
-      },
-      "post_earnings_moves": [
-        {
-          "event_date": "2026-06-03",
-          "move_pct": 15.93495941262967,
-          "window_label": "earnings-day close vs prior close"
-        },
-        {
-          "event_date": "2026-04-17",
-          "move_pct": -4.362875201343175,
-          "window_label": "next-day close vs earnings-day close"
-        }
-      ],
-      "beat_rates": {
-        "eps": {
-          "beats": 0,
-          "total": 2,
-          "source": "yfinance"
-        },
-        "revenue": {
-          "beats": 2,
-          "total": 2,
-          "source": "fmp"
-        }
-      },
-      "na_fields": [
-        {
-          "field": "consensus.eps.range",
-          "reason": "estimate range not available on FMP Starter plan"
-        }
-      ]
-    }
-  ]
+  "previews": []
 }
