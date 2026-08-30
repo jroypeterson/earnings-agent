@@ -1,87 +1,15 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-08-29T15:39:21Z",
+  "generated_at": "2026-08-30T15:21:58Z",
   "window": {
-    "start": "2026-08-27",
-    "end": "2026-09-12"
+    "start": "2026-08-28",
+    "end": "2026-09-13"
   },
   "counts": {
-    "events": 65
+    "events": 58
   },
   "events": [
-    {
-      "ticker": "ANAB",
-      "event_date": "2026-08-27",
-      "event_hour": "amc",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "AnaptysBio Inc"
-    },
-    {
-      "ticker": "BRTX",
-      "event_date": "2026-08-27",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "BioRestorative Therapies, Inc."
-    },
-    {
-      "ticker": "CASIF",
-      "event_date": "2026-08-27",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "CASI Pharmaceuticals Inc"
-    },
-    {
-      "ticker": "CELU",
-      "event_date": "2026-08-27",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Celularity Inc"
-    },
-    {
-      "ticker": "DOMO",
-      "event_date": "2026-08-27",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Domo Inc"
-    },
-    {
-      "ticker": "ENLV",
-      "event_date": "2026-08-27",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Enlivex Therapeutics Ltd."
-    },
-    {
-      "ticker": "NRSN",
-      "event_date": "2026-08-27",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "NeuroSense Therapeutics Ltd."
-    },
-    {
-      "ticker": "OBX",
-      "event_date": "2026-08-28",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Obsidian Therapeutics Inc."
-    },
     {
       "ticker": "ADAPY",
       "event_date": "2026-08-31",
@@ -144,6 +72,15 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Eagle Pharmaceuticals Inc"
+    },
+    {
+      "ticker": "OBX",
+      "event_date": "2026-08-31",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Obsidian Therapeutics Inc."
     },
     {
       "ticker": "RDHL",
