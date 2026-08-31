@@ -1,97 +1,13 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-08-30T15:21:58Z",
+  "generated_at": "2026-08-31T18:01:50Z",
   "window": {
-    "start": "2026-08-30",
-    "end": "2026-09-02"
+    "start": "2026-08-31",
+    "end": "2026-09-03"
   },
   "counts": {
-    "previews": 1
+    "previews": 0
   },
-  "previews": [
-    {
-      "ticker": "FIVE",
-      "company_name": "Five Below Inc",
-      "tier": 1,
-      "event_date": "2026-09-02",
-      "event_hour": "amc",
-      "call_datetime_utc": null,
-      "last_price": 241.88999938964844,
-      "day_change_pct": -2.060894171974056,
-      "consensus": {
-        "eps": {
-          "mean": 1.3645,
-          "count": null,
-          "low": null,
-          "high": null
-        },
-        "revenue": {
-          "mean": 1235786691.0,
-          "count": null,
-          "low": null,
-          "high": null
-        }
-      },
-      "qtd": {
-        "since": "2026-06-30",
-        "ticker_pct": 34.540301697817235,
-        "spx_pct": 3.023682722139945,
-        "sector_etf": null,
-        "sector_etf_pct": null
-      },
-      "implied_move": {
-        "pct": 10.6,
-        "expiry": "2026-09-18",
-        "method": "ATM straddle",
-        "notes": [
-          "(includes 15 extra days of time value)"
-        ]
-      },
-      "post_earnings_moves": [
-        {
-          "event_date": "2026-06-03",
-          "move_pct": -13.782583922484337,
-          "window_label": "next-day close vs earnings-day close"
-        },
-        {
-          "event_date": "2026-03-18",
-          "move_pct": 10.683859753294103,
-          "window_label": "next-day close vs earnings-day close"
-        },
-        {
-          "event_date": "2025-12-03",
-          "move_pct": 3.2301590374589026,
-          "window_label": "next-day close vs earnings-day close"
-        },
-        {
-          "event_date": "2025-08-27",
-          "move_pct": 3.891693770978061,
-          "window_label": "next-day close vs earnings-day close"
-        }
-      ],
-      "beat_rates": {
-        "eps": {
-          "beats": 16,
-          "total": 20,
-          "source": "yfinance"
-        },
-        "revenue": {
-          "beats": 13,
-          "total": 20,
-          "source": "fmp"
-        }
-      },
-      "na_fields": [
-        {
-          "field": "qtd.sector_etf",
-          "reason": "no mapped ETF for sector 'Consumer'"
-        },
-        {
-          "field": "consensus.eps.range",
-          "reason": "estimate range not available on FMP Starter plan"
-        }
-      ]
-    }
-  ]
+  "previews": []
 }
