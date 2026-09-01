@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-08-31T23:16:42Z",
+  "generated_at": "2026-09-01T15:29:59Z",
   "window": {
-    "start": "2026-08-29",
-    "end": "2026-09-14"
+    "start": "2026-08-30",
+    "end": "2026-09-15"
   },
   "counts": {
     "events": 59
@@ -29,15 +29,6 @@
       "company_name": "Ampio Pharmaceuticals Inc"
     },
     {
-      "ticker": "ANAB",
-      "event_date": "2026-08-31",
-      "event_hour": "amc",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "AnaptysBio Inc"
-    },
-    {
       "ticker": "CALA",
       "event_date": "2026-08-31",
       "event_hour": "",
@@ -45,15 +36,6 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Calithera Biosciences Inc"
-    },
-    {
-      "ticker": "CANF",
-      "event_date": "2026-08-31",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Can Fite Biopharma ADR Representing 300 Ord Shs"
     },
     {
       "ticker": "EFTR",
@@ -146,24 +128,6 @@
       "company_name": "Mongodb Inc"
     },
     {
-      "ticker": "MDT",
-      "event_date": "2026-09-01",
-      "event_hour": "bmo",
-      "tier": 2,
-      "date_confirmed": true,
-      "call_datetime_utc": "2026-09-01T20:00:00+00:00",
-      "company_name": "Medtronic plc"
-    },
-    {
-      "ticker": "MMED",
-      "event_date": "2026-09-01",
-      "event_hour": "bmo",
-      "tier": 1,
-      "date_confirmed": true,
-      "call_datetime_utc": "2026-09-01T20:00:00+00:00",
-      "company_name": "MiniMed Group Inc"
-    },
-    {
       "ticker": "PANW",
       "event_date": "2026-09-01",
       "event_hour": "amc",
@@ -173,13 +137,13 @@
       "company_name": "Palo Alto Networks Inc"
     },
     {
-      "ticker": "YEXT",
-      "event_date": "2026-09-01",
-      "event_hour": "bmo",
+      "ticker": "ANAB",
+      "event_date": "2026-09-02",
+      "event_hour": "amc",
       "tier": 3,
       "date_confirmed": true,
       "call_datetime_utc": null,
-      "company_name": "Yext Inc"
+      "company_name": "AnaptysBio Inc"
     },
     {
       "ticker": "APMD",
@@ -191,6 +155,15 @@
       "company_name": "Apnimed, Inc."
     },
     {
+      "ticker": "ATTO",
+      "event_date": "2026-09-02",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Attovia Therapeutics, Inc."
+    },
+    {
       "ticker": "AVGO",
       "event_date": "2026-09-02",
       "event_hour": "amc",
@@ -198,6 +171,15 @@
       "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "Broadcom Inc."
+    },
+    {
+      "ticker": "BRVE",
+      "event_date": "2026-09-02",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Braveheart Bio, Inc."
     },
     {
       "ticker": "CXM",
@@ -243,15 +225,6 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Hoth Therapeutics Inc"
-    },
-    {
-      "ticker": "IMMP",
-      "event_date": "2026-09-02",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Immutep Ltd - ADR"
     },
     {
       "ticker": "JMKE",
@@ -540,6 +513,33 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Oracle Corp"
+    },
+    {
+      "ticker": "FPS",
+      "event_date": "2026-09-15",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Forgent Power Solutions, Inc."
+    },
+    {
+      "ticker": "PLUR",
+      "event_date": "2026-09-15",
+      "event_hour": "amc",
+      "tier": 3,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Pluri Inc."
+    },
+    {
+      "ticker": "RZLT",
+      "event_date": "2026-09-15",
+      "event_hour": "amc",
+      "tier": 3,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Rezolute Inc"
     }
   ]
 }
