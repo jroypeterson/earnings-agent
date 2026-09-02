@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-09-02T17:18:46Z",
+  "generated_at": "2026-09-02T21:56:24Z",
   "window": {
     "start": "2026-08-31",
     "end": "2026-09-16"
   },
   "counts": {
-    "events": 60
+    "events": 58
   },
   "events": [
     {
@@ -137,15 +137,6 @@
       "company_name": "Apnimed, Inc."
     },
     {
-      "ticker": "ATTO",
-      "event_date": "2026-09-02",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Attovia Therapeutics, Inc."
-    },
-    {
       "ticker": "AVGO",
       "event_date": "2026-09-02",
       "event_hour": "amc",
@@ -184,9 +175,9 @@
     {
       "ticker": "FIVE",
       "event_date": "2026-09-02",
-      "event_hour": "",
+      "event_hour": "amc",
       "tier": 1,
-      "date_confirmed": false,
+      "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "Five Below Inc"
     },
@@ -279,15 +270,6 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Kuvatris Therapeutics Inc"
-    },
-    {
-      "ticker": "SCTX",
-      "event_date": "2026-09-02",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Scribe Therapeutics Inc."
     },
     {
       "ticker": "SNOW",
