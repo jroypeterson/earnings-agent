@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-09-04T14:58:00Z",
+  "generated_at": "2026-09-04T21:36:01Z",
   "window": {
     "start": "2026-09-02",
     "end": "2026-09-18"
   },
   "counts": {
-    "events": 29
+    "events": 28
   },
   "events": [
     {
@@ -63,15 +63,6 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Kazia Therapeutics Ltd ADR"
-    },
-    {
-      "ticker": "NTRB",
-      "event_date": "2026-09-07",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Nutriband Inc."
     },
     {
       "ticker": "ALZN",
