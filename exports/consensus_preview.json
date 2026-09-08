@@ -1,13 +1,95 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-09-08T15:06:33Z",
+  "generated_at": "2026-09-08T21:57:26Z",
   "window": {
     "start": "2026-09-08",
     "end": "2026-09-11"
   },
   "counts": {
-    "previews": 0
+    "previews": 1
   },
-  "previews": []
+  "previews": [
+    {
+      "ticker": "CPRT",
+      "company_name": "Copart Inc.",
+      "tier": 1,
+      "event_date": "2026-09-10",
+      "event_hour": "amc",
+      "call_datetime_utc": "2026-09-10T21:30:00+00:00",
+      "last_price": 32.599998474121094,
+      "day_change_pct": -3.321478962148973,
+      "consensus": {
+        "eps": {
+          "mean": 0.3898,
+          "count": null,
+          "low": null,
+          "high": null
+        },
+        "revenue": {
+          "mean": 1163345190.0,
+          "count": null,
+          "low": null,
+          "high": null
+        }
+      },
+      "qtd": {
+        "since": "2026-06-30",
+        "ticker_pct": 15.643837731523128,
+        "spx_pct": 2.569733912651164,
+        "sector_etf": null,
+        "sector_etf_pct": null
+      },
+      "implied_move": {
+        "pct": 7.4,
+        "expiry": "2026-09-18",
+        "method": "ATM straddle",
+        "notes": []
+      },
+      "post_earnings_moves": [
+        {
+          "event_date": "2026-05-21",
+          "move_pct": -1.7732575095750005,
+          "window_label": "next-day close vs earnings-day close"
+        },
+        {
+          "event_date": "2026-02-19",
+          "move_pct": -3.1075748638107537,
+          "window_label": "next-day close vs earnings-day close"
+        },
+        {
+          "event_date": "2025-11-20",
+          "move_pct": -0.7069744326939825,
+          "window_label": "next-day close vs earnings-day close"
+        },
+        {
+          "event_date": "2025-09-04",
+          "move_pct": -2.8016839937535765,
+          "window_label": "next-day close vs earnings-day close"
+        }
+      ],
+      "beat_rates": {
+        "eps": {
+          "beats": 16,
+          "total": 20,
+          "source": "yfinance"
+        },
+        "revenue": {
+          "beats": 13,
+          "total": 20,
+          "source": "fmp"
+        }
+      },
+      "na_fields": [
+        {
+          "field": "qtd.sector_etf",
+          "reason": "no mapped ETF for sector 'Industrials'"
+        },
+        {
+          "field": "consensus.eps.range",
+          "reason": "estimate range not available on FMP Starter plan"
+        }
+      ]
+    }
+  ]
 }
