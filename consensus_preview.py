@@ -228,6 +228,15 @@ class PreviewRow:
     eps_beat: BeatRate = field(default_factory=lambda: BeatRate(None, None, "yfinance"))
     rev_beat: BeatRate = field(default_factory=lambda: BeatRate(None, None, "fmp"))
 
+    # Guidance the company itself put out for the quarter it is about to
+    # report, lifted from the PRIOR quarter's 8-K EX-99. This is the
+    # "vs guidance" column StreetAccount prints beside consensus, and it is
+    # the thing that says whether the number the Street expects is one
+    # management has already endorsed.
+    guidance_lines: list[str] = field(default_factory=list)
+    guidance_source_url: Optional[str] = None
+    guidance_as_of: Optional[str] = None
+
     na_notes: list[str] = field(default_factory=list)
     na_fields: list[dict] = field(default_factory=list)
 
@@ -1052,7 +1061,79 @@ def _build_row(
     else:
         row.mark_na("beat_rates.revenue", "no FMP_API_KEY — revenue beat n/a")
 
+    # --- Guidance the company already gave for THIS quarter ---
+    try:
+        attach_prior_guidance(conn, row)
+    except Exception as exc:  # noqa: BLE001 - never lose the row over guidance
+        row.mark_na("guidance", f"lookup failed ({exc.__class__.__name__})")
+        logger.debug(f"guidance error {rep.ticker}: {exc}")
+
     return row
+
+
+def attach_prior_guidance(conn: sqlite3.Connection, row: PreviewRow) -> None:
+    """Fill row.guidance_lines from the company's PREVIOUS earnings release.
+
+    StreetAccount's preview prints "Revenue $1.22B vs guidance $1.18-1.20B" —
+    consensus beside the company's own outlook. Consensus alone does not say
+    whether the Street's number is one management has endorsed, and the gap
+    between the two is usually the setup.
+
+    The outlook for the quarter about to be reported was issued at the LAST
+    print, so this reads the prior 8-K, not the upcoming one. Deterministic:
+    the same regex extractor `--daily-summary` uses, no LLM and no key.
+    """
+    prior = conn.execute(
+        "SELECT event_date FROM events"
+        " WHERE ticker = ? AND event_date < ?"
+        "   AND (reported = 1 OR eps_actual IS NOT NULL)"
+        " ORDER BY event_date DESC LIMIT 1",
+        (row.ticker, row.event_date),
+    ).fetchone()
+    if not prior:
+        row.mark_na("guidance", "no prior reported quarter on file")
+        return
+
+    prior_date = _parse_iso_date(prior[0])
+    if prior_date is None:
+        row.mark_na("guidance", "prior quarter has an unparseable date")
+        return
+
+    import edgar_client
+    from daily_summary import (extract_guidance_blocks, extract_guidance_lines,
+                                rank_guidance_lines)
+
+    filing = edgar_client.find_earnings_release_filing(
+        row.ticker, prior_date - timedelta(days=3), prior_date + timedelta(days=5)
+    )
+    if not filing:
+        row.mark_na("guidance", f"no 8-K Item 2.02 for the {prior[0]} print")
+        return
+    doc = edgar_client.fetch_release_document(row.ticker, filing)
+    if not doc or not doc.text:
+        row.mark_na("guidance", f"8-K {filing.accession} carries no readable EX-99")
+        return
+
+    # Prefer the sectioned extractor: it reads the period from the heading and
+    # the FIGURES from the bullets beneath, which is how a release is actually
+    # organised. Fall back to the sentence-level one for issuers that guide in
+    # running prose under no heading -- Five Below's own Q2 release is laid out
+    # that way, so both paths are load-bearing on the same company.
+    lines: list[str] = []
+    for block in extract_guidance_blocks(doc.text):
+        for text_line in block.lines:
+            lines.append(f"{block.label}: {text_line}" if block.label else text_line)
+    if not lines:
+        lines = rank_guidance_lines(extract_guidance_lines(doc.text, limit=10))
+
+    if not lines:
+        # A release with no forward statement is a fact about the company, not
+        # a failure of the reader, so it is not marked as a degradation.
+        logger.info("%s: prior release had no guidance sentence", row.ticker)
+        return
+    row.guidance_lines = lines
+    row.guidance_source_url = doc.url
+    row.guidance_as_of = prior[0]
 
 
 # ---------------------------------------------------------------------------
@@ -1169,40 +1250,83 @@ def _render_estimate_range(er: EstimateRange) -> str:
 
 
 def _render_row_lines(row: PreviewRow) -> list[str]:
-    """The full set of spec §-scope lines for one reporter (fallback text)."""
+    """One reporter, in the shared card format.
+
+    SECTION ORDER IS FIXED AND SHARED WITH THE REVIEW CARD: Metrics, Guidance,
+    Setup/Reaction, Call/Takeaways, then what was unavailable. JP, 2026-09-09:
+    *"The consensus preview looks messy. Lets use bullets or something so that
+    I can tell what each line is about more quickly"* — so every line is a
+    bullet under a bold section label, and no line depends on the reader
+    remembering the order of a run-on sentence.
+
+    Modelled on StreetAccount's own Consensus Metrics Preview, which puts
+    consensus and the company's own guidance side by side. That pairing is the
+    point: consensus alone does not say whether management has endorsed it.
+    """
     badge = _timing_badge(row.event_hour)
     name = row.company_name or row.ticker
     day = f" ({_fmt_pct(row.day_change_pct)} day)" if row.day_change_pct is not None else ""
 
-    header = (
-        f"`{row.ticker}` {name} — {_fmt_short_date(row.event_date)} · {badge} · "
-        f"{_fmt_price(row.last_price)}{day}"
-    )
+    lines = [
+        f"*`{row.ticker}` {name}* — {_fmt_short_date(row.event_date)} · {badge} · "
+        f"{_fmt_price(row.last_price)}{day}",
+        "*Metrics* _(Street consensus)_",
+        f"  • EPS  {_fmt_eps(row.eps_mean)}",
+        f"  • Rev  {_fmt_rev(row.rev_mean)}",
+        f"  • Range  {_render_estimate_range(row.eps_range)}",
+        "*Guidance* _(company, from last quarter's 8-K)_",
+    ]
 
-    consensus = (
-        f"Consensus: EPS {_fmt_eps(row.eps_mean)} · Rev {_fmt_rev(row.rev_mean)} · "
-        f"{_render_estimate_range(row.eps_range)}"
-    )
+    if row.guidance_lines:
+        # Group by the period label the sectioned extractor prefixed, so
+        # "For the second quarter of Fiscal 2026" is stated once rather than
+        # on every bullet. Unlabelled lines (the prose fallback) group under "".
+        grouped: list[tuple[str, list[str]]] = []
+        for g in row.guidance_lines[:6]:
+            label, _, body = g.partition(": ")
+            if not body:
+                label, body = "", g
+            if grouped and grouped[-1][0] == label:
+                grouped[-1][1].append(body)
+            else:
+                grouped.append((label, [body]))
+        shown = 0
+        for label, bodies in grouped:
+            if shown >= 4:
+                break
+            if label:
+                lines.append(f"  • _{label}_")
+            for body in bodies:
+                if shown >= 4:
+                    break
+                lines.append(f"     – {body[:200]}")
+                shown += 1
+        if row.guidance_source_url:
+            lines.append(f"  • <{row.guidance_source_url}|source> "
+                         f"({row.guidance_as_of or 'prior quarter'})")
+    else:
+        lines.append("  • none stated in the prior release")
 
     qtd_bits = [f"{row.ticker} {_fmt_pct(row.qtd_ticker_pct)}",
-                f"S&P 500 (SPY) {_fmt_pct(row.qtd_spx_pct)}"]
+                f"S&P 500 {_fmt_pct(row.qtd_spx_pct)}"]
     if row.sector_etf:
         qtd_bits.append(
             f"{row.sector_etf_label} ({row.sector_etf}) {_fmt_pct(row.sector_etf_pct)}"
         )
     else:
-        qtd_bits.append("sector ETF n/a (no mapped ETF)")
-    qtd = f"QTD since {_fmt_short_date(row.qtd_since)}: " + " · ".join(qtd_bits)
+        qtd_bits.append("sector n/a")
 
-    implied = _render_implied_move(row.implied_move)
-    post = _render_post_moves(row.post_moves)
-    beats = (
-        f"{_render_beat_rate(row.eps_beat, 'EPS beat rate')} · "
-        f"{_render_beat_rate(row.rev_beat, 'Rev beat rate')}"
-    )
-    call = f"Conference call: {_fmt_call_et(row.call_datetime_utc, row.event_date)}"
-
-    return [header, consensus, qtd, implied, post, beats, call]
+    lines.extend([
+        "*Setup*",
+        f"  • Since {_fmt_short_date(row.qtd_since)}  " + " · ".join(qtd_bits),
+        f"  • {_render_implied_move(row.implied_move)}",
+        f"  • {_render_post_moves(row.post_moves)}",
+        f"  • {_render_beat_rate(row.eps_beat, 'EPS beat rate')} · "
+        f"{_render_beat_rate(row.rev_beat, 'Rev beat rate')}",
+        "*Call*",
+        f"  • {_fmt_call_et(row.call_datetime_utc, row.event_date)}",
+    ])
+    return lines
 
 
 # ---------------------------------------------------------------------------

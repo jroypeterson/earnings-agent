@@ -610,3 +610,149 @@ def build_slack_blocks(rows: list[SummaryRow], target: date) -> list[dict]:
                 {"type": "mrkdwn", "text": " · ".join(ctx)}]})
 
     return blocks
+
+
+# ---------------------------------------------------------------------------
+# Sectioned guidance — the numbers, not the heading above them
+#
+# WHY extract_guidance_lines IS NOT ENOUGH (2026-09-09)
+# ----------------------------------------------------
+# It requires the period AND the verb in the SAME sentence. A well-structured
+# release states the period once, in a heading, and lets the bullets under it
+# inherit it. Five Below's Q1 FY26 release is the reference case:
+#
+#   "Second Quarter and Fiscal 2026 Outlook:"                  <- period, no figures
+#     - "Net sales are expected to be in the range of $1.18
+#        billion to $1.20 billion ... an approximate 7% to 9%
+#        increase in comparable sales."                        <- figures, no period
+#
+# So the sentence-level extractor returned the two headings and dropped every
+# number. StreetAccount's own preview for the same print carried exactly the
+# figures it dropped: "Revenue $1.22B vs guidance $1.18-1.20B ... EPS $1.40 vs
+# guidance $1.17-1.29". A Guidance section made of section headings is noise.
+#
+# This reads the heading for the PERIOD and the sentences beneath it for the
+# FIGURES, which is how the document is actually organised.
+# ---------------------------------------------------------------------------
+
+# A heading that opens an outlook block: names a period and the word outlook /
+# guidance, and is short (a heading, not a paragraph that mentions one).
+_OUTLOOK_HEADING = re.compile(
+    r"^(?P<label>[^.\n]{0,90}?\b(?:outlook|guidance)\b[^.\n]{0,20}):?\s*$",
+    re.IGNORECASE,
+)
+# A sentence carrying an actual figure: currency, percent, or a share count.
+_HAS_FIGURE = re.compile(r"(\$\s?[\d,.]+|\b\d+(?:\.\d+)?\s?%)")
+
+
+@dataclass
+class GuidanceBlock:
+    """One outlook section: the period it covers, and its figure lines."""
+    label: str
+    lines: list[str]
+
+
+def extract_guidance_blocks(
+    text: str, *, max_blocks: int = 3, max_lines: int = 4
+) -> list[GuidanceBlock]:
+    """Outlook sections with their figures, in document order.
+
+    Deterministic and offline, like `extract_guidance_lines`, and additive to
+    it: callers should prefer these blocks and fall back to the sentence-level
+    extractor for releases that state guidance in running prose with no
+    heading (which is common for issuers that guide in a single sentence).
+    """
+    if not text:
+        return []
+
+    blocks: list[GuidanceBlock] = []
+    current: GuidanceBlock | None = None
+
+    for raw_line in text.splitlines():
+        line = " ".join(raw_line.split()).strip()
+        if not line:
+            continue
+
+        heading = _OUTLOOK_HEADING.match(line)
+        if heading and not _GUIDANCE_NOISE.search(line):
+            label = heading.group("label").strip(" :–—-")
+            current = GuidanceBlock(label=label or "Outlook", lines=[])
+            blocks.append(current)
+            if len(blocks) > max_blocks:
+                break
+            continue
+
+        if current is None:
+            continue
+
+        # A short "For the second quarter of Fiscal 2026:" line is a SUB-heading
+        # INSIDE the outlook, naming the period its bullets cover -- not the end
+        # of the block. Treating it as a terminator dropped every figure in the
+        # Five Below reference case. It opens a new block instead, which is also
+        # how StreetAccount splits the same content (Q2 block, FY block).
+        if line.endswith(":") and len(line) < 90 and not _HAS_FIGURE.search(line):
+            if _GUIDANCE_PERIOD.search(line):
+                current = GuidanceBlock(label=line.rstrip(":").strip(), lines=[])
+                blocks.append(current)
+                if len(blocks) > max_blocks + 2:
+                    break
+            else:
+                # An unrelated heading (e.g. "Non-GAAP Information:") ends it.
+                current = None
+            continue
+
+        # Forward-looking-statements boilerplate always ends the outlook.
+        if _GUIDANCE_NOISE.search(line):
+            current = None
+            continue
+
+        for piece in _BULLET_SPLIT.split(line):
+            for sent in _SENTENCE_SPLIT.split(piece):
+                s = _BULLET_STRIP.sub("", " ".join(sent.split())).strip()
+                if len(s) < 25 or len(s) > 400 or "|" in s:
+                    continue
+                if _GUIDANCE_NOISE.search(s):
+                    continue
+                # The heading supplies the period; the sentence must supply a
+                # figure, or it is the block's own preamble ("The Company
+                # expects the following results...") rather than guidance.
+                if not _HAS_FIGURE.search(s):
+                    continue
+                if s not in current.lines and len(current.lines) < max_lines:
+                    current.lines.append(s)
+
+    # Filter empties BEFORE slicing. A release opens with heading-only blocks
+    # ("Increases Full Year 2026 Sales and EPS Outlook", then "Second Quarter
+    # and Fiscal 2026 Outlook:"), and slicing first spent the whole budget on
+    # them and returned the Q block while dropping the FY block entirely.
+    return [b for b in blocks if b.lines][:max_blocks]
+
+
+# A guidance line earns its place by carrying a NUMBER or by announcing a
+# REVISION. Five Below's Q2 release states its outlook in a flat "Current
+# Outlook ..." run with no heading, so extract_guidance_blocks finds nothing
+# and the sentence extractor is the fallback -- but that returns the release
+# headline and a CEO pull-quote above the line that actually holds the figures.
+# Revision verbs are kept alongside figures because "we are raising our full
+# year outlook" is the news even though it contains no number, and it is what
+# StreetAccount leads with.
+_REVISION_VERB = re.compile(
+    r"\b(rais(?:e[sd]?|ing)|increas(?:e[sd]?|ing)|lower(?:s|ed|ing)?|"
+    r"reduc(?:e[sd]?|ing)|cut(?:s|ting)?|narrow(?:s|ed|ing)?|"
+    r"updat(?:e[sd]?|ing)|reaffirm(?:s|ed|ing)?|reiterat(?:e[sd]?|ing)|"
+    r"maintain(?:s|ed|ing)?)\b(?=[^.]{0,60}\b(?:outlook|guidance|forecast))",
+    re.IGNORECASE,
+)
+
+
+def rank_guidance_lines(lines: list[str], *, limit: int = 4) -> list[str]:
+    """Keep only guidance sentences that say something: a figure, or a revision.
+
+    Order is preserved -- a release states its outlook in a deliberate order
+    and reshuffling it would put the full year above the quarter.
+    """
+    kept = [
+        s for s in lines
+        if _HAS_FIGURE.search(s) or _REVISION_VERB.search(s)
+    ]
+    return (kept or lines)[:limit]

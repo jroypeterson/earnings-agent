@@ -15,6 +15,7 @@ is derived from config.py.
 from __future__ import annotations
 
 import json
+import html
 import re
 import time
 import logging
@@ -430,3 +431,173 @@ def infer_cadence_signal(
         days_from_ref=days_from_ref,
         commentary=commentary,
     )
+
+
+# ---------------------------------------------------------------------------
+# Earnings-release document (EX-99) — the source for --daily-summary and for
+# the Metrics / Guidance sections of the preview and review cards.
+#
+# WHY THIS EXISTS AT ALL (2026-09-09)
+# -----------------------------------
+# daily_summary.py has called `edgar_client.fetch_release_document` since it
+# was written, and this module has never defined it. `git log -S` finds the
+# name in no commit of this file: it was never implemented, not removed. So
+# `--daily-summary` raised AttributeError for every name with a filing, from
+# its first run. It went unnoticed because the flag is not scheduled and
+# because test_daily_summary.py exercises only the pure helpers -- the seam
+# between daily_summary and edgar_client had no test at all.
+#
+# The parsing follows earnings_kpi's proven approach: read the exhibit
+# manifest from `{accession}-index-headers.html`, NOT the directory
+# index.json, whose `type` field is a MIME/icon hint rather than the SEC
+# document type. That distinction was established by the earnings_kpi Phase-0
+# spike and is load-bearing.
+# ---------------------------------------------------------------------------
+
+_MIN_RELEASE_CHARS = 1200
+
+# SGML document header inside the (HTML-escaped) index-headers file.
+_DOC_HEADER_RE = re.compile(
+    r"<DOCUMENT>\s*<TYPE>(?P<type>[^\r\n<]*)\s*"
+    r"(?:<SEQUENCE>(?P<seq>[^\r\n<]*)\s*)?"
+    r"(?:<FILENAME>(?P<filename>[^\r\n<]*)\s*)?"
+    r"(?:<DESCRIPTION>(?P<desc>[^\r\n<]*)\s*)?",
+    re.IGNORECASE,
+)
+
+# A press release ranks above a slide deck or a supplemental data pack: those
+# are mostly tables, and a table flattened to text yields no usable guidance
+# sentence. Lower sorts first.
+_EXHIBIT_DEMOTIONS = (
+    "supplement", "slide", "presentation", "deck", "financial data",
+    "statistical", "workbook", "spreadsheet",
+)
+
+
+@dataclass
+class ReleaseDoc:
+    """One earnings press release, as text."""
+    ticker: str
+    accession: str
+    url: str
+    doc_type: str
+    filing_date: str
+    text: str
+
+    @property
+    def char_count(self) -> int:
+        return len(self.text)
+
+
+def _get_text(url: str) -> str | None:
+    """Fetch a URL as text, sharing the module's rate limiter and stats."""
+    global _edgar_requests, _edgar_failures
+    _edgar_requests += 1
+    _sleep_for_rate_limit()
+    try:
+        r = requests.get(url, headers=_SEC_HEADERS, timeout=30)
+    except requests.RequestException as exc:
+        logger.debug(f"EDGAR GET failed {url}: {exc}")
+        _edgar_failures += 1
+        return None
+    if r.status_code == 404:
+        return None
+    if r.status_code != 200:
+        logger.debug(f"EDGAR GET {url}: HTTP {r.status_code}")
+        _edgar_failures += 1
+        return None
+    return r.text
+
+
+def _html_to_text(raw: str) -> str:
+    """Flatten an exhibit to readable text.
+
+    Block-level tags become newlines BEFORE tags are stripped; without that,
+    every heading and paragraph runs into the next word and the sentence
+    splitter downstream sees one enormous sentence.
+    """
+    out = re.sub(r"(?is)<(script|style)[^>]*>.*?</\1>", " ", raw)
+    out = re.sub(r"(?i)<(br|/p|/div|/tr|/h[1-6]|/li)[^>]*>", "\n", out)
+    out = re.sub(r"(?s)<[^>]+>", " ", out)
+    out = html.unescape(out)
+    out = out.replace("\xa0", " ")
+    out = re.sub(r"[ \t]+", " ", out)
+    out = re.sub(r"\n\s*\n\s*", "\n\n", out)
+    return out.strip()
+
+
+def _rank_release_exhibit(doc_type: str, description: str, filename: str) -> tuple:
+    """Sort key: the likeliest press release first.
+
+    EX-99.1 is the conventional slot for the release itself, so it wins on
+    type; anything that names itself a supplement or a slide deck sinks below
+    a plain release regardless of its number.
+    """
+    dtype = (doc_type or "").upper().strip()
+    haystack = f"{description} {filename}".lower()
+    demoted = any(word in haystack for word in _EXHIBIT_DEMOTIONS)
+    # EX-99.1 -> 0, EX-99.2 -> 1, ... ; a bare EX-99 sorts with .1
+    suffix = 99
+    m = re.match(r"EX-99\.?(\d*)", dtype)
+    if m:
+        suffix = int(m.group(1)) - 1 if m.group(1) else 0
+    return (1 if demoted else 0, suffix, filename or "")
+
+
+def fetch_release_document(ticker: str, filing: Filing8K) -> ReleaseDoc | None:
+    """The earnings press release attached to an 8-K/6-K, as text.
+
+    Returns None when the filing carries no readable EX-99 exhibit. A
+    candidate shorter than _MIN_RELEASE_CHARS is treated as a cover page and
+    the next candidate is tried -- an EX-99.1 that is a one-paragraph
+    "we issued a press release" note is common and carries no guidance.
+    """
+    cik = get_cik(ticker)
+    if not cik or not filing or not filing.accession:
+        return None
+
+    nodash = filing.accession.replace("-", "")
+    base = f"https://www.sec.gov/Archives/edgar/data/{int(cik)}/{nodash}"
+
+    headers = _get_text(f"{base}/{filing.accession}-index-headers.html")
+    docs: list[dict] = []
+    if headers:
+        docs = [m.groupdict() for m in _DOC_HEADER_RE.finditer(html.unescape(headers))]
+    if not docs:
+        # Fallback: the multi-MB full submission, only when headers are unusable.
+        full = _get_text(f"{base}/{filing.accession}.txt")
+        if full:
+            docs = [m.groupdict() for m in _DOC_HEADER_RE.finditer(full)]
+    if not docs:
+        logger.debug("No document headers for %s %s", ticker, filing.accession)
+        return None
+
+    candidates = []
+    for d in docs:
+        dtype = (d.get("type") or "").strip()
+        if not dtype.upper().startswith("EX-99"):
+            continue
+        filename = (d.get("filename") or "").strip()
+        if not filename:
+            continue
+        candidates.append((
+            _rank_release_exhibit(dtype, (d.get("desc") or "").strip(), filename),
+            dtype, filename,
+        ))
+    candidates.sort(key=lambda c: c[0])
+
+    for _, dtype, filename in candidates:
+        url = f"{base}/{filename}"
+        raw = _get_text(url)
+        if not raw:
+            continue
+        text = _html_to_text(raw)
+        if len(text) < _MIN_RELEASE_CHARS:
+            logger.debug("%s %s: %s is %d chars, below the cover-page floor",
+                         ticker, filing.accession, filename, len(text))
+            continue
+        return ReleaseDoc(
+            ticker=ticker, accession=filing.accession, url=url,
+            doc_type=dtype, filing_date=filing.filing_date, text=text,
+        )
+    return None
