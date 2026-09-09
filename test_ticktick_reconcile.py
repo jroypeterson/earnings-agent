@@ -1167,3 +1167,50 @@ def test_reconcile_dry_run_writes_nothing(monkeypatch):
     assert posts == []                      # but nothing written
     # DB pointer also left alone in dry-run.
     assert find_existing_event(conn, "UNH", "2026-07-16")["ticktick_task_id"] is None
+
+
+# ── the one-day move in the title survives the reconcile (board #297) ────────
+
+def test_the_reconcile_does_not_strip_the_move_from_a_reported_title(monkeypatch):
+    """⛑ THE CHURN DEFECT, and it is invisible without driving the reconcile.
+
+    The one-day move lives ONLY in the title: it is computed live from yfinance
+    when the result lands (`main.py` -> `mark_task_reported(move_pct=...)`) and
+    there is no column for it in `events`. `reconcile_ticktick_tasks` runs 3x a
+    day off the DB and touches no price feed, so it cannot rebuild a title
+    carrying one.
+
+    That means it must compare titles with the suffix STRIPPED and carry the
+    suffix ACROSS any rewrite. Without that, every reported task reads as
+    title-stale, the reconcile writes the move back off, the next result run puts
+    it back, and the two fight for ever -- silently, at three writes a day.
+
+    Mutation-checked: deleting the preservation in `ticktick.py` left all 498
+    other tests green. Only this test fails.
+    """
+    conn = init_db(":memory:")
+    upsert_event(conn, "ISRG", "2026-07-16", "amc", None,
+                 quarter=date_to_quarter("2026-07-16"),
+                 eps_estimate=1.0, eps_actual=1.2, reported=True, tier=2,
+                 company_name="Intuitive Surgical")
+
+    project = {"id": "P_HC", "name": "2Q26 Earnings - HC Svcs, MedTech & Biopharma"}
+    titled = "ISRG Q2 2026 Earnings (Jul 16 AMC) +5.2%"
+    tasks = {"P_HC": [
+        {"id": "T_ISRG", "title": titled, "content": "body",
+         "startDate": "2026-07-16T09:00:00.000+0000",
+         "dueDate": "2026-07-16T09:00:00.000+0000", "status": 0,
+         "tags": [ticktick.REPORTED_TAG.lower()], "items": _std_items()},
+    ]}
+    posts = _stub_api(monkeypatch, tasks)
+    monkeypatch.setattr(ticktick, "_list_all_projects", lambda token: [project])
+
+    ticktick.reconcile_ticktick_tasks(
+        conn, date(2026, 7, 22), max_db_staleness_days=10_000
+    )
+
+    rewrites = [p["body"].get("title") for p in posts
+                if p["body"] and p["body"].get("title")]
+    for got in rewrites:
+        assert got.endswith(" +5.2%"), (
+            "the reconcile rewrote the title and dropped the move: %r" % got)

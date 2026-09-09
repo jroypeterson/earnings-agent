@@ -14,6 +14,7 @@ Uses the TickTick Open API v1:
 
 import os
 import logging
+import re
 from datetime import datetime, timezone
 
 import requests
@@ -191,11 +192,47 @@ def find_or_create_list(token: str, list_name: str) -> str | None:
 # ---------------------------------------------------------------------------
 
 
+# ⛑ THE MOVE SUFFIX, AND WHY IT NEEDS A REGEX (board #297, 2026-09-08).
+#
+# JP: "Append the stock's one-day post-earnings move to the end of the TickTick
+# entry header ... The size of the move is how JP decides which calls are worth
+# reading." It already went into the task BODY ("Stock reaction: +5.2%"), which
+# requires opening the task -- the point of the title is that it is visible in
+# the list.
+#
+# The move is NOT IN THE DATABASE. It is computed live from yfinance at
+# result-detection time (`main.py` passes `r.move.move_pct`), and there is no
+# column for it in `events` (36 columns, none of them a move). So
+# `reconcile_ticktick_tasks` -- which runs 3x a day off the DB and deliberately
+# does not touch a price feed -- CANNOT reconstruct a title carrying one.
+#
+# That is why this is a regex and not just a formatter. The reconcile compares
+# the task's title against `build_task_title(...)`; without stripping the suffix
+# first, every reported task would read as title-stale and the reconcile would
+# rewrite the move straight back OFF, on every run, for ever. And when the
+# reconcile does have a real reason to rewrite (a date correction), it must
+# CARRY THE SUFFIX ACROSS rather than drop it -- a date fix silently deleting the
+# move is the same defect wearing a different hat.
+_MOVE_SUFFIX_RE = re.compile(r"\s+[+-]\d+(?:\.\d+)?%$")
+
+
+def strip_move_suffix(title: str) -> str:
+    """The title without any trailing one-day move. Comparison happens here."""
+    return _MOVE_SUFFIX_RE.sub("", title or "")
+
+
+def move_suffix_of(title: str) -> str:
+    """The trailing move suffix, or "" -- so a rewrite can carry it across."""
+    m = _MOVE_SUFFIX_RE.search(title or "")
+    return m.group(0) if m else ""
+
+
 def build_task_title(
     ticker: str,
     event_date: str,
     hour: str | None,
     confirmed: bool = True,
+    move_pct: float | None = None,
 ) -> str:
     """Build the TickTick task title. e.g. 'UNH Q1 2026 Earnings (Apr 21 BMO)'.
 
@@ -211,6 +248,8 @@ def build_task_title(
     # Format quarter for display: "2025Q4" -> "Q4 2025"
     q_label = f"Q{quarter[-1]} {quarter[:4]}"
 
+    # An unconfirmed row never carries a date, and never a move either: with no
+    # confirmed report date there is no reported move to speak of.
     if not confirmed:
         return f"{ticker} {q_label} Earnings"
 
@@ -224,7 +263,12 @@ def build_task_title(
     elif hour == "amc":
         timing = " AMC"
 
-    return f"{ticker} {q_label} Earnings ({date_str}{timing})"
+    title = f"{ticker} {q_label} Earnings ({date_str}{timing})"
+    if move_pct is not None:
+        # One decimal, always signed, so +0.0% and -0.0% stay distinguishable
+        # from "no move recorded" -- a rounded-away move is still a measurement.
+        title += f" {move_pct:+.1f}%"
+    return title
 
 
 def build_task_content(
@@ -1020,7 +1064,7 @@ def mark_task_reported(
             logger.warning(f"  Could not resolve TickTick list '{list_name}' — task {task_id} not updated")
             return False
 
-    new_title = build_task_title(ticker, event_date, hour)
+    new_title = build_task_title(ticker, event_date, hour, move_pct=move_pct)
     new_content = build_task_content(
         ticker=ticker,
         hour=hour,
@@ -1780,6 +1824,16 @@ def reconcile_ticktick_tasks(
                 expected_title = build_task_title(
                     ticker, event_date, event_hour, confirmed=True,
                 )
+                # ⛑ COMPARE WITHOUT THE MOVE, AND CARRY IT ACROSS (board #297).
+                # The one-day move lives only in the TITLE -- it is computed live
+                # from yfinance when the result lands and is in no DB column, so
+                # this loop cannot rebuild it. Comparing the raw titles would make
+                # every reported task read as stale and strip the move back off on
+                # every run; rewriting without re-appending it would delete the
+                # move on the next legitimate date fix. Both are silent.
+                move_suffix = move_suffix_of(title)
+                if move_suffix:
+                    expected_title += move_suffix
                 # No `[REPORTED] ` branch any more: the clean title IS the
                 # expected form for a reported task too, so a legacy prefixed
                 # title reads as stale and this same write strips it while
