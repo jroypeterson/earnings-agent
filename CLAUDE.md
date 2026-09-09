@@ -38,13 +38,27 @@ python main.py --no-heartbeat      # Skip Slack success heartbeat at end of run
 
 - **Tier 1** (~58) — Coverage Manager Position lists, promoted as follows:
   - `Portfolio` — **any (Core filter dropped 2026-08-12; owning it IS the commitment)**
-  - `Researching` ∩ `Core=Y` (active thesis; this gate deliberately KEPT)
+  - `Researching` ∩ `Core=Y` (active thesis; this gate deliberately KEPT **for tier**, but
+    the consensus preview now reaches past it — see the `positions` note below)
   - `Ready to Buy` and `Ready to Short` — any (Core filter dropped 2026-05-11; trigger-ready ⇒ user committed)
   - Gets Calendar events, TickTick tasks, full digest detail.
 
   **Why the Portfolio gate went.** JP 2026-08-12, on finding LLY in none of his 2Q26 TickTick lists: *"I own LLY so it should be in positions & researching TickTick regardless of how it's categorized on coverage manager."* `Core` is an editorial marker on the coverage universe; ownership is a fact about the book, and the two drift. LLY sat at `Core=''` in `portfolio.json` until CM's 2026-08-06 biopharma batch (`84ce06c`), so for the whole 2Q26 season a held name was Tier 3 — no calendar event, no TickTick task, no digest detail — and nothing flagged it. Nine names were in that state (ADSK, BE, BRO, CPRT, FI, KRC, Q, SPCX, ULS); eight had no sector path to Tier 2 either, so they were wholly untracked. `ir_ticktick.load_universe` had already made the same call from the other direction on 2026-08-05 (*"Scope is Core=Y ∪ Portfolio, not Core alone"*) and named the same tickers — the two lanes now agree instead of disagreeing by one flag. Regressions: `test_held_names_are_tier_1.py`.
 - **Tier 2** (~209) — universe in `Healthcare Services` or `MedTech` sectors, excluding Tier 1. Gets Calendar + TickTick.
 - **Tier 3** (~842) — everything else. No Calendar, no TickTick. Shows in digest with YTD + timing.
+
+**The consensus preview selects by tier OR by Position (2026-09-09).** JP asked for previews on
+"held and researching and ready to buy names". Tier 1 gates `Researching` on `Core=Y`, so 10
+Researching names (`2715.HK ARXS KLRA MAIR MDA MICC MNKD MWH UBER XE`) never got one.
+`select_upcoming_reporters(..., positions=PREVIEW_POSITIONS)` adds a second qualifying arm that
+**only ever WIDENS** — a name qualifies by tier OR by Position list. ⚠ **Do not "simplify" this
+by relaxing the tier rule in `coverage.py` instead.** A dozen consumers read that rule (calendar
+sync, TickTick projection, `restamp_tiers_from_coverage`, the results check, the digest); moving
+the gate there silently re-scopes every one of them, and Tier 1 is the input to
+`_assert_coverage_not_collapsed`. Measured on the live DB over a 60-day window: 44 reporters
+tier-only → 48 with positions, gaining MAIR/UBER/MNKD/MDA (all Tier 3, all Researching), losing
+none; Tier 1 still reads 57. The first of those events is 2026-10-29, so this first bites in the
+3Q26 season. Regressions: `test_preview_scope_and_destinations.py`.
 
 `Following for Interest` names are NOT auto-promoted — they keep their sector-derived tier (T2 if HC, else T3). But every ticker in any of the five Position lists has its `TickerInfo.position` set so the digest renders it under its Position-named subgroup (Portfolio / Researching / Ready to Buy / Ready to Short / Following for Interest), not its sector subgroup. Same is true for Portfolio / Researching tickers that fail the Core=Y filter — they fall to T2/T3 but still render under their Position label in the digest.
 
@@ -339,6 +353,16 @@ is untouched; the ping is purely additive.
 ## Slack channel routing
 
 - **#earnings** (`SLACK_WEBHOOK_EARNINGS`, `SLACK_CHANNEL_ID`): heartbeat, weekly digest, results beat/miss alerts, urgent Tier 1 date moves within 5 biz days. The "primary feed" — actual earnings updates.
+- **#portfolio** (`SLACK_BOT_TOKEN` + `SLACK_PORTFOLIO_CHANNEL_ID`): the terse "RPD reported"
+  ping, and — since 2026-09-09 — the **pre-earnings consensus preview**, which posts here AND to
+  #street-account. JP reads this channel; #street-account exists to recreate the SA feed.
+  ⚠ **Each destination keeps its OWN posted-ledger** (`_preview_kv_key`). One shared key across
+  two channels means a failure on either is remembered as a success for both, and the portfolio
+  card goes silently missing while #street-account looks healthy. #street-account keeps the
+  original un-namespaced key shape, so no existing mark is orphaned. The pre-assembly dedup
+  keeps a reporter pending while ANY enabled destination still owes it a post — without that, a
+  name already sent to #street-account could never reach #portfolio. A dead channel logs loudly,
+  marks nothing, and retries; only an all-destination failure raises.
 - **#status-reports** (`SLACK_WEBHOOK_STATUS`, `SLACK_STATUS_CHANNEL_ID`): date-disagreement notices — cross-check (Finnhub vs yfinance), unseen-ticker, reconcile auto-fix. Routed off the earnings channel so it stays focused. Status secrets fall back to earnings ones when unset (back-compat for setups that haven't created the second channel).
 
 ## Scheduled workflows (GitHub Actions)
