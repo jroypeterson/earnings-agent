@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-09-09T15:07:23Z",
+  "generated_at": "2026-09-09T21:48:29Z",
   "window": {
     "start": "2026-09-07",
     "end": "2026-09-23"
   },
   "counts": {
-    "events": 22
+    "events": 21
   },
   "events": [
     {
@@ -27,15 +27,6 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Alzamend Neuro Inc"
-    },
-    {
-      "ticker": "ANIX",
-      "event_date": "2026-09-08",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Anixa Biosciences Inc"
     },
     {
       "ticker": "SHPH",
