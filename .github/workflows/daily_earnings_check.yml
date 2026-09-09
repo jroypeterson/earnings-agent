@@ -257,6 +257,13 @@ jobs:
           FMP_API_KEY: ${{ secrets.FMP_API_KEY }}
           COVERAGE_MANAGER_PATH: ${{ github.workspace }}/coverage-manager
           SLACK_WEBHOOK_STREET_ACCOUNT: ${{ secrets.SLACK_WEBHOOK_STREET_ACCOUNT }}
+          # Second destination (JP, 2026-09-09): the same preview card also
+          # goes to #portfolio, which is where he actually reads it. Each
+          # destination keeps its own posted-ledger, so adding this cannot
+          # disturb the #street-account lane. Without these two the portfolio
+          # arm logs a loud SKIP and posts nothing.
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_PORTFOLIO_CHANNEL_ID: ${{ secrets.SLACK_PORTFOLIO_CHANNEL_ID }}
         run: python main.py --consensus-preview
 
       # Publish exports/upcoming_events.json for downstream consumers

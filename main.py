@@ -2056,6 +2056,25 @@ def run_season_progress(
 # ---------------------------------------------------------------------------
 
 
+# Preview destinations. Each keeps its OWN dedup ledger, because one shared
+# key across two channels means a failure on either one is remembered as a
+# success for both — the portfolio card would go silently missing forever
+# while #street-account looked healthy.
+PREVIEW_DEST_STREET_ACCOUNT = "street_account"
+PREVIEW_DEST_PORTFOLIO = "portfolio"
+
+
+def _preview_kv_key(dest: str, ticker: str, event_date: str) -> str:
+    """kv_store key for one (destination, ticker, event) preview post.
+
+    #street-account keeps the ORIGINAL un-namespaced key shape. Re-keying it
+    would orphan every existing mark and re-post the whole open window once.
+    """
+    if dest == PREVIEW_DEST_STREET_ACCOUNT:
+        return f"consensus_preview_posted:{ticker}:{event_date}"
+    return f"consensus_preview_posted:{dest}:{ticker}:{event_date}"
+
+
 def run_consensus_preview(
     dry_run: bool = False,
     days_ahead: int = 3,
@@ -2084,19 +2103,49 @@ def run_consensus_preview(
 
     conn = init_db()
 
+    from config import SLACK_PORTFOLIO_CHANNEL_ID
+    from consensus_preview import PREVIEW_POSITIONS
+
+    # Which destinations can actually receive a post this run. A destination
+    # whose credentials are missing is logged loudly and skipped — never
+    # treated as posted.
+    destinations: list[str] = []
+    if SLACK_WEBHOOK_STREET_ACCOUNT:
+        destinations.append(PREVIEW_DEST_STREET_ACCOUNT)
+    else:
+        logger.warning(
+            "Consensus preview: #street-account SKIPPED — "
+            "SLACK_WEBHOOK_STREET_ACCOUNT unset."
+        )
+    if SLACK_BOT_TOKEN and SLACK_PORTFOLIO_CHANNEL_ID:
+        destinations.append(PREVIEW_DEST_PORTFOLIO)
+    else:
+        logger.warning(
+            "Consensus preview: #portfolio SKIPPED — %s unset.",
+            "SLACK_BOT_TOKEN" if not SLACK_BOT_TOKEN
+            else "SLACK_PORTFOLIO_CHANNEL_ID",
+        )
+
     reporters = select_upcoming_reporters(
-        conn, coverage, days_ahead=days_ahead, max_tier=1, ticker=ticker
+        conn, coverage, days_ahead=days_ahead, max_tier=1,
+        positions=PREVIEW_POSITIONS, ticker=ticker,
     )
 
     # Dedup (live runs only — dry-run must never consult/mutate the ledger,
-    # so a preview is re-previewable on demand).
+    # so a preview is re-previewable on demand). A reporter stays pending
+    # while ANY enabled destination still owes it a post; each destination
+    # then filters again at post time against its own ledger.
     if not dry_run and reporters:
         pending = []
         for r in reporters:
-            key = f"consensus_preview_posted:{r.ticker}:{r.event_date}"
-            if kv_get(conn, key):
+            owed = [
+                d for d in destinations
+                if not kv_get(conn, _preview_kv_key(d, r.ticker, r.event_date))
+            ]
+            if not owed:
                 logger.info(
-                    f"Preview already posted for {r.ticker} {r.event_date}; skipping"
+                    f"Preview already posted for {r.ticker} {r.event_date} "
+                    "to every enabled destination; skipping"
                 )
                 continue
             pending.append(r)
@@ -2149,34 +2198,79 @@ def run_consensus_preview(
         conn.close()
         return
 
-    if not SLACK_WEBHOOK_STREET_ACCOUNT:
+    if not destinations:
         conn.close()
         raise NotificationError(
-            "SLACK_WEBHOOK_STREET_ACCOUNT not set — cannot post consensus preview"
+            "No consensus-preview destination is configured "
+            "(need SLACK_WEBHOOK_STREET_ACCOUNT, or SLACK_BOT_TOKEN + "
+            "SLACK_PORTFOLIO_CHANNEL_ID) — cannot post consensus preview"
         )
 
-    post_slack(SLACK_WEBHOOK_STREET_ACCOUNT, blocks, fallback)
-    # Post-then-mark, and mark ONLY rows actually in the posted payload
-    # (build_preview_blocks stops at the Slack block cap and returns how many
-    # it included, in order). Overflow rows stay unmarked so the next run
-    # re-posts them — they are never silently dropped-yet-marked.
-    posted_rows = rows[:n_included]
-    if n_included < len(rows):
-        overflow = rows[n_included:]
-        logger.warning(
-            "Consensus preview overflow: posted %d of %d rows (Slack block cap); "
-            "%d left unmarked for the next run: %s",
-            n_included, len(rows), len(overflow),
-            ", ".join(r.ticker for r in overflow),
+    failures: list[str] = []
+    for dest in destinations:
+        # Each destination posts only what IT still owes, and marks only what
+        # it actually posted.
+        owed = [
+            r for r in rows
+            if not kv_get(conn, _preview_kv_key(dest, r.ticker, r.event_date))
+        ]
+        if not owed:
+            logger.info("Consensus preview: %s is up to date; nothing to post.", dest)
+            continue
+
+        d_blocks, d_included = build_preview_blocks(owed, as_of)
+        d_fallback = build_preview_fallback(owed, as_of)
+
+        try:
+            if dest == PREVIEW_DEST_STREET_ACCOUNT:
+                post_slack(SLACK_WEBHOOK_STREET_ACCOUNT, d_blocks, d_fallback)
+            else:
+                slack_post_message(
+                    SLACK_BOT_TOKEN,
+                    SLACK_PORTFOLIO_CHANNEL_ID,
+                    blocks=d_blocks,
+                    text=d_fallback,
+                )
+        except Exception as exc:  # noqa: BLE001 — one dead channel must not
+            # cost the other its post, and must never mark as sent.
+            failures.append(dest)
+            logger.error(
+                "Consensus preview: post to %s FAILED (%s). Nothing marked; "
+                "these %d name(s) retry next run: %s",
+                dest, exc, len(owed), ", ".join(r.ticker for r in owed),
+            )
+            continue
+
+        # Post-then-mark, and mark ONLY rows actually in the posted payload
+        # (build_preview_blocks stops at the Slack block cap and returns how
+        # many it included, in order). Overflow rows stay unmarked so the next
+        # run re-posts them — they are never silently dropped-yet-marked.
+        posted_rows = owed[:d_included]
+        if d_included < len(owed):
+            overflow = owed[d_included:]
+            logger.warning(
+                "Consensus preview overflow (%s): posted %d of %d rows (Slack "
+                "block cap); %d left unmarked for the next run: %s",
+                dest, d_included, len(owed), len(overflow),
+                ", ".join(r.ticker for r in overflow),
+            )
+        for r in posted_rows:
+            kv_set(
+                conn,
+                _preview_kv_key(dest, r.ticker, r.event_date),
+                f"posted:{as_of.isoformat()}",
+            )
+        logger.info(
+            "Posted consensus preview for %d name(s) to %s",
+            len(posted_rows), dest,
         )
-    for r in posted_rows:
-        kv_set(
-            conn,
-            f"consensus_preview_posted:{r.ticker}:{r.event_date}",
-            f"posted:{as_of.isoformat()}",
-        )
-    logger.info(f"Posted consensus preview for {len(posted_rows)} name(s)")
+
     conn.close()
+    if failures and len(failures) == len(destinations):
+        raise NotificationError(
+            "Consensus preview failed to post to every destination: "
+            + ", ".join(failures)
+        )
 
 
 # ---------------------------------------------------------------------------

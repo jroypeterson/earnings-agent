@@ -59,6 +59,13 @@ logger = logging.getLogger("earnings_agent")
 
 SCHEMA_VERSION = 1
 
+# Coverage-Manager Position lists that get a preview regardless of tier.
+# JP, 2026-09-09: previews for "held and researching and ready to buy names
+# for now and then likely will extend to other subsets of names like core".
+# "Ready to Short" is deliberately absent: it is already Tier 1 unconditionally,
+# so it arrives via the tier arm and does not need widening.
+PREVIEW_POSITIONS = frozenset({"Portfolio", "Researching", "Ready to Buy"})
+
 # Coverage-Manager sector (or subsector) -> sector-proxy ETF for the QTD row.
 # Keys are the canonical CM sector labels. Unknown sector -> no ETF row + note.
 SECTOR_ETF: dict[str, str] = {
@@ -179,6 +186,11 @@ class Reporter:
     rev_estimate: Optional[float]
     sector: str
     subsector: str
+    # Coverage-Manager Position list ("Portfolio" / "Researching" /
+    # "Ready to Buy" / "Ready to Short" / "Following for Interest" / "").
+    # Carried so selection can widen by position WITHOUT touching the global
+    # tier rule in coverage.py, which a dozen other consumers read.
+    position: str = ""
 
 
 @dataclass
@@ -361,6 +373,7 @@ def _row_to_reporter(raw: tuple, coverage_map: dict[str, TickerInfo]) -> Reporte
         rev_estimate=rev_est,
         sector=(info.sector if info else ""),
         subsector=(info.subsector if info else ""),
+        position=(info.position if info else ""),
     )
 
 
@@ -376,6 +389,7 @@ def select_upcoming_reporters(
     *,
     days_ahead: int = 3,
     max_tier: int = 1,
+    positions: Optional[frozenset[str]] = None,
     ticker: Optional[str] = None,
 ) -> list[Reporter]:
     """Select upcoming, not-yet-reported reporters for previewing.
@@ -383,7 +397,16 @@ def select_upcoming_reporters(
     When `ticker` is given, returns that ticker's single nearest upcoming
     unreported event regardless of tier or window (on-demand preview).
     Otherwise returns every unreported event in [today, today+days_ahead]
-    whose Coverage-Manager tier is <= max_tier (Tier-1 only by default).
+    that qualifies EITHER by tier (<= max_tier) OR by Coverage-Manager
+    Position list membership (`positions`).
+
+    `positions` only ever WIDENS the set — a name already inside max_tier is
+    selected whether or not its position is listed. This is deliberate: JP
+    asked for previews on Portfolio / Researching / Ready to Buy (2026-09-09),
+    but Tier 1 gates Researching on Core=Y, and 10 Researching names are not
+    Core. Editing the tier rule in coverage.py to fix that would silently
+    re-scope calendar sync, TickTick projection and the results check too.
+    Widening here changes exactly the one lane that was asked about.
     """
     coverage_map = {t.ticker: t for t in coverage}
     today = date.today()
@@ -410,13 +433,21 @@ def select_upcoming_reporters(
     ).fetchall()
 
     reporters: list[Reporter] = []
+    by_position_only = 0
     for raw in rows:
         rep = _row_to_reporter(raw, coverage_map)
-        if rep.tier <= max_tier:
+        in_tier = rep.tier <= max_tier
+        in_position = bool(positions) and rep.position in positions
+        if in_tier or in_position:
             reporters.append(rep)
+            if in_position and not in_tier:
+                by_position_only += 1
     logger.info(
-        f"Selected {len(reporters)} upcoming Tier<= {max_tier} reporter(s) "
-        f"in next {days_ahead}d ({len(rows)} events scanned)"
+        "Selected %d upcoming reporter(s) in next %dd (%d events scanned; "
+        "tier<=%d, positions=%s; %d qualified by position alone)",
+        len(reporters), days_ahead, len(rows), max_tier,
+        ",".join(sorted(positions)) if positions else "none",
+        by_position_only,
     )
     return reporters
 
