@@ -188,6 +188,60 @@ if [ -n "$PINNED" ]; then
   exit 0
 fi
 
+# ---- staleness: the trigger the overdue metric cannot see OFF-SEASON --------------
+#
+# The past-due-without-actuals metric below is SEASON DEPENDENT. It works because a
+# rollback strands events that have reported; between reporting seasons almost
+# nothing is past due, so the same rollback measures near zero.
+#
+# Measured 2026-09-08. reconcile_calendar run 34259752925 restored an artifact from
+# 2026-09-05, skipping one from 2026-09-08 15:06, and lost events 2987 -> 2980 and
+# eps_actual 1744 -> 1740. This guard ran on that database and correctly reported
+# "healthy (past-due-without-actuals 2 <= 40)". The rollback was then re-uploaded as
+# the newest earnings-db and restored by the next daily run.
+#
+# So: a second trigger on a quantity that does not depend on the calendar -- how long
+# it has been since ANY run wrote to this database. Measured over the 30 most recent
+# unexpired artifacts, the gap between an artifact's upload time and its own content
+# watermark was:
+#
+#     <= 0.01h   for the 15 uploaded by a run that writes events
+#     0.4h-4.96h for the 14 uploaded by a run that only restores and re-uploads
+#                (reconcile_calendar, season_progress) -- the gap is just the time
+#                since the last writing run
+#     89.53h     for the one rolled-back artifact
+#
+# 24h therefore sits ~4.8x above the largest legitimate gap observed and ~3.7x below
+# the defect, and it is not a threshold on the DEFECT's size -- any rollback of more
+# than a day trips it regardless of magnitude. A gap above 24h with no rollback means
+# no run has written in over a day, which is itself an outage worth failing on.
+#
+# ⚠ Compared against NOW, not against the artifact's created_at, so it needs no API
+# call and also covers a database that went stale on disk for any other reason.
+MAX_CONTENT_AGE_H="${EA_DB_MAX_CONTENT_AGE_HOURS:-24}"
+content_age_h="$("$PY_BIN" - "$DB" <<'PY' 2>/dev/null
+import sqlite3, sys, datetime
+con = sqlite3.connect(f"file:{sys.argv[1]}?mode=ro", uri=True)
+w = con.execute("SELECT MAX(updated_at) FROM events").fetchone()[0]
+if not w:
+    raise SystemExit(1)
+# Stored naive UTC, matching how the agent writes it.
+wd = datetime.datetime.strptime(str(w)[:19], "%Y-%m-%d %H:%M:%S")
+print(f"{(datetime.datetime.utcnow() - wd).total_seconds() / 3600:.2f}")
+PY
+)"
+if [ -z "${content_age_h:-}" ]; then
+  # No watermark at all is not "fresh". Say so rather than skipping the check --
+  # a check that silently matches nothing is the class this repo keeps meeting.
+  alarm "The restored database has no readable \`MAX(events.updated_at)\` watermark, so its content age could not be established."
+  exit 1
+fi
+log "content watermark age: ${content_age_h}h (limit ${MAX_CONTENT_AGE_H}h)"
+if awk "BEGIN{exit !($content_age_h > $MAX_CONTENT_AGE_H)}"; then
+  alarm "The restored database's newest \`events.updated_at\` is ${content_age_h}h old (limit ${MAX_CONTENT_AGE_H}h). Either the restore returned a rolled-back artifact, or no run has written to this database in over a day. Refusing to write to it and re-upload it as the newest \`earnings-db\`, which is how a rollback propagates. Check the \`[db-restore] selected artifact\` line in this run's log against \`gh api repos/${REPO}/actions/artifacts?name=earnings-db\`; recover by dispatching with \`restore_artifact_id\` set to a known-good artifact."
+  exit 1
+fi
+
 # ---- the trigger ------------------------------------------------------------------
 if [ "$cur_overdue" -le "$MAX_OVERDUE" ]; then
   log "healthy (past-due-without-actuals $cur_overdue <= $MAX_OVERDUE) - no artifact scan."

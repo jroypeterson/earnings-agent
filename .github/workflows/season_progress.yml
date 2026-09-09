@@ -75,38 +75,29 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      # Cross-run downloader pinned to a commit SHA — actions/download-artifact
-      # only sees same-run artifacts and would silently produce a fresh DB,
-      # erasing the watermark (and everything else).
+      # Deterministic restore: newest unexpired `earnings-db` artifact on main,
+      # selected by created_at through the artifacts API and downloaded by id.
+      #
+      # Replaced dawidd6/action-download-artifact on 2026-09-08. That action chose
+      # by ENUMERATING RUNS, and measured over the twelve most recent runs of the
+      # four workflows that restore this database, TWO restored a stale artifact --
+      # reconcile_calendar run 34259752925 restored a 2026-09-05 snapshot, skipping
+      # one from 2026-09-08 15:06, then re-uploaded it as the newest earnings-db.
+      # Content lost: events 2987 -> 2980, eps_actual 1744 -> 1740, kv_store 70 -> 69.
+      # The script carries the full measurement and the failure contract; the
+      # rollback guard below remains the content backstop.
+      #
+      # The script's own retry/verify replaces the previous restore+retry step pair:
+      # it retries the listing and the download, verifies the SQLite file before it
+      # overwrites the working copy, and exits non-zero rather than leaving a
+      # half-restored database behind. No continue-on-error -- a restore that cannot
+      # complete must stop the run, not start a fresh-DB one.
       - name: Restore earnings database
         id: restore_db
-        continue-on-error: true
-        uses: dawidd6/action-download-artifact@bf251b5aa9c2f7eeb574a96ee720e24f801b7c11  # v6
-        with:
-          name: earnings-db
-          search_artifacts: true
-          workflow_search: true
-          workflow_conclusion: success
-          branch: main
-          if_no_artifact_found: warn
-          path: .
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/ci_restore_db_artifact.sh
 
-      - name: Restore earnings database (retry after transient error)
-        if: steps.restore_db.outcome == 'failure'
-        uses: dawidd6/action-download-artifact@bf251b5aa9c2f7eeb574a96ee720e24f801b7c11  # v6
-        with:
-          name: earnings-db
-          search_artifacts: true
-          workflow_search: true
-          workflow_conclusion: success
-          branch: main
-          if_no_artifact_found: warn
-          path: .
-
-      # A fresh DB here is not merely lossy, it is WRONG in a specific way: an
-      # unseeded watermark makes the first run treat the entire season as
-      # already-seen and stay silent, so the failure would present as "quiet
-      # week" rather than as an outage.
       - name: Abort if DB artifact missing post-bootstrap
         if: vars.EA_DB_BOOTSTRAPPED == 'true' && hashFiles('earnings_events.db') == ''
         env:
