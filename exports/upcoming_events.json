@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-09-10T14:59:45Z",
+  "generated_at": "2026-09-10T21:43:55Z",
   "window": {
     "start": "2026-09-08",
     "end": "2026-09-24"
   },
   "counts": {
-    "events": 23
+    "events": 21
   },
   "events": [
     {
@@ -18,15 +18,6 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Alps Group Inc"
-    },
-    {
-      "ticker": "ALZN",
-      "event_date": "2026-09-08",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Alzamend Neuro Inc"
     },
     {
       "ticker": "SHPH",
@@ -54,15 +45,6 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Biodexa Pharmaceuticals Plc"
-    },
-    {
-      "ticker": "CMND",
-      "event_date": "2026-09-10",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Clearmind Medicine Inc."
     },
     {
       "ticker": "CPRT",
