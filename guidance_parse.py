@@ -25,7 +25,7 @@ company's own words.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 # --- canonical metric keys --------------------------------------------------
@@ -566,11 +566,39 @@ _CAPITAL_PATTERNS: list[tuple[str, str]] = [
 _CAPITAL_RES = [(name, re.compile(p, re.IGNORECASE)) for name, p in _CAPITAL_PATTERNS]
 
 
+# Qualifiers that answer the questions an amount alone leaves open. JP,
+# 2026-09-10: "did they buyback 60m in the quarter? vs what total
+# authorization, how much do they have left. is the $600M buyback
+# authorization a new authorization or a continuation? Any insight they said on
+# continuing buyback quantum over what time period?"
+_CAP_QUALIFIERS: list[tuple[str, str]] = [
+    ("replaces the prior authorization",
+     r"\breplaces?\s+and\s+supersedes?|\breplaces?\s+the\s+(?:remaining\s+)?"
+     r"(?:capacity|prior|previous)"),
+    ("in addition to the existing authorization",
+     r"\bin\s+addition\s+to\s+(?:the\s+)?(?:existing|prior|previous|remaining)"),
+    ("new program", r"\bapproved\s+a\s+new\b|\bnew\s+(?:share\s+)?repurchase\s+program\b"),
+    ("no expiration", r"\bwithout\s+an?\s+expiration|\bno\s+expiration\s+date"),
+    ("expires", r"\bexpir\w+\s+(?:on|in)\s+\w+"),
+    ("remaining capacity", r"\bremaining\s+(?:capacity|authorization|availability)"),
+    ("shares", r"\b([\d.,]+)\s*(?:thousand|million)?\s+shares\b"),
+]
+_CAP_QUALIFIER_RES = [(n, re.compile(p, re.IGNORECASE)) for n, p in _CAP_QUALIFIERS]
+
+
 @dataclass
 class CapitalItem:
     kind: str
     amount: str      # as the company printed it
     text: str
+    # What the sentence says ABOUT the amount: whether an authorization is new
+    # or additive, whether it expires, how many shares. An amount with no
+    # qualifier answers "how much" and leaves "against what" unanswered.
+    qualifiers: list = field(default_factory=list)
+
+    @property
+    def detail(self) -> str:
+        return " · ".join(self.qualifiers)
 
 
 def extract_capital_allocation(text: str, *, limit: int = 5) -> list[CapitalItem]:
@@ -579,13 +607,21 @@ def extract_capital_allocation(text: str, *, limit: int = 5) -> list[CapitalItem
         return []
     out: list[CapitalItem] = []
     seen: set[tuple[str, str]] = set()
-    for sent in re.split(r"(?<=[.!?])\s+|\n", text):
-        s = " ".join(sent.split())
+    sentences = [" ".join(x.split()) for x in re.split(r"(?<=[.!?])\s+|\n", text)]
+    for i, s in enumerate(sentences):
         if len(s) < 25 or len(s) > 320:
             continue
         # A cumulative figure is not the period's activity.
         if _CUMULATIVE.search(s):
             continue
+        # A buyback authorization is qualified in the FOLLOWING sentence as
+        # often as in its own: "the Board approved a new share repurchase
+        # program authorizing up to $600 million." then "The new program
+        # replaces and supersedes the remaining capacity under the prior
+        # program." Scanning one sentence answered "how much" and left "new or
+        # a continuation" unanswered -- the half that decides whether capacity
+        # actually went up.
+        window = " ".join(x for x in sentences[i:i + 3] if len(x) < 400)
         for kind, rx in _CAPITAL_RES:
             m = rx.search(s)
             if not m:
@@ -594,7 +630,17 @@ def extract_capital_allocation(text: str, *, limit: int = 5) -> list[CapitalItem
             if (kind, amount) in seen:
                 break
             seen.add((kind, amount))
-            out.append(CapitalItem(kind=kind, amount=amount, text=s))
+            quals = []
+            for name, qrx in _CAP_QUALIFIER_RES:
+                qm = qrx.search(window)
+                if not qm:
+                    continue
+                if name == "shares" and qm.lastindex:
+                    quals.append("%s shares" % qm.group(1))
+                else:
+                    quals.append(name)
+            out.append(CapitalItem(kind=kind, amount=amount, text=s,
+                                   qualifiers=quals))
             break
         if len(out) >= limit:
             break
@@ -681,6 +727,203 @@ def extract_unusual_items(text: str, *, limit: int = 5) -> list[UnusualItem]:
             break
     return out
 
+
+
+# --- operating KPIs ---------------------------------------------------------
+# JP, 2026-09-10: "in Results we need to have at least 1 KPI ... For FIVE it
+# certainly includes same store sales y/y and probably new store openings."
+#
+# These do NOT fit the "<metric> was $X" grammar: a release writes "comparable
+# sales increased by 14.1%" and "The Company opened 52 net new stores and ended
+# the quarter with 2,022 stores." The verb carries the number, so each shape
+# gets its own pattern rather than the metric grammar being loosened until it
+# starts matching prose it should not.
+#
+# The vocabulary is deliberately CROSS-SECTOR. A retailer's comps, a
+# subscription business's net adds and a lender's originations are the same
+# kind of fact -- the operating driver underneath the revenue line.
+
+_KPI_PATTERNS: list[tuple[str, str]] = [
+    ("comparable sales",
+     r"comparable\s+(?:store\s+)?sales\s+(?:increase[d]?|decrease[d]?|grew|declined|"
+     r"rose|fell)?\s*(?:by\s+|of\s+)?(?P<v>[-+]?[\d.]+\s*%)"),
+    ("same-store sales",
+     r"same[- ]store\s+sales\s+(?:increase[d]?|decrease[d]?)?\s*(?:by\s+|of\s+)?"
+     r"(?P<v>[-+]?[\d.]+\s*%)"),
+    ("net new stores",
+     r"opened\s+(?P<v>[\d,]+)\s+net\s+new\s+stores"),
+    ("net new stores",
+     r"(?P<v>[\d,]+)\s+net\s+new\s+stores\s+(?:were\s+)?opened"),
+    ("total stores",
+     r"ended\s+the\s+(?:quarter|period|year)\s+with\s+(?P<v>[\d,]+)\s+stores"),
+    ("total locations",
+     r"(?:operated|had)\s+(?P<v>[\d,]+)\s+(?:locations|clinics|centers|restaurants)"),
+    ("subscribers",
+     r"(?P<v>[\d.,]+\s*(?:million|thousand)?)\s+(?:paid\s+)?subscribers"),
+    ("net adds",
+     r"(?:net\s+adds?|net\s+additions?)\s+of\s+(?P<v>[\d.,]+\s*(?:million|thousand)?)"),
+    ("members",
+     r"(?P<v>[\d.,]+\s*(?:million|thousand)?)\s+members\b"),
+    ("active customers",
+     r"(?P<v>[\d.,]+\s*(?:million|thousand)?)\s+active\s+(?:customers|users|accounts)"),
+    ("GMV",
+     r"\bGMV\s+(?:of\s+|was\s+|totaled\s+)?(?P<v>\$[\d.,]+\s*(?:billion|million)?)"),
+    ("originations",
+     r"originations?\s+(?:of\s+|was\s+|were\s+|totaled\s+)?"
+     r"(?P<v>\$[\d.,]+\s*(?:billion|million)?)"),
+    ("backlog",
+     r"backlog\s+(?:of\s+|was\s+|totaled\s+)?(?P<v>\$[\d.,]+\s*(?:billion|million)?)"),
+    ("bookings",
+     r"bookings\s+(?:of\s+|was\s+|were\s+|totaled\s+)?"
+     r"(?P<v>\$[\d.,]+\s*(?:billion|million)?)"),
+    ("ARR",
+     r"\bARR\s+(?:of\s+|was\s+|totaled\s+)?(?P<v>\$[\d.,]+\s*(?:billion|million)?)"),
+]
+_KPI_RES = [(name, re.compile(pat, re.IGNORECASE)) for name, pat in _KPI_PATTERNS]
+
+
+@dataclass
+class OperatingKPI:
+    name: str
+    value: str          # as the company printed it
+    text: str
+
+
+def extract_operating_kpis(text: str, *, limit: int = 6) -> list[OperatingKPI]:
+    """The operating drivers underneath the revenue line."""
+    if not text:
+        return []
+    out: list[OperatingKPI] = []
+    seen: set[str] = set()
+    for sent in re.split(r"(?<=[.!?])\s+|\n", text):
+        s = " ".join(sent.split())
+        if len(s) < 20 or len(s) > 320:
+            continue
+        # The quarter's own figures, never the cumulative ones.
+        if _CUMULATIVE.search(s):
+            continue
+        for name, rx in _KPI_RES:
+            if name in seen:
+                continue
+            m = rx.search(s)
+            if not m:
+                continue
+            seen.add(name)
+            out.append(OperatingKPI(name=name,
+                                    value=" ".join(m.group("v").split()),
+                                    text=s))
+            break
+        if len(out) >= limit:
+            break
+    return out
+
+
+# --- qualitative outlook ----------------------------------------------------
+# JP, 2026-09-10: "we should also have an outlook section where we highlight any
+# outlook items outside of just quantitative guidance. Maybe they say something
+# like 'we expect China market to get more competitive' or 'costs to build to
+# ameliorate'. That is not specific guidance ... but it's useful."
+#
+# So: forward-looking statements that carry NO figure. The numeric outlook is
+# already the Guidance section; this is the half that never appears in a table
+# and disappears entirely from any purely numeric summary.
+
+_FORWARD = re.compile(
+    r"\b(we\s+(?:expect|anticipate|believe|continue\s+to\s+expect|see|plan|intend)|"
+    r"expects?\s+to|anticipat\w+|going\s+forward|looking\s+(?:ahead|forward)|"
+    r"in\s+the\s+(?:coming|back\s+half|second\s+half|next)|over\s+the\s+(?:next|coming)|"
+    r"longer[- ]term|medium[- ]term|into\s+(?:next\s+year|20\d\d))\b",
+    re.IGNORECASE,
+)
+# A sentence carrying a figure belongs to Guidance, not here.
+_HAS_ANY_FIGURE = re.compile(r"(\$\s?[\d,.]+|\b\d+(?:\.\d+)?\s?%)")
+
+# Safe-harbour boilerplate reads exactly like forward-looking commentary and
+# appears in every release and on every call. `daily_summary` has its own copy
+# for the guidance extractor; this module cannot import it without a cycle, so
+# the pattern is stated here and the two are allowed to differ -- they gate
+# different things and coupling them would make one wrong for the other.
+_FORWARD_NOISE = re.compile(
+    r"(forward[- ]looking\s+statements|safe\s+harbor|risk\s+factors|"
+    r"Private\s+Securities\s+Litigation|undue\s+reliance|"
+    r"we\s+undertake\s+no\s+(?:obligation|duty)|"
+    r"actual\s+results\s+(?:may|could)\s+differ)",
+    re.IGNORECASE,
+)
+
+
+@dataclass
+class OutlookNote:
+    text: str
+
+
+def extract_outlook_notes(text: str, *, limit: int = 4) -> list[OutlookNote]:
+    """Forward-looking statements with no number attached."""
+    if not text:
+        return []
+    out: list[OutlookNote] = []
+    seen: set[str] = set()
+    for sent in re.split(r"(?<=[.!?])\s+", text):
+        s = " ".join(sent.split())
+        if len(s) < 45 or len(s) > 300:
+            continue
+        if s.endswith("?"):
+            continue
+        if _FORWARD_NOISE.search(s) or _HAS_ANY_FIGURE.search(s):
+            continue
+        if not _FORWARD.search(s):
+            continue
+        key = s.lower()[:70]
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(OutlookNote(text=s))
+        if len(out) >= limit:
+            break
+    return out
+
+
+# --- announced future events ------------------------------------------------
+# JP, 2026-09-10: "If they announce future events like Analyst day or customer
+# conference that is good to highlight as well."
+
+_EVENT = re.compile(
+    r"\b(investor\s+day|analyst\s+day|capital\s+markets\s+day|investor\s+conference|"
+    r"user\s+conference|customer\s+conference|annual\s+meeting|"
+    r"(?:will\s+)?host\s+(?:an?\s+)?\w*\s*(?:day|conference|webcast)|"
+    r"R&D\s+day|product\s+launch\s+event)\b",
+    re.IGNORECASE,
+)
+
+
+@dataclass
+class AnnouncedEvent:
+    text: str
+
+
+def extract_announced_events(text: str, *, limit: int = 3) -> list[AnnouncedEvent]:
+    """Dates the company put in the diary."""
+    if not text:
+        return []
+    out: list[AnnouncedEvent] = []
+    seen: set[str] = set()
+    for sent in re.split(r"(?<=[.!?])\s+|\n", text):
+        s = " ".join(sent.split())
+        if len(s) < 30 or len(s) > 300:
+            continue
+        if not _EVENT.search(s):
+            continue
+        # The earnings call itself is not a future event worth flagging.
+        if re.search(r"\b(this|today's)\s+(?:call|webcast)\b", s, re.IGNORECASE):
+            continue
+        key = s.lower()[:70]
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(AnnouncedEvent(text=s))
+        if len(out) >= limit:
+            break
+    return out
 
 # --- puts and takes ---------------------------------------------------------
 # JP: "a lot of times the call will talk about puts and takes for guidance so in

@@ -553,6 +553,73 @@ def _rank_release_exhibit(doc_type: str, description: str, filename: str) -> tup
     return (1 if demoted else 0, suffix, filename or "")
 
 
+@dataclass
+class FilingDocument:
+    """One document attached to a filing, as the SGML header describes it."""
+    doc_type: str
+    filename: str
+    description: str
+    url: str
+
+    @property
+    def extension(self) -> str:
+        return self.filename.rsplit(".", 1)[-1].lower() if "." in self.filename else ""
+
+    @property
+    def is_exhibit(self) -> bool:
+        return self.doc_type.upper().startswith("EX-")
+
+
+def list_filing_documents(ticker: str, filing: Filing8K) -> list[FilingDocument]:
+    """Every document attached to a filing.
+
+    Used to ARCHIVE what a company actually publishes with its results -- the
+    press release, the slide deck, sometimes a supplemental workbook -- and to
+    answer the prior question of what they provide at all. Knowing that an
+    issuer ships an XLSX is itself worth having; it changes what analysis is
+    possible without re-deriving anything from a vendor.
+    """
+    cik = get_cik(ticker)
+    if not cik or not filing or not filing.accession:
+        return []
+    nodash = filing.accession.replace("-", "")
+    base = f"https://www.sec.gov/Archives/edgar/data/{int(cik)}/{nodash}"
+    headers = _get_text(f"{base}/{filing.accession}-index-headers.html")
+    if not headers:
+        return []
+    out: list[FilingDocument] = []
+    for m in _DOC_HEADER_RE.finditer(html.unescape(headers)):
+        d = m.groupdict()
+        filename = (d.get("filename") or "").strip()
+        if not filename:
+            continue
+        out.append(FilingDocument(
+            doc_type=(d.get("type") or "").strip(),
+            filename=filename,
+            description=(d.get("desc") or "").strip(),
+            url=f"{base}/{filename}",
+        ))
+    return out
+
+
+def fetch_document_bytes(url: str) -> bytes | None:
+    """Raw bytes for one filing document, sharing the module rate limiter."""
+    global _edgar_requests, _edgar_failures
+    _edgar_requests += 1
+    _sleep_for_rate_limit()
+    try:
+        r = requests.get(url, headers=_SEC_HEADERS, timeout=60)
+    except requests.RequestException as exc:
+        logger.debug(f"EDGAR GET failed {url}: {exc}")
+        _edgar_failures += 1
+        return None
+    if r.status_code != 200:
+        if r.status_code != 404:
+            _edgar_failures += 1
+        return None
+    return r.content
+
+
 def fetch_release_document(ticker: str, filing: Filing8K) -> ReleaseDoc | None:
     """The earnings press release attached to an 8-K/6-K, as text.
 
