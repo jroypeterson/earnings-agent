@@ -204,11 +204,44 @@ def test_the_operating_line_and_its_year_ago_comparison():
     assert round(got[0].yoy_pct) == 204
 
 
-def test_revenue_and_eps_are_not_taken_from_the_release():
-    """They already have a row from the consensus data, which is the better
-    source because it carries the estimate alongside."""
-    got = extract_reported_metrics("Net sales were $1.26 billion.")
-    assert all(m.key != "revenue" for m in got)
+def test_the_release_supplies_the_year_ago_base_for_eps_and_revenue():
+    """The events DB is a ROLLING window -- earliest row 2026-04-21 as of
+    2026-09-09 -- so it holds no year-ago comparable for any name. The release
+    is the only source, which is why revenue and EPS are extracted here even
+    though the actual itself comes from consensus data."""
+    got = extract_reported_metrics(
+        "Adjusted diluted income per common share (1) was $1.68 compared to "
+        "$0.81 in the second quarter of fiscal 2025.")
+    assert got and got[0].key == "eps" and got[0].basis == "adjusted"
+    assert got[0].prior_year == 0.81
+    assert round(got[0].yoy_pct, 1) == 107.4
+
+
+def test_a_footnote_marker_does_not_break_the_metric_name():
+    """"Adjusted diluted income per common share (1) was ..." is the ONLY place
+    the adjusted year-ago figure appears. A metric pattern without digits
+    dropped every adjusted comparison."""
+    got = extract_reported_metrics(
+        "Operating income (3) was $10.0 million compared to $5.0 million.")
+    assert got and got[0].key == "op_income"
+
+
+def test_a_growth_rate_is_not_recorded_as_the_level():
+    """"Net sales increased by 22.9% to $1.3 billion" otherwise books revenue
+    as 22.9."""
+    got = extract_reported_metrics(
+        "Net sales increased by 22.9% to $1.3 billion from $970.5 million.")
+    assert all(not (m.key == "revenue" and m.value < 1000) for m in got)
+
+
+def test_a_later_sentence_with_the_year_ago_figure_wins():
+    """A release states the same metric more than once and only some of those
+    sentences carry the comparison. First-wins discarded the useful one."""
+    got = extract_reported_metrics(
+        "Operating income was $275.4 million. "
+        "Operating income was $275.4 million compared to $52.4 million a year ago.")
+    op = [m for m in got if m.key == "op_income"]
+    assert op and op[0].prior_year == 52.4e6
 
 
 def test_a_prior_year_loss_in_parentheses_is_read_as_negative():

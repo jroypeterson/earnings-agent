@@ -339,8 +339,18 @@ def diff_guidance(new: list[GuidanceRange],
 # which carries the year-ago figure too, and therefore a YoY for free.
 
 _REPORTED = re.compile(
-    r"(?P<metric>[A-Z][A-Za-z ()\-]{2,60}?)\s+"
-    r"(?:was|were|totaled|totalled|came in at|increased to|decreased to|of)\s+"
+    # Digits belong in the metric name: releases carry footnote markers, and
+    # "Adjusted diluted income per common share (1) was $1.68 compared to
+    # $0.54" is the ONLY place the adjusted year-ago figure appears. Excluding
+    # them dropped every adjusted comparison, which is the one that matches
+    # consensus.
+    r"(?P<metric>[A-Z][A-Za-z0-9 ()\-]{2,60}?)\s+"
+    # "increased BY 22.9% TO $1.3 billion" -- the growth rate sits between the
+    # verb and the level, so the verb must step over it or the sentence never
+    # matches and revenue loses its year-ago base entirely.
+    r"(?:was|were|totaled|totalled|came in at|of"
+    r"|(?:increased|decreased|grew|declined|rose|fell)"
+    r"(?:\s+by\s+[\d.,]+\s*%)?\s+to)\s+"
     # A closing paren sits BETWEEN the number and its scale word in
     # "$(10.0) million", so the scale must be reachable past it -- otherwise a
     # parenthesised loss parses as -10.0 rather than -10.0 million, off by 1e6
@@ -350,15 +360,22 @@ _REPORTED = re.compile(
     # "$(10.0) million" puts the currency symbol OUTSIDE the negation paren,
     # so the paren must be allowed on either side of it or a swing out of a
     # loss loses its prior-year figure entirely and reports no YoY at all.
-    r"(?:\s*,?\s*(?:compared|versus|vs\.?)\s+(?:to|with)?\s*"
+    # "from $970.5 million" is the other half of "Net sales increased by 22.9%
+    # to $1.3 billion from $970.5 million in the second quarter of fiscal
+    # 2025" -- the same year-ago comparison in a different sentence shape.
+    r"(?:\s*,?\s*(?:compared|versus|vs\.?|from)\s+(?:to|with)?\s*"
     r"(?P<neg2>\(?)\s*\$?\s*\(?\s*(?P<v2>\d[\d,]*(?:\.\d+)?)\s*\)?\s*"
     r"(?P<s2>billion|million|thousand|bn|mm|[bmk])?\s*(?P<p2>%)?)?",
     re.IGNORECASE,
 )
 
-# Only operating-ish lines are wanted here; EPS and revenue already have their
-# own rows on the card from the consensus data, which is the better source.
-_REPORTED_KEYS = ("ebitda", "op_income", "op_margin", "gross_margin", "comps")
+# EPS and revenue are included even though the consensus data already supplies
+# the actual, because the RELEASE is the only source of the YEAR-AGO figure:
+# the events DB is a rolling window (earliest row 2026-04-21 on 2026-09-09), so
+# it cannot reach back four quarters for any name. The card takes the actual
+# from consensus and the comparison base from here.
+_REPORTED_KEYS = ("ebitda", "op_income", "op_margin", "gross_margin", "comps",
+                  "revenue", "eps", "net_income")
 
 
 @dataclass
@@ -386,8 +403,13 @@ def extract_reported_metrics(text: str, *, limit: int = 6) -> list[ReportedMetri
     """Operating figures the release states for the quarter just reported."""
     if not text:
         return []
-    out: list[ReportedMetric] = []
-    seen: set[tuple[str, str]] = set()
+    # Metrics that are AMOUNTS. A percentage captured for one of these is the
+    # growth rate, not the level: "Net sales increased by 22.9% to $1.3 billion
+    # from $970.5 million" otherwise records revenue as 22.9.
+    amount_keys = {"revenue", "eps", "op_income", "net_income", "ebitda", "capex"}
+
+    best: dict[tuple[str, str], ReportedMetric] = {}
+    order: list[tuple[str, str]] = []
     for sent in re.split(r"(?<=[.!?])\s+|\n", text):
         s = " ".join(sent.split())
         if len(s) < 20 or len(s) > 320:
@@ -400,9 +422,9 @@ def extract_reported_metrics(text: str, *, limit: int = 6) -> list[ReportedMetri
             continue
         key, label = found
         basis = _basis_for(m.group("metric"))
-        if (key, basis) in seen:
-            continue
         pct = bool(m.group("p1"))
+        if pct and key in amount_keys:
+            continue
         value = _to_number(m.group("v1"), m.group("s1"), m.group("neg1") == "(")
         prior = None
         if m.group("v2"):
@@ -413,13 +435,22 @@ def extract_reported_metrics(text: str, *, limit: int = 6) -> list[ReportedMetri
             negative = m.group("neg2") == "(" or "(" in gap
             prior = _to_number(m.group("v2"), m.group("s2"), negative)
         unit = "pct" if (pct or key in ("op_margin", "gross_margin", "comps")) else "currency"
-        seen.add((key, basis))
-        out.append(ReportedMetric(
-            key=key, label=m.group("metric").strip(), value=value,
-            unit=unit, basis=basis, prior_year=prior))
-        if len(out) >= limit:
-            break
-    return out
+        cand = ReportedMetric(key=key, label=m.group("metric").strip(),
+                              value=value, unit=unit, basis=basis, prior_year=prior)
+
+        # A release states the same metric more than once, and only some of
+        # those sentences carry the year-ago comparison. First-wins discarded
+        # the useful one: EPS appeared first without a prior and the later
+        # "compared to $0.77" sentence was then skipped as a duplicate.
+        slot = (key, basis)
+        held = best.get(slot)
+        if held is None:
+            best[slot] = cand
+            order.append(slot)
+        elif held.prior_year is None and cand.prior_year is not None:
+            best[slot] = cand
+
+    return [best[k] for k in order][:limit]
 
 
 # --- puts and takes ---------------------------------------------------------

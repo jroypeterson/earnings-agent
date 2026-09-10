@@ -518,7 +518,16 @@ def _html_to_text(raw: str) -> str:
     """
     out = re.sub(r"(?is)<(script|style)[^>]*>.*?</\1>", " ", raw)
     out = re.sub(r"(?i)<(br|/p|/div|/tr|/h[1-6]|/li)[^>]*>", "\n", out)
-    out = re.sub(r"(?s)<[^>]+>", " ", out)
+    # Table cells need a separator or adjacent columns fuse into one token.
+    out = re.sub(r"(?i)</(td|th)[^>]*>", " ", out)
+    # ⚠ Every REMAINING tag is inline, and inline tags land INSIDE words:
+    # issuers wrap fragments in <span>/<font> for styling, so replacing them
+    # with a space turns "compared" into "com pared". That broke the year-ago
+    # comparison on Five Below's adjusted EPS line -- the extractor looks for
+    # "compared to" and the word was no longer there. Delete them instead of
+    # spacing them; the block and cell rules above already supply the real
+    # separators.
+    out = re.sub(r"(?s)<[^>]+>", "", out)
     out = html.unescape(out)
     out = out.replace("\xa0", " ")
     out = re.sub(r"[ \t]+", " ", out)
