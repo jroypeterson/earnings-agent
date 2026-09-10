@@ -52,6 +52,27 @@ _METRIC_RES = [(key, re.compile(pat, re.IGNORECASE)) for key, pat in _METRIC_PAT
 _ADJUSTED = re.compile(r"\b(adjusted|non[- ]gaap|underlying|core)\b", re.IGNORECASE)
 _GAAP = re.compile(r"\bgaap\b", re.IGNORECASE)
 
+# A LOSS printed as a positive magnitude. Codex review 2026-09-09, confirmed
+# against the parser: "Adjusted loss per share is expected to be $0.40 to
+# $0.50" returned +0.40 to +0.50, and "Net loss was $25.0 million" returned
+# net income +$25M. A loss-making issuer -- and the book holds several -- would
+# have shown a false profit, a false margin, and an actual-versus-guide result
+# with the sign inverted. Issuers state losses three ways: parenthesised,
+# signed, and as a positive number the WORD "loss" makes negative. Only the
+# first two were handled.
+_LOSS_WORD = re.compile(r"\bloss(?:es)?\b", re.IGNORECASE)
+
+# Expense and cost lines that the generic revenue vocabulary would otherwise
+# swallow. "Sales and marketing expense was $120.0 million" was classified as
+# revenue $120M -- which then becomes the year-ago revenue base, the margin
+# denominator, and the thing a revenue guide is scored against.
+_NOT_REVENUE = re.compile(
+    r"\b(expenses?|costs?|expenditures?|spend(?:ing)?|SG&A|"
+    r"selling,?\s+general|marketing|commissions?|deductions?|allowances?|"
+    r"cost\s+of\s+(?:goods|sales|revenue))\b",
+    re.IGNORECASE,
+)
+
 _SCALE = {"billion": 1e9, "bn": 1e9, "million": 1e6, "mm": 1e6, "m": 1e6, "b": 1e9,
           "thousand": 1e3, "k": 1e3}
 
@@ -123,9 +144,19 @@ def _metric_for(text: str) -> Optional[tuple[str, str]]:
     """(canonical key, matched label) for the metric a sentence is about."""
     for key, rx in _METRIC_RES:
         m = rx.search(text)
-        if m:
-            return key, m.group(0)
+        if not m:
+            continue
+        # An expense line is not revenue, however much its wording looks like
+        # it: "Sales and marketing expense", "cost of sales", "SG&A".
+        if key == "revenue" and _NOT_REVENUE.search(text):
+            continue
+        return key, m.group(0)
     return None
+
+
+def _is_loss(text: str) -> bool:
+    """True when the metric is a LOSS stated as a positive magnitude."""
+    return bool(_LOSS_WORD.search(text))
 
 
 def _basis_for(text: str) -> str:
@@ -172,6 +203,13 @@ def parse_guidance_line(line: str, *, period: str = "") -> Optional[GuidanceRang
         low = high = _to_number(point.group("v"), point.group("s"), False)
 
     unit = "pct" if pct else ("currency" if cur else "count")
+    # A loss stated as a positive magnitude is economically negative.
+    if _is_loss(head) or _is_loss(label):
+        if low > 0:
+            low = -low
+        if high > 0:
+            high = -high
+        low, high = min(low, high), max(low, high)
     # A margin or a comp is a percentage even when the % sign sits elsewhere.
     if key in ("comps", "op_margin", "gross_margin", "tax_rate") and not cur:
         unit = "pct"
@@ -183,7 +221,16 @@ def parse_guidance_line(line: str, *, period: str = "") -> Optional[GuidanceRang
     prior_low = prior_high = None
     if m:
         tail = line[m.end():]
+        # ⚠ A second range of the same unit is NOT automatically the prior
+        # column. Codex review 2026-09-09, confirmed: "Revenue $2.40 billion to
+        # $2.50 billion adjusted EBITDA $2.10 billion to $2.20 billion"
+        # recorded EBITDA as revenue's PRIOR guide and reported a plausible
+        # false cut of -$300M. The second range only counts when nothing
+        # between the two names a different metric -- i.e. it is the next
+        # column of the same table row, not the next metric in a sentence.
         m2 = _RANGE.match(tail.lstrip()) or _RANGE.search(tail[:60])
+        if m2 and _metric_for(tail[: m2.start()]):
+            m2 = None
         if m2:
             pct2 = bool(m2.group("p1") or m2.group("p2"))
             cur2 = bool(m2.group("c1") or m2.group("c2"))
@@ -448,6 +495,12 @@ def extract_reported_metrics(text: str, *, limit: int = 6) -> list[ReportedMetri
             negative = m.group("neg2") == "(" or "(" in gap
             prior = _to_number(m.group("v2"), m.group("s2"), negative)
         unit = "pct" if (pct or key in ("op_margin", "gross_margin", "comps")) else "currency"
+        if _is_loss(m.group("metric")):
+            # "Net loss was $25.0 million" is -$25M. Left positive it becomes
+            # a profit, a positive margin, and a beat.
+            value = -abs(value)
+            if prior is not None:
+                prior = -abs(prior)
         cand = ReportedMetric(key=key, label=m.group("metric").strip(),
                               value=value, unit=unit, basis=basis, prior_year=prior)
 
@@ -464,6 +517,87 @@ def extract_reported_metrics(text: str, *, limit: int = 6) -> list[ReportedMetri
             best[slot] = cand
 
     return [best[k] for k in order][:limit]
+
+
+# --- unusual items ----------------------------------------------------------
+# JP, 2026-09-09: "anything unusual should be called out in other. So if they
+# say they are going to re-segment or management changes or things like that".
+#
+# These are the disclosures that change how every FUTURE number is read, and
+# they are easy to miss precisely because they are not on any metric line. A
+# re-segmentation breaks the comparability of the whole history; a CFO leaving
+# two quarters before a guidance cut is the kind of thing worth knowing early.
+#
+# Each pattern is narrow and names its category, so a hit can be shown with the
+# sentence that produced it and judged by eye. Better to surface a few false
+# positives the reader dismisses in a second than to stay silent on a
+# re-segmentation.
+
+_UNUSUAL: list[tuple[str, str]] = [
+    ("segments", r"\b(re-?segment\w*|change\w*\s+(?:to|in)\s+(?:our\s+)?(?:reportable\s+)?"
+                 r"segment\w*|new\s+reportable\s+segment\w*|segment\s+reporting\s+"
+                 r"(?:change|structure)|realign\w*\s+(?:our\s+)?(?:reporting|segment))\b"),
+    ("management", r"\b((?:chief\s+\w+\s+officer|CEO|CFO|COO|president|chair(?:man)?)\b"
+                   r"[^.]{0,60}\b(?:transition\w*|step(?:ping|s|ped)?\s+down|retir\w+|"
+                   r"depart\w+|resign\w+|succeed\w*|appoint\w+|named|joins?|joined)|"
+                   r"\b(?:appoint\w+|named)\b[^.]{0,40}\b(?:chief\s+\w+\s+officer|CEO|CFO|COO))"),
+    ("restatement", r"\b(restat\w+|non-?reliance|material\s+weakness|"
+                    r"revis\w+\s+(?:our\s+)?(?:previously\s+)?(?:issued\s+)?financial)\b"),
+    ("auditor", r"\b(dismiss\w+|engag\w+|appoint\w+)\b[^.]{0,40}\b"
+                r"(?:independent\s+registered\s+public\s+accounting\s+firm|auditor)\b"),
+    ("accounting", r"\b(change\w*\s+in\s+accounting\s+(?:principle|policy|estimate)|"
+                   r"adopt\w+\s+(?:ASU|ASC)\s*[\d-]+|new\s+accounting\s+standard)\b"),
+    ("capital return", r"\b((?:initiat\w+|increas\w+|suspend\w+|reinstat\w+)\b[^.]{0,40}"
+                       r"\b(?:dividend|share\s+repurchase|buyback)|"
+                       r"new\s+\$?[\d.,]+\s*(?:billion|million)?\s+"
+                       r"(?:share\s+)?repurchase\s+(?:program|authorization))\b"),
+    ("M&A", r"\b(definitive\s+agreement|agreed?\s+to\s+acquire|acquisition\s+of\b|"
+            r"divest\w+|spin-?off|merger\s+agreement|sale\s+of\s+(?:our|the)\s+\w+\s+business)\b"),
+    ("impairment", r"\b(goodwill\s+impairment|impairment\s+charge|write-?(?:down|off)\s+of)\b"),
+    ("guidance policy", r"\b(no\s+longer\s+(?:provid\w+|issu\w+)\s+(?:annual\s+|quarterly\s+)?"
+                        r"guidance|suspend\w+\s+(?:our\s+)?guidance|withdraw\w+\s+"
+                        r"(?:our\s+)?(?:guidance|outlook))\b"),
+    ("split", r"\b(stock\s+split|reverse\s+split|split-?adjusted\s+basis)\b"),
+]
+_UNUSUAL_RES = [(name, re.compile(p, re.IGNORECASE)) for name, p in _UNUSUAL]
+
+# Boilerplate that names these words without disclosing anything.
+_UNUSUAL_NOISE = re.compile(
+    r"(forward[- ]looking|safe harbor|risk factors|Private Securities Litigation|"
+    r"may|could|might)\s", re.IGNORECASE,
+)
+
+
+@dataclass
+class UnusualItem:
+    category: str
+    text: str
+
+
+def extract_unusual_items(text: str, *, limit: int = 5) -> list[UnusualItem]:
+    """Disclosures that change how the numbers should be read."""
+    if not text:
+        return []
+    out: list[UnusualItem] = []
+    seen: set[str] = set()
+    for sent in re.split(r"(?<=[.!?])\s+|\n", text):
+        s = " ".join(sent.split())
+        if len(s) < 35 or len(s) > 320:
+            continue
+        if _UNUSUAL_NOISE.match(s):
+            continue
+        for name, rx in _UNUSUAL_RES:
+            if not rx.search(s):
+                continue
+            key = s.lower()[:70]
+            if key in seen:
+                break
+            seen.add(key)
+            out.append(UnusualItem(category=name, text=s))
+            break
+        if len(out) >= limit:
+            break
+    return out
 
 
 # --- puts and takes ---------------------------------------------------------

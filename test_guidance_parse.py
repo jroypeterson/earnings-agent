@@ -54,8 +54,49 @@ def test_a_reversed_range_is_normalised():
 
 
 def test_a_sentence_with_no_metric_is_not_guessed_at():
-    assert parse_guidance_line("It was up $5 to $7 that day") is None or True
+    """⚠ The first version asserted `... is None or True`, which cannot fail.
+    Codex flagged it as a check that silently matches nothing."""
     assert parse_guidance_line("We are pleased with the quarter.") is None
+    assert parse_guidance_line("Attendance rose from 5 to 7 that day") is None
+
+
+def test_a_loss_stated_as_a_positive_magnitude_is_negative():
+    """Codex 2026-09-09, confirmed live: "Adjusted loss per share is expected
+    to be $0.40 to $0.50" returned +0.40 to +0.50. A loss-making issuer would
+    have shown a false profit, a false margin, and an inverted beat."""
+    r = parse_guidance_line("Adjusted loss per share is expected to be $0.40 to $0.50.")
+    assert r.low == -0.50 and r.high == -0.40
+
+
+def test_a_reported_net_loss_is_negative():
+    got = extract_reported_metrics(
+        "Net loss was $25.0 million compared to $10.0 million a year ago.")
+    assert got and got[0].value == -25.0e6 and got[0].prior_year == -10.0e6
+
+
+def test_an_expense_line_is_not_revenue():
+    """"Sales and marketing expense was $120.0 million" was classified as
+    revenue -- which then becomes the margin denominator and the thing a
+    revenue guide is scored against."""
+    got = extract_reported_metrics(
+        "Sales and marketing expense was $120.0 million compared to $100.0 million.")
+    assert all(m.key != "revenue" for m in got)
+
+
+def test_a_second_metric_is_not_mistaken_for_the_prior_column():
+    """"Revenue $2.40B to $2.50B adjusted EBITDA $2.10B to $2.20B" recorded
+    EBITDA as revenue's PRIOR guide and reported a false cut of -$300M."""
+    r = parse_guidance_line(
+        "Revenue $2.40 billion to $2.50 billion "
+        "adjusted EBITDA $2.10 billion to $2.20 billion")
+    assert r.key == "revenue"
+    assert not r.has_prior
+
+
+def test_a_real_prior_column_still_parses():
+    r = parse_guidance_line(
+        "Net sales $5.63 billion to $5.71 billion $5.40 billion to $5.48 billion")
+    assert r.has_prior and r.prior_low == 5.40e9
 
 
 # --- basis ------------------------------------------------------------------
