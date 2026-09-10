@@ -294,3 +294,16 @@ def test_boilerplate_without_guidance_context_is_ignored():
 def test_empty_text_is_safe():
     assert extract_puts_and_takes("") == []
     assert extract_reported_metrics("") == []
+
+
+def test_a_year_to_date_figure_is_never_read_as_the_quarter():
+    """A release states each metric for the quarter and again cumulatively, in
+    the same words. Six months of profit over one quarter of revenue reports a
+    margin roughly double the real one -- plausible, and wrong."""
+    got = extract_reported_metrics(
+        "Operating income was $113.2 million compared to $55.1 million in the "
+        "second quarter of fiscal 2025. "
+        "Operating income was $275.4 million compared to $52.4 million in the "
+        "year to date period of fiscal 2025.")
+    op = [m for m in got if m.key == "op_income"]
+    assert op and op[0].value == 113.2e6, "the quarterly figure must win"

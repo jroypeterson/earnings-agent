@@ -377,6 +377,13 @@ _REPORTED = re.compile(
 _REPORTED_KEYS = ("ebitda", "op_income", "op_margin", "gross_margin", "comps",
                   "revenue", "eps", "net_income")
 
+# Cumulative periods, which must never be read as the quarter.
+_CUMULATIVE = re.compile(
+    r"\b(year[- ]to[- ]date|first (?:six|nine) months|"
+    r"(?:six|nine)[- ]month|first half|year to date period)\b",
+    re.IGNORECASE,
+)
+
 
 @dataclass
 class ReportedMetric:
@@ -413,6 +420,12 @@ def extract_reported_metrics(text: str, *, limit: int = 6) -> list[ReportedMetri
     for sent in re.split(r"(?<=[.!?])\s+|\n", text):
         s = " ".join(sent.split())
         if len(s) < 20 or len(s) > 320:
+            continue
+        # A release states each metric for the QUARTER and again for the year
+        # to date, in the same words. Taking a cumulative figure would put six
+        # months of profit over one quarter of revenue and report a margin
+        # roughly double the real one -- plausible, and wrong.
+        if _CUMULATIVE.search(s):
             continue
         m = _REPORTED.search(s)
         if not m:
