@@ -21,15 +21,21 @@ Modelled on **StreetAccount's own earnings cycle**, reverse-engineered from the 
 ## Section order — fixed, and the same for both
 
 ```
-HEADER      `TICKER` Company — <date> · BMO/AMC · $price (±day)
+HEADER      `TICKER` Company — $price (±day)
+WHEN        report date + session, call time, quarter
 METRICS     the numbers
 GUIDANCE    what the company itself said about the future
 SETUP       (preview)  positioning into the print
 REACTION    (review)   what the stock did
-CALL        (preview)  when it is
 TAKEAWAYS   (review)   what management said
 NOT AVAILABLE          every source that failed, named
 ```
+
+**Every date is labelled, and the dates live together.** JP, 2026-09-09, on the CPRT preview:
+*"you just have a date written but don't say what that date is… have date and call in same
+section as well under a bold header."* A bare date in a header is ambiguous between the report
+date, the call date and the as-of date — and for an AMC print those are routinely different
+days. `WHEN` carries all of them, each named.
 
 Rules that hold in both:
 

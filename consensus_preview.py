@@ -1268,8 +1268,15 @@ def _render_row_lines(row: PreviewRow) -> list[str]:
     day = f" ({_fmt_pct(row.day_change_pct)} day)" if row.day_change_pct is not None else ""
 
     lines = [
-        f"*`{row.ticker}` {name}* — {_fmt_short_date(row.event_date)} · {badge} · "
-        f"{_fmt_price(row.last_price)}{day}",
+        f"*`{row.ticker}` {name}* — {_fmt_price(row.last_price)}{day}",
+        # JP, 2026-09-09: "you just have a date written but don't say what that
+        # date is". A bare date in the header is ambiguous between the report
+        # date, the call date and the as-of date — three different days for an
+        # AMC name whose call is the next morning. Both are labelled, and both
+        # live in one section rather than at opposite ends of the card.
+        "*When*",
+        f"  • Reports  {_fmt_short_date(row.event_date)} · {badge}",
+        f"  • Call  {_fmt_call_et(row.call_datetime_utc, row.event_date)}",
         "*Metrics* _(Street consensus)_",
         f"  • EPS  {_fmt_eps(row.eps_mean)}",
         f"  • Rev  {_fmt_rev(row.rev_mean)}",
@@ -1323,8 +1330,6 @@ def _render_row_lines(row: PreviewRow) -> list[str]:
         f"  • {_render_post_moves(row.post_moves)}",
         f"  • {_render_beat_rate(row.eps_beat, 'EPS beat rate')} · "
         f"{_render_beat_rate(row.rev_beat, 'Rev beat rate')}",
-        "*Call*",
-        f"  • {_fmt_call_et(row.call_datetime_utc, row.event_date)}",
     ])
     return lines
 
