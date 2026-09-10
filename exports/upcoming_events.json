@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-09-09T21:48:29Z",
+  "generated_at": "2026-09-10T14:59:45Z",
   "window": {
-    "start": "2026-09-07",
-    "end": "2026-09-23"
+    "start": "2026-09-08",
+    "end": "2026-09-24"
   },
   "counts": {
-    "events": 21
+    "events": 23
   },
   "events": [
     {
@@ -38,15 +38,6 @@
       "company_name": "Shuttle Pharmaceuticals Holdings, Inc."
     },
     {
-      "ticker": "COO",
-      "event_date": "2026-09-09",
-      "event_hour": "amc",
-      "tier": 2,
-      "date_confirmed": true,
-      "call_datetime_utc": "2026-09-09T20:00:00+00:00",
-      "company_name": "The Cooper Companies, Inc."
-    },
-    {
       "ticker": "ADBE",
       "event_date": "2026-09-10",
       "event_hour": "amc",
@@ -63,6 +54,15 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Biodexa Pharmaceuticals Plc"
+    },
+    {
+      "ticker": "CMND",
+      "event_date": "2026-09-10",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Clearmind Medicine Inc."
     },
     {
       "ticker": "CPRT",
@@ -94,9 +94,9 @@
     {
       "ticker": "HYFT",
       "event_date": "2026-09-14",
-      "event_hour": "",
+      "event_hour": "amc",
       "tier": 3,
-      "date_confirmed": false,
+      "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "MindWalk Holdings Corp."
     },
@@ -198,6 +198,24 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "YD Bio Limited Ordinary Shares"
+    },
+    {
+      "ticker": "APLM",
+      "event_date": "2026-09-24",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Apollomics, Inc."
+    },
+    {
+      "ticker": "LITS",
+      "event_date": "2026-09-24",
+      "event_hour": "amc",
+      "tier": 3,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Lite Strategy, Inc."
     }
   ]
 }
