@@ -553,6 +553,126 @@ def _rank_release_exhibit(doc_type: str, description: str, filename: str) -> tup
     return (1 if demoted else 0, suffix, filename or "")
 
 
+def find_periodic_report(
+    ticker: str, window_start: date, window_end: date, forms=("10-Q", "10-K")
+) -> Filing8K | None:
+    """The most recent 10-Q / 10-K filed in the window.
+
+    The quarterly report carries facts the earnings release does not, and the
+    one this fleet needs first is the REMAINING share-repurchase authorization:
+    Item 5 / "Issuer Purchases of Equity Securities" states the maximum dollar
+    value that may yet be purchased. A release announces a new program and its
+    size; only the periodic report says how much is actually left.
+    """
+    cik = get_cik(ticker)
+    if not cik:
+        return None
+    data = _get_json(
+        f"https://data.sec.gov/submissions/CIK{int(cik):010d}.json")
+    if not data:
+        return None
+    recent = (data.get("filings") or {}).get("recent") or {}
+    forms_list = recent.get("form") or []
+    dates = recent.get("filingDate") or []
+    accs = recent.get("accessionNumber") or []
+    docs = recent.get("primaryDocument") or []
+    best = None
+    for i, form in enumerate(forms_list):
+        if form not in forms:
+            continue
+        if i >= len(dates) or i >= len(accs):
+            continue
+        try:
+            filed = date.fromisoformat(dates[i])
+        except (ValueError, TypeError):
+            continue
+        if not (window_start <= filed <= window_end):
+            continue
+        cand = Filing8K(
+            form=form, filing_date=dates[i], accession=accs[i],
+            primary_doc_title=docs[i] if i < len(docs) else "", items=(),
+        )
+        if best is None or cand.filing_date > best.filing_date:
+            best = cand
+    return best
+
+
+# Item 5's repurchase table. The column heading is standard across filers;
+# the ROWS beneath it run oldest to newest, one per month plus a quarter
+# total, and the figure that matters is the LAST one -- what was left when the
+# quarter closed.
+#
+# FIVE's Q2 FY26 table reads:
+#   First Quarter 2026            —  $ —  —  $ 60,006,492
+#   May 31 - July 4, 2026   310,501  $ 193.24  310,501  $ 5,279
+#   Second Quarter 2026     310,501  $ 193.24  310,501  $ 5,279
+# so the answer is $5,279 -- the $100M program authorised in 2023 is spent
+# ($40.0M in FY24 plus $60.0M this quarter), which is why a new $600M program
+# replaced it. Taking the FIRST match would have reported $60,006,492 and said
+# the opposite: plenty of capacity left.
+# ⚠ The TABLE heading only. "remaining capacity" also appears in PROSE -- FIVE's
+# 10-Q says the new program "replaces and supersedes the remaining capacity
+# under our prior share repurchase program" three separate times, all of them
+# BEFORE the table. A pattern that accepted either matched the prose first and
+# read currency out of a sentence about the old program.
+_REMAINING_HEADER = re.compile(
+    r"maximum\s+(?:approximate\s+)?(?:dollar\s+value|number)[^.]{0,80}?"
+    r"may\s+yet\s+be\s+purchased",
+    re.IGNORECASE,
+)
+_CURRENCY_CELL = re.compile(r"\$\s?(?P<v>\d[\d,]*(?:\.\d+)?)\s*"
+                            r"(?P<s>billion|million|thousand)?", re.IGNORECASE)
+
+
+def find_remaining_buyback(ticker: str, event_date: date) -> tuple[str, str] | None:
+    """(amount as printed, source url) for the repurchase capacity left.
+
+    Reads the periodic report filed around the print. Returns None rather than
+    a guess: a wrong remaining-authorization figure is worse than none, because
+    it is precisely the number used to judge whether a buyback can continue.
+    """
+    filing = find_periodic_report(
+        ticker, event_date - timedelta(days=10), event_date + timedelta(days=60))
+    if not filing:
+        return None
+    cik = get_cik(ticker)
+    if not cik:
+        return None
+    nodash = filing.accession.replace("-", "")
+    base = f"https://www.sec.gov/Archives/edgar/data/{int(cik)}/{nodash}"
+    url = f"{base}/{filing.primary_doc_title}" if filing.primary_doc_title else ""
+    if not url:
+        return None
+    raw = _get_text(url)
+    if not raw:
+        return None
+    text = _html_to_text(raw)
+    head = _REMAINING_HEADER.search(text)
+    if not head:
+        return None
+    # The table sits between the heading and its footnote marker. Bounded so a
+    # missing footnote cannot swallow the rest of the document.
+    tail = text[head.end(): head.end() + 2500]
+    # ⚠ Cut at the footnote PARAGRAPH, not at the first "(1)". The column
+    # heading itself ends "...May Yet be Purchased Under the Program(1)", so a
+    # plain find("(1)") matches inside the heading, cuts nothing, and the
+    # window runs on into the footnote prose -- which is full of currency
+    # ("$100 million", "$40.0 million", per-share prices). The last match there
+    # is not the remaining authorization: it returned $30,489 where the table
+    # says $5,279.
+    end = re.search(r"\n\s*\(\d\)\s", tail)
+    if end:
+        tail = tail[: end.start()]
+    cells = list(_CURRENCY_CELL.finditer(tail))
+    if not cells:
+        return None
+    last = cells[-1]
+    amount = "$%s" % last.group("v")
+    if last.group("s"):
+        amount += " %s" % last.group("s").lower()
+    return amount, url
+
+
 @dataclass
 class FilingDocument:
     """One document attached to a filing, as the SGML header describes it."""
