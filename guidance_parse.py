@@ -1157,6 +1157,14 @@ def extract_puts_and_takes(text: str, *, limit: int = 4) -> list[PutTake]:
             continue
         if not _GUIDANCE_CONTEXT.search(s):
             continue
+        # ⚠ Safe-harbour boilerplate passes BOTH gates and is not a put or a
+        # take. "If one or more of these risks or uncertainties materialize ...
+        # actual results may vary" names risk (headwind) and sits beside the
+        # outlook (guidance context), so it scored as the release's only
+        # headwind for FIVE. extract_outlook_notes already filters this; the
+        # filter simply was never applied here.
+        if _FORWARD_NOISE.search(s):
+            continue
         tail, head = _TAILWIND.search(s), _HEADWIND.search(s)
         if not (tail or head):
             continue
