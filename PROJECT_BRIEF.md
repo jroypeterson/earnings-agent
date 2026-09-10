@@ -1,5 +1,12 @@
 # Project Brief — read this first (for reviewers, human or AI)
 
+> **Staleness -- check before trusting any figure below.** This file is not auto-updated:
+> `python ../scripts/audit_project_briefs.py --repo "earnings_agent"` counts the behaviour-changing
+> commits landed since it was last touched. Section 3 rationale and section 4 non-goals age
+> well; section 2 status, and every count, version, path and line number here, is a
+> **hypothesis** until checked against the code -- and a disagreement between this file and
+> the repo is a defect worth reporting, not a documentation nit.
+
 This file exists so a reviewer can (1) judge how close the project is to its
 intended goal and (2) understand the key design decisions **before** giving
 feedback. For mechanics — module map, CLI modes, schema history, the full
