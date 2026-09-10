@@ -642,6 +642,14 @@ _OUTLOOK_HEADING = re.compile(
     re.IGNORECASE,
 )
 # A sentence carrying an actual figure: currency, percent, or a share count.
+_METRIC_NAME = re.compile(
+    r"\b(net sales|revenues?|comparable sales|comp sales|same[- ]store sales|"
+    r"net income|adjusted net income|operating (?:income|margin|profit)|"
+    r"gross margin|ebitda|adjusted ebitda|"
+    r"(?:diluted )?(?:income|earnings|loss) per (?:common )?share|eps|"
+    r"capital expenditures|capex|free cash flow|tax rate|new stores)\b",
+    re.IGNORECASE,
+)
 _HAS_FIGURE = re.compile(r"(\$\s?[\d,.]+|\b\d+(?:\.\d+)?\s?%)")
 
 
@@ -650,10 +658,15 @@ class GuidanceBlock:
     """One outlook section: the period it covers, and its figure lines."""
     label: str
     lines: list[str]
+    # True when the label came from a period sub-heading ("For the full year
+    # of Fiscal 2026:") rather than a generic outlook heading. Only a
+    # period-labelled block is protected from being replaced by a table
+    # column header.
+    period_label: bool = False
 
 
 def extract_guidance_blocks(
-    text: str, *, max_blocks: int = 3, max_lines: int = 4
+    text: str, *, max_blocks: int = 3, max_lines: int = 10
 ) -> list[GuidanceBlock]:
     """Outlook sections with their figures, in document order.
 
@@ -667,6 +680,7 @@ def extract_guidance_blocks(
 
     blocks: list[GuidanceBlock] = []
     current: GuidanceBlock | None = None
+    pending_label = ""
 
     for raw_line in text.splitlines():
         line = " ".join(raw_line.split()).strip()
@@ -676,10 +690,15 @@ def extract_guidance_blocks(
         heading = _OUTLOOK_HEADING.match(line)
         if heading and not _GUIDANCE_NOISE.search(line):
             label = heading.group("label").strip(" :–—-")
+            # A bare "Current Outlook" / "Current Outlook Prior Outlook" is a
+            # TABLE COLUMN HEADER, not a new period. Opening a block on it
+            # discards the period label ("For the full year of Fiscal 2026")
+            # that the figures beneath actually belong to.
+            if (current is not None and current.period_label
+                    and not _GUIDANCE_PERIOD.search(line)):
+                continue
             current = GuidanceBlock(label=label or "Outlook", lines=[])
             blocks.append(current)
-            if len(blocks) > max_blocks:
-                break
             continue
 
         if current is None:
@@ -692,10 +711,9 @@ def extract_guidance_blocks(
         # how StreetAccount splits the same content (Q2 block, FY block).
         if line.endswith(":") and len(line) < 90 and not _HAS_FIGURE.search(line):
             if _GUIDANCE_PERIOD.search(line):
-                current = GuidanceBlock(label=line.rstrip(":").strip(), lines=[])
+                current = GuidanceBlock(
+                    label=line.rstrip(":").strip(), lines=[], period_label=True)
                 blocks.append(current)
-                if len(blocks) > max_blocks + 2:
-                    break
             else:
                 # An unrelated heading (e.g. "Non-GAAP Information:") ends it.
                 current = None
@@ -709,7 +727,7 @@ def extract_guidance_blocks(
         for piece in _BULLET_SPLIT.split(line):
             for sent in _SENTENCE_SPLIT.split(piece):
                 s = _BULLET_STRIP.sub("", " ".join(sent.split())).strip()
-                if len(s) < 25 or len(s) > 400 or "|" in s:
+                if len(s) < 4 or len(s) > 400 or "|" in s:
                     continue
                 if _GUIDANCE_NOISE.search(s):
                     continue
@@ -717,6 +735,19 @@ def extract_guidance_blocks(
                 # figure, or it is the block's own preamble ("The Company
                 # expects the following results...") rather than guidance.
                 if not _HAS_FIGURE.search(s):
+                    # ...unless it is a metric NAME whose figures wrapped onto
+                    # the next line. Five Below's outlook table does this for
+                    # its longest labels ("Adjusted diluted income per common
+                    # share (3)" sits alone above "$9.83 to $10.31 $8.65 to
+                    # $9.05"). Dropping it leaves the figures unlabelled and
+                    # the adjusted EPS guide unattributable.
+                    if len(s) < 70 and _METRIC_NAME.search(s):
+                        pending_label = s.rstrip(":")
+                    continue
+                if pending_label and not _METRIC_NAME.search(s):
+                    s = "%s %s" % (pending_label, s)
+                pending_label = ""
+                if len(s) < 12:
                     continue
                 if s not in current.lines and len(current.lines) < max_lines:
                     current.lines.append(s)
