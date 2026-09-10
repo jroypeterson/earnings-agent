@@ -41,7 +41,14 @@ _METRIC_PATTERNS: list[tuple[str, str]] = [
     ("op_margin", r"operating\s+margin"),
     ("gross_margin", r"gross\s+margin"),
     ("net_income", r"net\s+(?:income|loss|earnings)"),
-    ("capex", r"capital\s+expenditures?|capex"),
+    ("capex", r"(?:gross\s+|net\s+)?capital\s+expenditures?|capex"),
+    # Capital allocation. JP, 2026-09-10: Results should note "any return to
+    # shareholders or Capex or investments in SG&A or something else in the
+    # period" -- what the company DID with the cash, which no profit line says.
+    ("buyback", r"(?:share\s+)?repurchases?|repurchased|buy-?backs?|"
+                r"treasury\s+stock\s+purchase"),
+    ("dividend", r"dividends?\s+(?:paid|declared)|dividends?"),
+    ("sga", r"SG&A|selling,?\s+general\s+and\s+administrative"),
     ("fcf", r"free\s+cash\s+flow"),
     ("stores", r"net\s+new\s+stores|new\s+stores"),
     ("tax_rate", r"(?:effective\s+)?tax\s+rate"),
@@ -422,7 +429,8 @@ _REPORTED = re.compile(
 # it cannot reach back four quarters for any name. The card takes the actual
 # from consensus and the comparison base from here.
 _REPORTED_KEYS = ("ebitda", "op_income", "op_margin", "gross_margin", "comps",
-                  "revenue", "eps", "net_income")
+                  "revenue", "eps", "net_income",
+                  "buyback", "dividend", "sga", "capex")
 
 # Cumulative periods, which must never be read as the quarter.
 _CUMULATIVE = re.compile(
@@ -460,7 +468,8 @@ def extract_reported_metrics(text: str, *, limit: int = 6) -> list[ReportedMetri
     # Metrics that are AMOUNTS. A percentage captured for one of these is the
     # growth rate, not the level: "Net sales increased by 22.9% to $1.3 billion
     # from $970.5 million" otherwise records revenue as 22.9.
-    amount_keys = {"revenue", "eps", "op_income", "net_income", "ebitda", "capex"}
+    amount_keys = {"revenue", "eps", "op_income", "net_income", "ebitda", "capex",
+                   "buyback", "dividend", "sga"}
 
     best: dict[tuple[str, str], ReportedMetric] = {}
     order: list[tuple[str, str]] = []
@@ -517,6 +526,79 @@ def extract_reported_metrics(text: str, *, limit: int = 6) -> list[ReportedMetri
             best[slot] = cand
 
     return [best[k] for k in order][:limit]
+
+
+# --- capital allocation -----------------------------------------------------
+# JP, 2026-09-10: Results should note "any return to shareholders or Capex or
+# investments in SG&A or something else in the period."
+#
+# These do NOT fit the "<metric> was $X" shape the reported-metric regex reads.
+# A release says "The Company repurchased approximately 311,000 shares ... at a
+# cost of approximately $60.0 million" and "the Board approved a new share
+# repurchase program authorizing the repurchase of up to $600 million" -- the
+# figure trails the action rather than following the metric name. Purpose-built
+# patterns, each naming what it found, rather than bending the metric grammar
+# until it matches and starts mis-classifying ordinary lines.
+
+_CAPITAL_PATTERNS: list[tuple[str, str]] = [
+    ("buyback", r"repurchas\w+[^.]{0,120}?at\s+a\s+cost\s+of\s+(?:approximately\s+)?"
+                r"(?P<v>\$[\d.,]+\s*(?:billion|million|thousand)?)"),
+    ("buyback", r"(?:repurchased|bought\s+back)\s+(?:approximately\s+)?"
+                r"(?P<v>\$[\d.,]+\s*(?:billion|million|thousand)?)\s+(?:of|in)\b"),
+    ("buyback authorization",
+     r"(?:new\s+)?(?:share\s+)?repurchase\s+(?:program|authorization)[^.]{0,80}?"
+     r"up\s+to\s+(?P<v>\$[\d.,]+\s*(?:billion|million|thousand)?)"),
+    ("buyback authorization",
+     r"approved\s+a\s+(?:new\s+)?(?P<v>\$[\d.,]+\s*(?:billion|million|thousand)?)"
+     r"[^.]{0,40}repurchase"),
+    ("dividend", r"(?:quarterly\s+)?(?:cash\s+)?dividend\s+of\s+"
+                 r"(?P<v>\$[\d.,]+)\s*per\s+share"),
+    ("dividend", r"(?:paid|returned)[^.]{0,60}?(?P<v>\$[\d.,]+\s*"
+                 r"(?:billion|million|thousand)?)[^.]{0,40}?dividends?"),
+    ("returned to shareholders",
+     r"returned\s+(?:approximately\s+)?(?P<v>\$[\d.,]+\s*(?:billion|million|thousand)?)"
+     r"[^.]{0,50}(?:to\s+)?(?:share|stock)holders"),
+    ("capex", r"(?:gross\s+|net\s+)?capital\s+expenditures?[^.]{0,60}?(?:were|was|of|totaled)\s+"
+              r"(?P<v>\$[\d.,]+\s*(?:billion|million|thousand)?)"),
+    ("SG&A", r"(?:adjusted\s+)?SG&A[^.]{0,60}?(?:were|was|of|totaled)\s+"
+             r"(?P<v>\$[\d.,]+\s*(?:billion|million|thousand)?)"),
+]
+_CAPITAL_RES = [(name, re.compile(p, re.IGNORECASE)) for name, p in _CAPITAL_PATTERNS]
+
+
+@dataclass
+class CapitalItem:
+    kind: str
+    amount: str      # as the company printed it
+    text: str
+
+
+def extract_capital_allocation(text: str, *, limit: int = 5) -> list[CapitalItem]:
+    """What the company did with the cash this period."""
+    if not text:
+        return []
+    out: list[CapitalItem] = []
+    seen: set[tuple[str, str]] = set()
+    for sent in re.split(r"(?<=[.!?])\s+|\n", text):
+        s = " ".join(sent.split())
+        if len(s) < 25 or len(s) > 320:
+            continue
+        # A cumulative figure is not the period's activity.
+        if _CUMULATIVE.search(s):
+            continue
+        for kind, rx in _CAPITAL_RES:
+            m = rx.search(s)
+            if not m:
+                continue
+            amount = " ".join(m.group("v").split())
+            if (kind, amount) in seen:
+                break
+            seen.add((kind, amount))
+            out.append(CapitalItem(kind=kind, amount=amount, text=s))
+            break
+        if len(out) >= limit:
+            break
+    return out
 
 
 # --- unusual items ----------------------------------------------------------
