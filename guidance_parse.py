@@ -793,6 +793,51 @@ class OperatingKPI:
     value: str          # as the company printed it
     text: str
     basis_hint: str = ""   # "y/y", "at period end", "in the period"
+    context: str = ""      # the base the count sits in: "of 2,022 total"
+
+
+# ⚠ An absolute count with no base is unreadable. JP, 2026-09-10:
+# *"For store openings lets put that absolute number in context, that is a
+# general rule. So how many stores is that vs total store count or how many new
+# stores is that opening this quarter vs the same quarter last year."*
+#
+# "52 opened" is 2.6% growth for Five Below and would be a doubling for a
+# 50-store chain, and the card cannot tell you which. The base is almost always
+# in the SAME sentence -- releases write the count and the total together -- so
+# this reads it from the filing rather than reaching for a vendor, which also
+# keeps it available to the SCHEDULED run: the Fiscal.ai KPI history carries
+# the same figures but is MCP-only, and a cron job cannot reach it.
+_KPI_TOTAL = re.compile(
+    r"end(?:ed|ing)?\s+(?:the\s+)?(?:quarter|period|year)?\s*with\s+"
+    r"(?P<n>[\d,]+)\s+(?:total\s+)?(?P<noun>[a-z]+)", re.IGNORECASE)
+_KPI_VS_PRIOR = re.compile(
+    r"compared\s+to\s+(?P<n>[\d,]+)\s+(?P<noun>[a-z ]{3,30}?)\s+in\s+"
+    r"(?:the\s+)?(?P<when>[^.,]{3,60})", re.IGNORECASE)
+_KPI_TOTAL_YOY = re.compile(
+    r"increase\s+in\s+(?P<noun>[a-z]+)\s+of\s+(?P<pct>\d+(?:\.\d+)?)\s*%",
+    re.IGNORECASE)
+
+
+def _kpi_context(sentence: str, following: str = "") -> str:
+    """The base a count sits in, read from the release's own words.
+
+    Returns "" rather than guessing. A fabricated denominator is worse than an
+    absent one: it would put a number on the card that the filing never says,
+    and nothing downstream could tell the two apart.
+    """
+    bits: list[str] = []
+    m = _KPI_TOTAL.search(sentence)
+    if m:
+        bits.append("of %s %s total" % (m.group("n"), m.group("noun").lower()))
+    # The year-ago comparison is usually the NEXT sentence ("This represents an
+    # increase in stores of 8.8% over ..."), so a little lookahead is read too.
+    m = _KPI_TOTAL_YOY.search(sentence) or _KPI_TOTAL_YOY.search(following)
+    if m:
+        bits.append("+%s%% y/y" % m.group("pct"))
+    m = _KPI_VS_PRIOR.search(sentence)
+    if m:
+        bits.append("vs %s in %s" % (m.group("n"), m.group("when").strip()))
+    return " \u00b7 ".join(bits)
 
 
 def extract_operating_kpis(text: str, *, limit: int = 6) -> list[OperatingKPI]:
@@ -801,7 +846,8 @@ def extract_operating_kpis(text: str, *, limit: int = 6) -> list[OperatingKPI]:
         return []
     out: list[OperatingKPI] = []
     seen: set[str] = set()
-    for sent in re.split(r"(?<=[.!?])\s+|\n", text):
+    sentences = re.split(r"(?<=[.!?])\s+|\n", text)
+    for i, sent in enumerate(sentences):
         s = " ".join(sent.split())
         if len(s) < 20 or len(s) > 320:
             continue
@@ -821,8 +867,10 @@ def extract_operating_kpis(text: str, *, limit: int = 6) -> list[OperatingKPI]:
             if hint == "y/y" and not value.startswith(("+", "-")):
                 down = re.search(r"\b(decreas|declin|fell|down)", s, re.IGNORECASE)
                 value = ("-" if down else "+") + value
+            nxt = " ".join(" ".join(sentences[i + 1:i + 3]).split())
             out.append(OperatingKPI(name=name, value=value, text=s,
-                                    basis_hint=hint))
+                                    basis_hint=hint,
+                                    context=_kpi_context(s, nxt)))
             break
         if len(out) >= limit:
             break
@@ -944,28 +992,69 @@ def extract_announced_events(text: str, *, limit: int = 3) -> list[AnnouncedEven
 # 52/53-week retailer's quarter ends drift and a derived date would be wrong by
 # days in a way nothing downstream could detect.
 
-_PERIOD_END = re.compile(
-    r"(?:thirteen|fourteen|13|14|three|3)[- ]?(?:weeks?|months?)\s+ended\s+"
-    r"(?P<d>[A-Z][a-z]+\s+\d{1,2},\s+\d{4})",
-    re.IGNORECASE,
-)
+# ⚠ Do NOT require the date to sit next to the phrase. FIVE's release flattens
+# its statement header to "Thirteen Weeks Ended Twenty-Six Weeks Ended August
+# 1, 2026" -- two column captions and one date -- so an adjacency pattern
+# matched nothing and the period end silently vanished from the card even
+# though the release states it four times.
+#
+# Every candidate "ended <date>" is collected and selected on PLAUSIBILITY
+# instead: the reported period must end on or before the print, and within a
+# quarter or so of it. That rejects the year-ago comparatives a release is full
+# of without needing to know which phrase introduced them.
+# ⚠ Restored. The period-end rewrite replaced the whole block between
+# _PERIOD_END and extract_fiscal_year_end_month, and _FY_END lived inside it --
+# so every release read raised NameError, was caught upstream, and surfaced on
+# the card as one line of small grey text ("release read failed") while every
+# other section rendered normally.
 _FY_END = re.compile(
     r"fiscal\s+(?:year\s+)?\d{4}\s+(?:will\s+)?end(?:s|ed|ing)?\s+"
     r"(?:on\s+)?(?P<d>[A-Z][a-z]+\s+\d{1,2},?\s+\d{4})",
     re.IGNORECASE,
 )
+
+_ENDED_DATE = re.compile(
+    r"\bended\s+(?P<d>[A-Z][a-z]{2,8}\s+\d{1,2},?\s+\d{4})", re.IGNORECASE)
+
 _MONTHS = ("January February March April May June July August September "
            "October November December").split()
 
 
-def extract_period_end(text: str) -> Optional[str]:
-    """ISO date the reported quarter ended, or None."""
+def extract_period_end(text: str, event_date=None) -> Optional[str]:
+    """ISO date the reported quarter ended, or None.
+
+    `event_date` bounds the answer. Without it the latest plausible date wins,
+    which is right for a release but would happily take a forward-looking one.
+    """
     if not text:
         return None
-    m = _PERIOD_END.search(text)
-    if not m:
-        return None
-    return _parse_long_date(m.group("d"))
+    from datetime import date as _date, timedelta as _td
+
+    anchor = event_date
+    if isinstance(anchor, str):
+        try:
+            anchor = _date.fromisoformat(anchor)
+        except ValueError:
+            anchor = None
+
+    best = None
+    for m in _ENDED_DATE.finditer(text):
+        iso = _parse_long_date(m.group("d"))
+        if not iso:
+            continue
+        try:
+            d = _date.fromisoformat(iso)
+        except ValueError:
+            continue
+        if anchor is not None:
+            # A quarter ends before it is reported, and a release reports a
+            # quarter that ended recently -- 120 days covers a late filer
+            # without reaching last year's comparative.
+            if d > anchor or (anchor - d) > _td(days=120):
+                continue
+        if best is None or d > best:
+            best = d
+    return best.isoformat() if best else None
 
 
 def extract_fiscal_year_end_month(text: str) -> str:
