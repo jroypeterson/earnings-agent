@@ -743,43 +743,48 @@ def extract_unusual_items(text: str, *, limit: int = 5) -> list[UnusualItem]:
 # subscription business's net adds and a lender's originations are the same
 # kind of fact -- the operating driver underneath the revenue line.
 
-_KPI_PATTERNS: list[tuple[str, str]] = [
-    ("comparable sales",
+# (name, pattern, basis hint). The hint answers "of WHAT" -- a comp is a
+# year-over-year change, a store count is a level at a point in time, and a
+# bare number cannot distinguish them. JP, 2026-09-10: "For KPIs you need to
+# include units. You just have comparable sales 14.1% ... is that y/y?"
+_KPI_PATTERNS: list[tuple[str, str, str]] = [
+    ("comparable sales", "y/y",
      r"comparable\s+(?:store\s+)?sales\s+(?:increase[d]?|decrease[d]?|grew|declined|"
      r"rose|fell)?\s*(?:by\s+|of\s+)?(?P<v>[-+]?[\d.]+\s*%)"),
-    ("same-store sales",
+    ("same-store sales", "y/y",
      r"same[- ]store\s+sales\s+(?:increase[d]?|decrease[d]?)?\s*(?:by\s+|of\s+)?"
      r"(?P<v>[-+]?[\d.]+\s*%)"),
-    ("net new stores",
+    ("net new stores", "opened in the period",
      r"opened\s+(?P<v>[\d,]+)\s+net\s+new\s+stores"),
-    ("net new stores",
+    ("net new stores", "opened in the period",
      r"(?P<v>[\d,]+)\s+net\s+new\s+stores\s+(?:were\s+)?opened"),
-    ("total stores",
+    ("total stores", "at period end",
      r"ended\s+the\s+(?:quarter|period|year)\s+with\s+(?P<v>[\d,]+)\s+stores"),
-    ("total locations",
+    ("total locations", "at period end",
      r"(?:operated|had)\s+(?P<v>[\d,]+)\s+(?:locations|clinics|centers|restaurants)"),
-    ("subscribers",
+    ("subscribers", "at period end",
      r"(?P<v>[\d.,]+\s*(?:million|thousand)?)\s+(?:paid\s+)?subscribers"),
-    ("net adds",
+    ("net adds", "in the period",
      r"(?:net\s+adds?|net\s+additions?)\s+of\s+(?P<v>[\d.,]+\s*(?:million|thousand)?)"),
-    ("members",
+    ("members", "at period end",
      r"(?P<v>[\d.,]+\s*(?:million|thousand)?)\s+members\b"),
-    ("active customers",
+    ("active customers", "at period end",
      r"(?P<v>[\d.,]+\s*(?:million|thousand)?)\s+active\s+(?:customers|users|accounts)"),
-    ("GMV",
+    ("GMV", "in the period",
      r"\bGMV\s+(?:of\s+|was\s+|totaled\s+)?(?P<v>\$[\d.,]+\s*(?:billion|million)?)"),
-    ("originations",
+    ("originations", "in the period",
      r"originations?\s+(?:of\s+|was\s+|were\s+|totaled\s+)?"
      r"(?P<v>\$[\d.,]+\s*(?:billion|million)?)"),
-    ("backlog",
+    ("backlog", "at period end",
      r"backlog\s+(?:of\s+|was\s+|totaled\s+)?(?P<v>\$[\d.,]+\s*(?:billion|million)?)"),
-    ("bookings",
+    ("bookings", "in the period",
      r"bookings\s+(?:of\s+|was\s+|were\s+|totaled\s+)?"
      r"(?P<v>\$[\d.,]+\s*(?:billion|million)?)"),
-    ("ARR",
+    ("ARR", "at period end",
      r"\bARR\s+(?:of\s+|was\s+|totaled\s+)?(?P<v>\$[\d.,]+\s*(?:billion|million)?)"),
 ]
-_KPI_RES = [(name, re.compile(pat, re.IGNORECASE)) for name, pat in _KPI_PATTERNS]
+_KPI_RES = [(name, hint, re.compile(pat, re.IGNORECASE))
+            for name, hint, pat in _KPI_PATTERNS]
 
 
 @dataclass
@@ -787,6 +792,7 @@ class OperatingKPI:
     name: str
     value: str          # as the company printed it
     text: str
+    basis_hint: str = ""   # "y/y", "at period end", "in the period"
 
 
 def extract_operating_kpis(text: str, *, limit: int = 6) -> list[OperatingKPI]:
@@ -802,16 +808,21 @@ def extract_operating_kpis(text: str, *, limit: int = 6) -> list[OperatingKPI]:
         # The quarter's own figures, never the cumulative ones.
         if _CUMULATIVE.search(s):
             continue
-        for name, rx in _KPI_RES:
+        for name, hint, rx in _KPI_RES:
             if name in seen:
                 continue
             m = rx.search(s)
             if not m:
                 continue
             seen.add(name)
-            out.append(OperatingKPI(name=name,
-                                    value=" ".join(m.group("v").split()),
-                                    text=s))
+            value = " ".join(m.group("v").split())
+            # A y/y change carries its sign. "increased by 14.1%" is +14.1%,
+            # and dropping the direction makes a decline read as growth.
+            if hint == "y/y" and not value.startswith(("+", "-")):
+                down = re.search(r"\b(decreas|declin|fell|down)", s, re.IGNORECASE)
+                value = ("-" if down else "+") + value
+            out.append(OperatingKPI(name=name, value=value, text=s,
+                                    basis_hint=hint))
             break
         if len(out) >= limit:
             break
@@ -925,6 +936,66 @@ def extract_announced_events(text: str, *, limit: int = 3) -> list[AnnouncedEven
             break
     return out
 
+
+# --- period end -------------------------------------------------------------
+# A fiscal label ("F2Q27") tells a reader neither which months it covers nor
+# how stale the data is. Releases state it plainly -- "for the thirteen weeks
+# ended August 1, 2026" -- and this reads it rather than deriving it, because a
+# 52/53-week retailer's quarter ends drift and a derived date would be wrong by
+# days in a way nothing downstream could detect.
+
+_PERIOD_END = re.compile(
+    r"(?:thirteen|fourteen|13|14|three|3)[- ]?(?:weeks?|months?)\s+ended\s+"
+    r"(?P<d>[A-Z][a-z]+\s+\d{1,2},\s+\d{4})",
+    re.IGNORECASE,
+)
+_FY_END = re.compile(
+    r"fiscal\s+(?:year\s+)?\d{4}\s+(?:will\s+)?end(?:s|ed|ing)?\s+"
+    r"(?:on\s+)?(?P<d>[A-Z][a-z]+\s+\d{1,2},?\s+\d{4})",
+    re.IGNORECASE,
+)
+_MONTHS = ("January February March April May June July August September "
+           "October November December").split()
+
+
+def extract_period_end(text: str) -> Optional[str]:
+    """ISO date the reported quarter ended, or None."""
+    if not text:
+        return None
+    m = _PERIOD_END.search(text)
+    if not m:
+        return None
+    return _parse_long_date(m.group("d"))
+
+
+def extract_fiscal_year_end_month(text: str) -> str:
+    """Abbreviated month the FISCAL YEAR ends, e.g. "Jan", or "".
+
+    Only when the filing SAYS it. Counting quarters forward from the period
+    end would put a 52/53-week retailer's year-end in the wrong month, and a
+    wrong year-end is worse than an absent one: it silently redates every
+    period on the card.
+    """
+    if not text:
+        return ""
+    m = _FY_END.search(text)
+    if m:
+        iso = _parse_long_date(m.group("d"))
+        if iso:
+            return _MONTHS[int(iso[5:7]) - 1][:3]
+    return ""
+
+
+def _parse_long_date(raw: str) -> Optional[str]:
+    from datetime import datetime
+    cleaned = " ".join(raw.replace(",", " ").split())
+    for fmt in ("%B %d %Y", "%b %d %Y"):
+        try:
+            return datetime.strptime(cleaned, fmt).date().isoformat()
+        except ValueError:
+            continue
+    return None
+
 # --- puts and takes ---------------------------------------------------------
 # JP: "a lot of times the call will talk about puts and takes for guidance so in
 # guidance section call out any discrete headwinds or tailwinds they noted as
@@ -969,6 +1040,8 @@ _GUIDANCE_CONTEXT = re.compile(
 class PutTake:
     direction: str   # "tailwind" | "headwind"
     text: str
+    speaker: str = ""
+    speaker_title: str = ""
 
 
 def extract_puts_and_takes(text: str, *, limit: int = 4) -> list[PutTake]:
