@@ -40,6 +40,11 @@ _METRIC_PATTERNS: list[tuple[str, str]] = [
     ("op_income", r"operating\s+(?:income|profit|earnings)|income\s+from\s+operations"),
     ("op_margin", r"operating\s+margin"),
     ("gross_margin", r"gross\s+margin"),
+    # ⚠ Gross PROFIT, distinct from gross margin, and matched AFTER it so the
+    # margin pattern claims "gross margin" first. For a retailer the gross
+    # line and SG&A are the margin story -- FIVE's release reports both and
+    # the card carried neither.
+    ("gross_profit", r"gross\s+profit"),
     ("net_income", r"net\s+(?:income|loss|earnings)"),
     ("capex", r"(?:gross\s+|net\s+)?capital\s+expenditures?|capex"),
     # Capital allocation. JP, 2026-09-10: Results should note "any return to
@@ -428,7 +433,17 @@ _REPORTED = re.compile(
 # the events DB is a rolling window (earliest row 2026-04-21 on 2026-09-09), so
 # it cannot reach back four quarters for any name. The card takes the actual
 # from consensus and the comparison base from here.
-_REPORTED_KEYS = ("ebitda", "op_income", "op_margin", "gross_margin", "comps",
+# ⚠ gross_profit is read only from the SENTENCE form ("Gross profit was
+# $612.4 million"), which many issuers write. FIVE does not: its release puts
+# "Gross profit(4)" on one flattened line and the four period columns on the
+# next, so the figure is in the STATEMENT TABLE and this sentence-based
+# extractor cannot reach it. Reading statement tables means picking the right
+# column among quarter / prior-year quarter / YTD / prior-year YTD, and
+# picking wrong puts six months of profit over three months of revenue -- the
+# exact failure _CUMULATIVE exists to prevent. Left for a table-aware pass
+# rather than approximated here.
+_REPORTED_KEYS = ("ebitda", "op_income", "op_margin", "gross_margin",
+                  "gross_profit", "comps",
                   "revenue", "eps", "net_income",
                   "buyback", "dividend", "sga", "capex")
 
