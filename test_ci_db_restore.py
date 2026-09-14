@@ -231,53 +231,165 @@ def _recent(*, hours: float) -> str:
     return (datetime.utcnow() - timedelta(hours=hours)).strftime("%Y-%m-%d %H:%M:%S")
 
 
-# --- the staleness assertion in the rollback guard --------------------------------
+# --- the rollback guard: regression, not staleness --------------------------------
+#
+# These replace three tests that asserted the guard FAILS on an old watermark. That
+# assertion is what took the pipeline down from 2026-09-11 15:00 to 2026-09-14: the
+# guard runs before the agent writes, so once it failed nothing could advance the
+# watermark, and every later run read an older one (47.91h, 52.43h, 73.94h, 76.29h --
+# wall clock exactly).
+#
+# ⛑ The old test could not have caught that, and it is worth naming why, because the
+# fixture looked convincing. `test_guard_refuses_a_rolled_back_db_that_the_overdue_
+# metric_calls_healthy` built ONE database with an old watermark and asserted exit 1.
+# A rolled-back database and a healthy off-season database are indistinguishable in
+# that fixture -- there was no second, richer artifact for the first to be a rollback
+# OF. The test named a property its input did not have, so it passed for a reason
+# unrelated to the defect, and the guard shipped measuring recency instead of loss.
+# Every test below therefore builds BOTH sides: what was restored and what exists to
+# compare it against.
 
 
-def _guard_env(tmp_path) -> dict:
-    env = dict(os.environ)
+def _guard_env_with_artifacts(tmp_path, dbs: list[tuple[int, Path]]) -> dict:
+    """`dbs` is [(artifact_id, db_path)], newest first -- the order the API returns."""
+    listing, zips = [], {}
+    for n, (aid, db) in enumerate(dbs):
+        z = tmp_path / f"a{aid}.zip"
+        _zip_of(db, z)
+        zips[str(aid)] = z
+        listing.append(_artifact(aid, (datetime.utcnow() - timedelta(hours=n)).isoformat() + "Z"))
+    env = _install_fake_gh(tmp_path, listing, zips)
     env["GITHUB_REPOSITORY"] = "owner/repo"
-    env.pop("WEBHOOK_STATUS", None)
-    env.pop("WEBHOOK_EARNINGS", None)
-    env.pop("EA_DB_RESTORE_ARTIFACT_ID", None)
+    for k in ("WEBHOOK_STATUS", "WEBHOOK_EARNINGS", "EA_DB_RESTORE_ARTIFACT_ID"):
+        env.pop(k, None)
     return env
 
 
-def test_guard_refuses_a_rolled_back_db_that_the_overdue_metric_calls_healthy(tmp_path):
-    """The 2026-09-08 case, reproduced.
+def test_quiet_offseason_db_is_NOT_a_fault(tmp_path):
+    """The 2026-09-11 -> 2026-09-14 outage, reproduced.
 
-    Off-season the past-due-without-actuals metric reads ~2 on a rolled-back
-    database, so the guard's original trigger passes it. The content-age check is
-    what has to catch it.
+    Every unexpired artifact carried events=2996 actuals=1757 and the identical
+    watermark 2026-09-11 15:00:28 across five distinct sha256 digests -- runs were
+    writing, no EVENT had changed, and there was no rollback anywhere. The guard must
+    let this through: it is the best database available, and refusing to write to it
+    is what made a quiet week into a three-day outage.
+    """
+    work = tmp_path / "work"
+    work.mkdir()
+    _make_db(work / "earnings_events.db", events=2996, actuals=1757, watermark=_recent(hours=76.29))
+    peer = tmp_path / "peer.db"
+    _make_db(peer, events=2996, actuals=1757, watermark=_recent(hours=76.29))
+
+    res = _run(GUARD, work, _guard_env_with_artifacts(tmp_path, [(901, peer)]))
+    assert res.returncode == 0, res.stdout + res.stderr
+    assert "regression check clean" in res.stdout
+    assert "ALARM" not in res.stdout
+
+
+def test_guard_cannot_fail_on_age_alone(tmp_path):
+    """The latch, asserted directly.
+
+    No artifact is richer, so however old the watermark is there is nothing to heal
+    to and nothing to refuse. A guard that fails here can never be recovered from by
+    a later run, because a later run reads an even older watermark.
+    """
+    work = tmp_path / "work"
+    work.mkdir()
+    _make_db(work / "earnings_events.db", events=2996, actuals=1757, watermark=_recent(hours=720))
+    peer = tmp_path / "peer.db"
+    _make_db(peer, events=2996, actuals=1757, watermark=_recent(hours=720))
+
+    res = _run(GUARD, work, _guard_env_with_artifacts(tmp_path, [(902, peer)]))
+    assert res.returncode == 0, res.stdout + res.stderr
+    assert "advisory" in res.stdout
+
+
+def test_guard_heals_a_rollback_the_overdue_metric_calls_healthy(tmp_path):
+    """The 2026-09-08 case, with the second side the old fixture was missing.
+
+    reconcile_calendar restored a 2026-09-05 snapshot over a 2026-09-08 one: events
+    2987 -> 2980, actuals 1744 -> 1740. Off-season the past-due metric reads ~2 on
+    both, so only the comparison against the richer artifact can see it. Four actuals
+    is the smallest real incident on record, so the tolerance has to be tighter than
+    that or the check is decorative.
     """
     work = tmp_path / "work"
     work.mkdir()
     _make_db(work / "earnings_events.db", events=2980, actuals=1740, watermark=_recent(hours=98))
+    good = tmp_path / "good.db"
+    _make_db(good, events=2987, actuals=1744, watermark=_recent(hours=2))
 
-    res = _run(GUARD, work, _guard_env(tmp_path))
-    assert res.returncode == 1, res.stdout + res.stderr
-    assert "content watermark age" in res.stdout
-    assert "ALARM" in res.stdout
-
-
-def test_guard_passes_a_fresh_db(tmp_path):
-    work = tmp_path / "work"
-    work.mkdir()
-    _make_db(work / "earnings_events.db", events=2990, actuals=1746, watermark=_recent(hours=1.8))
-
-    res = _run(GUARD, work, _guard_env(tmp_path))
+    res = _run(GUARD, work, _guard_env_with_artifacts(tmp_path, [(903, good)]))
     assert res.returncode == 0, res.stdout + res.stderr
-    assert "healthy" in res.stdout
+    assert "ROLLBACK" in res.stdout
+    # Healed in place, and the run continues on the good copy rather than aborting:
+    # refusing to write is what turned the previous incident into an outage.
+    con = sqlite3.connect(work / "earnings_events.db")
+    assert con.execute("SELECT COUNT(*) FROM events WHERE eps_actual IS NOT NULL").fetchone()[0] == 1744
+    con.close()
 
 
-def test_guard_threshold_is_configurable(tmp_path):
+def test_guard_heals_the_28_day_rollback(tmp_path):
+    """The 2026-08-24 case: events 2912 -> 1735, actuals 1680 -> 763."""
     work = tmp_path / "work"
     work.mkdir()
-    _make_db(work / "earnings_events.db", events=100, actuals=50, watermark=_recent(hours=30))
+    _make_db(work / "earnings_events.db", events=1735, actuals=763, watermark=_recent(hours=1))
+    good = tmp_path / "good.db"
+    _make_db(good, events=2912, actuals=1680, watermark=_recent(hours=30))
 
-    env = _guard_env(tmp_path)
-    env["EA_DB_MAX_CONTENT_AGE_HOURS"] = "48"
-    assert _run(GUARD, work, env).returncode == 0
+    res = _run(GUARD, work, _guard_env_with_artifacts(tmp_path, [(904, good)]))
+    assert res.returncode == 0, res.stdout + res.stderr
+    assert "ROLLBACK" in res.stdout
+    con = sqlite3.connect(work / "earnings_events.db")
+    assert con.execute("SELECT COUNT(*) FROM events WHERE eps_actual IS NOT NULL").fetchone()[0] == 1680
+    con.close()
 
-    env["EA_DB_MAX_CONTENT_AGE_HOURS"] = "24"
-    assert _run(GUARD, work, env).returncode == 1
+
+def test_a_fresh_db_is_not_healed_backwards(tmp_path):
+    """A newer database with MORE actuals must never be replaced by an older one.
+
+    This is the direction that would destroy live state -- kv_store watermarks, date
+    locks and ticktick pointers that no re-run reconstructs.
+    """
+    work = tmp_path / "work"
+    work.mkdir()
+    _make_db(work / "earnings_events.db", events=2996, actuals=1757, watermark=_recent(hours=1))
+    older = tmp_path / "older.db"
+    _make_db(older, events=2990, actuals=1750, watermark=_recent(hours=48))
+
+    res = _run(GUARD, work, _guard_env_with_artifacts(tmp_path, [(905, older)]))
+    assert res.returncode == 0, res.stdout + res.stderr
+    assert "regression check clean" in res.stdout
+    con = sqlite3.connect(work / "earnings_events.db")
+    assert con.execute("SELECT COUNT(*) FROM events WHERE eps_actual IS NOT NULL").fetchone()[0] == 1757
+    con.close()
+
+
+def test_unlistable_artifacts_do_not_fail_the_run_but_are_announced(tmp_path):
+    """A token without actions:read is not evidence the database is bad.
+
+    But the skip has to be visible: an unannounced skip reads exactly like a check
+    that passed, which is the class this repo keeps meeting.
+    """
+    work = tmp_path / "work"
+    work.mkdir()
+    _make_db(work / "earnings_events.db", events=2996, actuals=1757, watermark=_recent(hours=1))
+    peer = tmp_path / "peer.db"
+    _make_db(peer, events=2996, actuals=1757, watermark=_recent(hours=1))
+
+    env = _guard_env_with_artifacts(tmp_path, [(906, peer)])
+    env["GH_FAIL"] = "1"
+    res = _run(GUARD, work, env)
+    assert res.returncode == 0, res.stdout + res.stderr
+    assert "regression check SKIPPED" in res.stdout
+
+
+def test_corrupt_db_still_fails(tmp_path):
+    """The one thing that must still be fatal: nothing readable to write to."""
+    work = tmp_path / "work"
+    work.mkdir()
+    (work / "earnings_events.db").write_bytes(b"not a sqlite file at all")
+
+    res = _run(GUARD, work, _guard_env_with_artifacts(tmp_path, []))
+    assert res.returncode == 1, res.stdout + res.stderr
+    assert "ALARM" in res.stdout

@@ -38,6 +38,13 @@
 # Self-heal then ranks candidate artifacts by ACCUMULATED ACTUALS, never by upload
 # time - upload time is exactly what lied.
 #
+# A SECOND TRIGGER ON THE SAME QUANTITY runs on every invocation: if any recent
+# artifact holds MORE accumulated actuals than the database we are about to write to,
+# the restore went backwards. That covers the off-season case the overdue metric is
+# blind to, and it replaces a wall-clock staleness check that failed the build and
+# latched the pipeline down for three days in September 2026. The long note above that
+# section is the record; do not reintroduce a time-based fail here.
+#
 # EA_DB_RESTORE_ARTIFACT_ID pins the restore to one specific artifact: the recovery
 # lever. Set it once via workflow_dispatch to climb back to a known-good snapshot,
 # then leave it unset.
@@ -188,36 +195,43 @@ if [ -n "$PINNED" ]; then
   exit 0
 fi
 
-# ---- staleness: the trigger the overdue metric cannot see OFF-SEASON --------------
+# ---- content age: REPORTED, never fatal -------------------------------------------
 #
-# The past-due-without-actuals metric below is SEASON DEPENDENT. It works because a
-# rollback strands events that have reported; between reporting seasons almost
-# nothing is past due, so the same rollback measures near zero.
+# ⛑ THIS CHECK USED TO FAIL THE BUILD, AND THAT IS WHAT TOOK THE PIPELINE DOWN FOR
+# THREE DAYS (2026-09-11 15:00 -> 2026-09-14). Read this before restoring it.
 #
-# Measured 2026-09-08. reconcile_calendar run 34259752925 restored an artifact from
-# 2026-09-05, skipping one from 2026-09-08 15:06, and lost events 2987 -> 2980 and
-# eps_actual 1744 -> 1740. This guard ran on that database and correctly reported
-# "healthy (past-due-without-actuals 2 <= 40)". The rollback was then re-uploaded as
-# the newest earnings-db and restored by the next daily run.
+# The original trigger was `now - MAX(events.updated_at) > 24h => exit 1`, on the
+# reasoning that "a gap above 24h with no rollback means no run has written in over a
+# day, which is itself an outage worth failing on". Two things were wrong with it, and
+# the second is the serious one.
 #
-# So: a second trigger on a quantity that does not depend on the calendar -- how long
-# it has been since ANY run wrote to this database. Measured over the 30 most recent
-# unexpired artifacts, the gap between an artifact's upload time and its own content
-# watermark was:
+# 1. IT MEASURES THE WRONG QUANTITY. `events.updated_at` advances when an EVENT
+#    changes, not when a RUN writes. Between reporting seasons nothing changes, so the
+#    watermark legitimately goes quiet while every run succeeds. Measured on the eight
+#    most recent unexpired artifacts on 2026-09-14: all eight carried events=2996,
+#    actuals=1757, past-due-without-actuals=2, kv_store=72 and the identical watermark
+#    2026-09-11 15:00:28, across five DISTINCT sha256 digests. Different bytes, same
+#    content -- runs were writing kv_store and page layout the whole time. There was no
+#    rollback and no data loss anywhere in that window.
 #
-#     <= 0.01h   for the 15 uploaded by a run that writes events
-#     0.4h-4.96h for the 14 uploaded by a run that only restores and re-uploads
-#                (reconcile_calendar, season_progress) -- the gap is just the time
-#                since the last writing run
-#     89.53h     for the one rolled-back artifact
+# 2. IT LATCHED. The guard runs BEFORE the agent writes, so once it tripped, nothing
+#    could advance the watermark, so every later run read an OLDER one. The alarm ages
+#    tracked wall-clock exactly -- 47.91h, 52.43h, 73.94h, 76.29h -- which is the
+#    signature of a check that has become the condition it reports. The documented
+#    recovery lever does not help either: every candidate artifact carried the same
+#    watermark, so pinning to any of them re-trips the same check.
 #
-# 24h therefore sits ~4.8x above the largest legitimate gap observed and ~3.7x below
-# the defect, and it is not a threshold on the DEFECT's size -- any rollback of more
-# than a day trips it regardless of magnitude. A gap above 24h with no rollback means
-# no run has written in over a day, which is itself an outage worth failing on.
+# Compared against the artifact's own `created_at` instead of `now` it would still
+# latch, just more slowly -- off-season the gap between a re-uploaded artifact and its
+# unchanged content grows without bound too. The fix is not a better clock. It is to
+# stop asking a time question at all: see the regression check below, which asks the
+# question the incidents were actually about.
 #
-# ⚠ Compared against NOW, not against the artifact's created_at, so it needs no API
-# call and also covers a database that went stale on disk for any other reason.
+# The age is still worth SEEING, so it is logged. It is not alarmed, because off-season
+# it is true every day and this fleet has already learned what a permanently-true flag
+# does to the reader. "No workflow has succeeded recently" is a real question with a
+# real owner -- the Workflow Watchdog, which measures run history rather than row
+# timestamps, and which correctly reported this outage while it was happening.
 MAX_CONTENT_AGE_H="${EA_DB_MAX_CONTENT_AGE_HOURS:-24}"
 content_age_h="$("$PY_BIN" - "$DB" <<'PY' 2>/dev/null
 import sqlite3, sys, datetime
@@ -236,10 +250,82 @@ if [ -z "${content_age_h:-}" ]; then
   alarm "The restored database has no readable \`MAX(events.updated_at)\` watermark, so its content age could not be established."
   exit 1
 fi
-log "content watermark age: ${content_age_h}h (limit ${MAX_CONTENT_AGE_H}h)"
+log "content watermark age: ${content_age_h}h (advisory; limit ${MAX_CONTENT_AGE_H}h)"
 if awk "BEGIN{exit !($content_age_h > $MAX_CONTENT_AGE_H)}"; then
-  alarm "The restored database's newest \`events.updated_at\` is ${content_age_h}h old (limit ${MAX_CONTENT_AGE_H}h). Either the restore returned a rolled-back artifact, or no run has written to this database in over a day. Refusing to write to it and re-upload it as the newest \`earnings-db\`, which is how a rollback propagates. Check the \`[db-restore] selected artifact\` line in this run's log against \`gh api repos/${REPO}/actions/artifacts?name=earnings-db\`; recover by dispatching with \`restore_artifact_id\` set to a known-good artifact."
-  exit 1
+  log "NOTE: no event row has changed in ${content_age_h}h. Off-season that is normal and"
+  log "      is NOT treated as a fault. Whether the WORKFLOWS are running is a different"
+  log "      question, owned by the Workflow Watchdog."
+fi
+
+# ---- regression: the check that actually catches a rollback ------------------------
+#
+# A rollback is not "old", it is POORER. Both real incidents were losses of accumulated
+# rows, and both are visible without consulting a clock:
+#
+#     2026-08-24   events 2912 -> 1735, actuals 1680 -> 763   (a 28-day snapshot)
+#     2026-09-08   events 2987 -> 2980, actuals 1744 -> 1740  (a 3.6-day snapshot)
+#
+# ⚠ ACTUALS IS THE AXIS, NOT EVENTS. Within a season `eps_actual` only accumulates --
+# `upsert_event` writes it as `COALESCE(?, eps_actual)` so it is never nulled, and the
+# DELETE on the legacy-schema path is guarded on `reported = 0`, which a row carrying an
+# actual is not. Event COUNT, by contrast, legitimately falls when `--cleanup` removes a
+# duplicate, so a raw event-count drop is not on its own evidence of anything.
+#
+# The 09-08 loss was FOUR actuals. `MIN_ACTUALS_GAIN` (50) governs the overdue-driven
+# self-heal below, where a big margin is right because that path trades away live state;
+# here the tolerance has to be tighter than the smallest real incident or the check is
+# decorative. Default 0: any older artifact holding MORE accumulated actuals than the
+# copy we are about to write to means the copy we are about to write to went backwards.
+#
+# ⛑ The asymmetry is deliberate. A false positive costs at most one `--cleanup` and
+# arrives with an alarm a human can read. A false negative is silent multi-day data
+# destruction, which this repository has now suffered twice. So this heals and CONTINUES
+# rather than failing -- refusing to write is what turned the last incident into an
+# outage, and the point is to get a good database in front of the agent, not to stop.
+REGRESSION_TOLERANCE="${EA_DB_ACTUALS_REGRESSION_TOLERANCE:-0}"
+REGRESSION_SCAN="${EA_DB_REGRESSION_SCAN_LIMIT:-6}"
+
+scan_ids() {
+  # The real `gh api --jq '… | .id'` prints one id per line. Take the first
+  # whitespace-delimited field rather than the whole line, so a richer projection --
+  # or a stub that emits one -- cannot silently turn every id into a malformed URL.
+  gh api "repos/${REPO}/actions/artifacts?name=earnings-db&per_page=$1" \
+    --jq '.artifacts[] | select(.expired==false) | .id' 2>/dev/null \
+    | awk 'NF {print $1}'
+}
+
+mapfile -t reg_ids < <(scan_ids "$REGRESSION_SCAN")
+if [ "${#reg_ids[@]}" -eq 0 ]; then
+  # Not fatal: a fresh repo, an API blip or a token without actions:read all land here,
+  # and none of them is evidence that the database on disk is bad. Say it out loud
+  # though -- an unannounced skip is indistinguishable from a check that passed.
+  log "regression check SKIPPED: no unexpired earnings-db artifacts could be listed."
+else
+  reg_best_actuals="$cur_actuals"; reg_best_id=""; reg_best_total=""; reg_best_kv=""
+  for aid in "${reg_ids[@]}"; do
+    fetch_artifact "$aid" ".db_reg" || { log "  [regression] artifact $aid: download failed"; continue; }
+    read -r r_total r_actuals r_overdue r_kv <<<"$(db_stats ".db_reg/earnings_events.db")"
+    if [ -z "${r_total:-}" ]; then log "  [regression] artifact $aid: unreadable"; continue; fi
+    log "  [regression] artifact $aid: events=$r_total actuals=$r_actuals kv_store=$r_kv"
+    if [ "$r_actuals" -gt "$(( reg_best_actuals + REGRESSION_TOLERANCE ))" ]; then
+      reg_best_actuals="$r_actuals"; reg_best_id="$aid"
+      reg_best_total="$r_total"; reg_best_kv="$r_kv"
+      cp ".db_reg/earnings_events.db" ".db_reg_best" || true
+    fi
+  done
+
+  if [ -n "$reg_best_id" ] && [ -f ".db_reg_best" ]; then
+    cp ".db_reg_best" "$DB" || exit 1
+    alarm "ROLLBACK: the restored database carries ${cur_actuals} accumulated actuals, but artifact \`${reg_best_id}\` carries ${reg_best_actuals}. Accumulated actuals do not decrease, so the restore returned a snapshot that had gone backwards. Healed in place from \`${reg_best_id}\` (events ${cur_total} -> ${reg_best_total}, actuals ${cur_actuals} -> ${reg_best_actuals}, kv_store ${cur_kv} -> ${reg_best_kv}) and continuing, so this run writes to the good copy instead of re-uploading the poor one as the newest \`earnings-db\`. Check the \`[db-restore] selected artifact\` line above; if the selector keeps choosing the poor snapshot, pin the good one with \`restore_artifact_id\`."
+    # Re-read: everything downstream must describe the database we actually kept.
+    read -r cur_total cur_actuals cur_overdue cur_kv <<<"$(db_stats "$DB")"
+    if [ -z "${cur_total:-}" ]; then
+      alarm "The healed database failed its integrity check."; exit 1
+    fi
+    log "after heal: events=$cur_total actuals=$cur_actuals past-due-without-actuals=$cur_overdue kv_store=$cur_kv"
+  else
+    log "regression check clean: no artifact carries more accumulated actuals than ${cur_actuals}."
+  fi
 fi
 
 # ---- the trigger ------------------------------------------------------------------
@@ -251,8 +337,7 @@ fi
 log "SUSPECT: $cur_overdue tracked events are past due with no actuals (threshold $MAX_OVERDUE)."
 log "Scanning up to $SCAN_LIMIT artifacts, ranking by ACCUMULATED ACTUALS not upload time."
 
-mapfile -t ids < <(gh api "repos/${REPO}/actions/artifacts?name=earnings-db&per_page=${SCAN_LIMIT}" \
-  --jq '.artifacts[] | select(.expired==false) | .id' 2>/dev/null)
+mapfile -t ids < <(scan_ids "$SCAN_LIMIT")
 
 if [ "${#ids[@]}" -eq 0 ]; then
   alarm "Database looks rolled back ($cur_overdue past-due events with no actuals) and no unexpired \`earnings-db\` artifacts could be listed."
