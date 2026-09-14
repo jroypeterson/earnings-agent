@@ -1,23 +1,23 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-09-12T14:06:58Z",
+  "generated_at": "2026-09-14T20:47:04Z",
   "window": {
-    "start": "2026-09-10",
-    "end": "2026-09-26"
+    "start": "2026-09-12",
+    "end": "2026-09-28"
   },
   "counts": {
-    "events": 17
+    "events": 20
   },
   "events": [
     {
-      "ticker": "BDRX",
-      "event_date": "2026-09-10",
-      "event_hour": "",
+      "ticker": "BNTC",
+      "event_date": "2026-09-14",
+      "event_hour": "amc",
       "tier": 3,
-      "date_confirmed": false,
+      "date_confirmed": true,
       "call_datetime_utc": null,
-      "company_name": "Biodexa Pharmaceuticals Plc"
+      "company_name": "Benitec Biopharma Inc"
     },
     {
       "ticker": "CLSD",
@@ -101,15 +101,6 @@
       "company_name": "Abivax S.A."
     },
     {
-      "ticker": "BNTC",
-      "event_date": "2026-09-21",
-      "event_hour": "amc",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Benitec Biopharma Inc"
-    },
-    {
       "ticker": "INM",
       "event_date": "2026-09-21",
       "event_hour": "",
@@ -162,6 +153,42 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Inventiva ADR Representing Ord Shs"
+    },
+    {
+      "ticker": "GDTC",
+      "event_date": "2026-09-28",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "CytoMed Therapeutics Ltd"
+    },
+    {
+      "ticker": "IXHL",
+      "event_date": "2026-09-28",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Incannex Healthcare Inc"
+    },
+    {
+      "ticker": "LNAI",
+      "event_date": "2026-09-28",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Lunai Bioworks Inc."
+    },
+    {
+      "ticker": "TRAK",
+      "event_date": "2026-09-28",
+      "event_hour": "amc",
+      "tier": 3,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Repositrak Inc"
     }
   ]
 }
