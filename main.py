@@ -44,6 +44,7 @@ from coverage import (
 )
 from storage import (
     init_db,
+    mark_sync_completed,
     find_existing_event,
     find_event_for_ticker_near_date,
     find_reported_event_for_quarter,
@@ -1489,6 +1490,27 @@ def run(
     if dry_run:
         logger.info("(Dry run — no calendar events were actually created, updated, or deleted)")
     logger.info("=" * 50)
+
+    # Stamp the sync heartbeat. Placed HERE, after the fetch loop has run to
+    # completion without raising, and gated on the upstream having actually
+    # returned rows — an empty `earnings` means Finnhub gave us nothing, which
+    # is exactly the case a freshness signal must not paper over.
+    #
+    # `dry_run` still stamps, and that is correct rather than an oversight:
+    # --populate-db-only aliases to dry_run and DOES write the database
+    # ("DB writes only, no external side effects"), so the DB really was
+    # synced. Withholding the stamp there would make the reconcile abort after
+    # a populate that genuinely refreshed the rows it reads.
+    #
+    # See storage.LAST_SYNC_KEY for why row-level `updated_at` cannot answer
+    # this question.
+    if earnings:
+        mark_sync_completed(conn)
+    else:
+        logger.warning(
+            "Earnings fetch returned 0 rows — NOT stamping the sync heartbeat. "
+            "Downstream staleness guards will treat this DB as unrefreshed."
+        )
 
     # --- Notify on any newly-reported actuals detected during this sync ---
     if sync_results and not dry_run:

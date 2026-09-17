@@ -1330,3 +1330,42 @@ def kv_list_prefix(conn: sqlite3.Connection, prefix: str) -> dict[str, str]:
         (prefix + "%",),
     )
     return {row[0]: row[1] for row in cur.fetchall()}
+
+
+# ---------------------------------------------------------------------------
+# Sync heartbeat — "when did the calendar sync last actually RUN?"
+# ---------------------------------------------------------------------------
+#
+# Distinct from any row's `updated_at`, and that distinction is the whole
+# point. `updated_at` is stamped by UPDATE statements, so it moves only when a
+# row's DATA changes. Between earnings seasons the upcoming-quarter rows are
+# correct and unchanging, nothing writes them, and their timestamps age while
+# the database is being refreshed every single day.
+#
+# A freshness check built on those timestamps therefore cannot tell
+#   "the sync ran and found nothing to change"   (healthy, the quiet season)
+# from
+#   "this DB is a frozen snapshot"               (dangerous, the real threat)
+#
+# and in a quiet period it decays into the first while claiming the second.
+# Measured 2026-09-17: the TickTick reconcile had refused to run for four days
+# because the newest of its 110 in-window target rows was stamped 2026-09-10,
+# while the database as a whole had been written 2026-09-16.
+#
+# This key moves when the SYNC completes, whether or not anything changed, so
+# it separates the two cases. It is deliberately written only after the fetch
+# loop finishes without raising AND only when the upstream actually returned
+# rows: stamping it on an empty fetch would turn it into a flag that is always
+# true, which is the failure it exists to prevent.
+LAST_SYNC_KEY = "last_sync_completed"
+
+
+def mark_sync_completed(conn: sqlite3.Connection, when: str | None = None) -> None:
+    """Record that the calendar sync ran to completion against real data."""
+    from datetime import datetime, timezone
+    kv_set(conn, LAST_SYNC_KEY, when or datetime.now(timezone.utc).date().isoformat())
+
+
+def get_last_sync_completed(conn: sqlite3.Connection) -> str | None:
+    """The last sync date (ISO), or None on a DB that predates the heartbeat."""
+    return kv_get(conn, LAST_SYNC_KEY)

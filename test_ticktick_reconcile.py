@@ -1214,3 +1214,113 @@ def test_the_reconcile_does_not_strip_the_move_from_a_reported_title(monkeypatch
     for got in rewrites:
         assert got.endswith(" +5.2%"), (
             "the reconcile rewrote the title and dropped the move: %r" % got)
+
+
+# ---------------------------------------------------------------------------
+# Staleness guard: it must measure whether the SYNC RAN, not whether these
+# particular rows changed.
+#
+# Provenance (2026-09-17): the guard keyed on MAX(events.updated_at) over its
+# target rows. `updated_at` is stamped by UPDATE statements, so it moves only
+# when a row's DATA changes. Between earnings seasons the upcoming-quarter rows
+# are correct and unchanging, nothing writes them, and the timestamps age while
+# the DB is refreshed daily. The reconcile refused to run for four days
+# (2026-09-14..09-17) with 110 in-window target rows newest-stamped 2026-09-10,
+# while the database as a whole had been written 2026-09-16.
+#
+# These pin both directions: a quiet season must NOT abort, and a genuinely
+# frozen database must still abort. A guard that only ever passes is worth
+# nothing, which is what a naive "just use the DB-wide max" fix would produce.
+# ---------------------------------------------------------------------------
+
+def _quiet_season_conn():
+    """A DB whose target rows are old but which was synced today.
+
+    This is the real shape: the row is a future, unreported, unconfirmed
+    Tier 2 event that no provider has changed in weeks.
+    """
+    conn = init_db(":memory:")
+    upsert_event(conn, "ABT", "2026-10-13", None, None,
+                 quarter=date_to_quarter("2026-10-13"),
+                 reported=False, tier=2, company_name="Abbott")
+    conn.execute("UPDATE events SET updated_at = '2026-08-06 13:10:14'")
+    conn.commit()
+    return conn
+
+
+def _reconcile_at(conn, monkeypatch, today, tasks=None):
+    monkeypatch.setenv("TICKTICK_ACCESS_TOKEN", "tok")
+    project = {"id": "P_HC", "name": "4Q26 Earnings - HC Svcs, MedTech & Biopharma"}
+    _stub_api(monkeypatch, tasks or {"P_HC": []})
+    monkeypatch.setattr(ticktick, "_list_all_projects", lambda token: [project])
+    return ticktick.reconcile_ticktick_tasks(conn, today)
+
+
+def test_quiet_season_does_not_abort_when_the_sync_is_fresh(monkeypatch):
+    """The outage, as a test. Target rows 42 days stale, sync ran today."""
+    from storage import mark_sync_completed
+    conn = _quiet_season_conn()
+    mark_sync_completed(conn, "2026-09-17")
+
+    stats = _reconcile_at(conn, monkeypatch, date(2026, 9, 17))
+
+    assert stats["errors"] == 0, (
+        "a fresh sync must let the reconcile run even when no target row has "
+        "changed in weeks - this is the between-seasons case that broke it"
+    )
+
+
+def test_a_frozen_database_still_aborts(monkeypatch):
+    """The threat the guard exists for: sync has not completed in weeks."""
+    from storage import mark_sync_completed
+    conn = _quiet_season_conn()
+    mark_sync_completed(conn, "2026-08-20")   # restored-old-snapshot shape
+
+    stats = _reconcile_at(conn, monkeypatch, date(2026, 9, 17))
+
+    assert stats["errors"] == 1, "a stale sync heartbeat must still refuse"
+
+
+def test_a_db_with_no_heartbeat_falls_back_to_the_row_check(monkeypatch):
+    """Back-compat: an artifact written before the heartbeat key existed.
+
+    Its rows are ancient and it has no heartbeat, so the old row-level check
+    must still catch it rather than waving it through on a missing key.
+    """
+    conn = _quiet_season_conn()          # no mark_sync_completed() call
+    stats = _reconcile_at(conn, monkeypatch, date(2026, 9, 17))
+    assert stats["errors"] == 1, (
+        "no heartbeat + stale rows must abort via the legacy path, not pass"
+    )
+
+
+def test_the_heartbeat_overrides_the_row_check_rather_than_adding_to_it(monkeypatch):
+    """Assert the negative: the old signal must no longer be able to veto.
+
+    Deleting the heartbeat branch, or ANDing the two checks together, leaves
+    this failing - which is what tells us the new signal is actually the one
+    being consulted.
+    """
+    from storage import mark_sync_completed
+    conn = _quiet_season_conn()
+    mark_sync_completed(conn, "2026-09-17")
+    newest_row = conn.execute("SELECT MAX(updated_at) FROM events").fetchone()[0]
+    assert newest_row.startswith("2026-08-06"), "fixture must keep stale rows"
+
+    stats = _reconcile_at(conn, monkeypatch, date(2026, 9, 17))
+    assert stats["errors"] == 0
+
+
+def test_an_empty_fetch_must_not_stamp_the_heartbeat():
+    """A sync that returned nothing has not proved the DB is fresh.
+
+    Stamping unconditionally would make the heartbeat a flag that is always
+    true - exactly the failure it replaced.
+    """
+    import inspect
+    import main
+    src = inspect.getsource(main.run)
+    marker = "if earnings:\n        mark_sync_completed(conn)"
+    assert marker in src, (
+        "mark_sync_completed must be gated on a non-empty fetch in main.run()"
+    )

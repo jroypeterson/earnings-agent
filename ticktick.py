@@ -20,7 +20,7 @@ from datetime import datetime, timezone
 import requests
 
 from config import TIMEZONE, TIMING_LABELS
-from storage import date_to_quarter, OPEN_EVENT_SQL
+from storage import date_to_quarter, get_last_sync_completed, OPEN_EVENT_SQL
 
 logger = logging.getLogger("earnings_agent")
 
@@ -1417,27 +1417,64 @@ def reconcile_ticktick_tasks(
     # date_locked rows are operator overrides: intentionally pinned and
     # legitimately old, so they must NOT count toward staleness (one old lock
     # would otherwise abort the whole reconcile).
-    newest = conn.execute(
-        "SELECT MAX(updated_at) FROM events "
-        f"WHERE tier <= 2 AND {OPEN_EVENT_SQL} AND date_locked = 0 "
-        "AND event_date BETWEEN ? AND ?",
-        (lo, hi),
-    ).fetchone()[0]
-    if newest:
+    # CORRECTED 2026-09-17. The row-level check below is kept only as a
+    # fallback, because it answers the wrong question. `updated_at` is stamped
+    # by UPDATE statements, so it moves only when a row's DATA changes. Between
+    # earnings seasons the upcoming-quarter rows are correct and unchanging,
+    # nothing writes them, and their timestamps age while the DB is refreshed
+    # daily — so the check cannot separate "the sync ran and found nothing to
+    # change" from "this DB is a frozen snapshot", and in a quiet period it
+    # reports the second while the first is true.
+    #
+    # It did exactly that: the reconcile refused to run for four days
+    # (2026-09-14 through 09-17) because the newest of its 110 in-window target
+    # rows was stamped 2026-09-10, while the database as a whole had been
+    # written 2026-09-16. Nothing was wrong with the data.
+    #
+    # `last_sync_completed` moves when the SYNC completes, changed rows or not,
+    # so it distinguishes the two. It still catches every case this guard was
+    # built for: a restored old snapshot carries an old heartbeat, and a sync
+    # that fails or returns nothing never stamps one.
+    synced = get_last_sync_completed(conn)
+    if synced:
         try:
-            newest_date = date.fromisoformat(str(newest)[:10])
-            age = (today - newest_date).days
+            synced_date = date.fromisoformat(str(synced)[:10])
+            age = (today - synced_date).days
             if age > max_db_staleness_days:
                 logger.error(
-                    "TickTick reconcile ABORTED: reconcile-target rows look stale "
-                    "(newest unreported Tier 1/2 event updated %s, %d days old > %d). "
-                    "Reconcile would push stale dates onto TickTick. Refusing.",
-                    newest_date, age, max_db_staleness_days,
+                    "TickTick reconcile ABORTED: the calendar sync has not completed "
+                    "since %s (%d days ago > %d). This DB may be a stale snapshot, and "
+                    "reconcile would push its dates onto TickTick. Refusing.",
+                    synced_date, age, max_db_staleness_days,
                 )
                 stats["errors"] += 1
                 return stats
         except ValueError:
-            pass  # unparseable timestamp — don't block on it
+            pass  # unparseable heartbeat — fall through rather than block
+    else:
+        # No heartbeat: a DB written before this key existed. Fall back to the
+        # old row-level check so a genuinely ancient artifact is still caught.
+        newest = conn.execute(
+            "SELECT MAX(updated_at) FROM events "
+            f"WHERE tier <= 2 AND {OPEN_EVENT_SQL} AND date_locked = 0 "
+            "AND event_date BETWEEN ? AND ?",
+            (lo, hi),
+        ).fetchone()[0]
+        if newest:
+            try:
+                newest_date = date.fromisoformat(str(newest)[:10])
+                age = (today - newest_date).days
+                if age > max_db_staleness_days:
+                    logger.error(
+                        "TickTick reconcile ABORTED: no sync heartbeat, and "
+                        "reconcile-target rows look stale (newest unreported Tier 1/2 "
+                        "event updated %s, %d days old > %d). Refusing.",
+                        newest_date, age, max_db_staleness_days,
+                    )
+                    stats["errors"] += 1
+                    return stats
+            except ValueError:
+                pass  # unparseable timestamp — don't block on it
     rows = conn.execute(
         "SELECT ticker, event_date, event_hour, quarter, reported, "
         "eps_estimate, eps_actual, rev_estimate, rev_actual, tier, "
