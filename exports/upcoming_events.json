@@ -1,24 +1,15 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-09-16T22:16:25Z",
+  "generated_at": "2026-09-17T15:33:46Z",
   "window": {
-    "start": "2026-09-14",
-    "end": "2026-09-30"
+    "start": "2026-09-15",
+    "end": "2026-10-01"
   },
   "counts": {
-    "events": 22
+    "events": 20
   },
   "events": [
-    {
-      "ticker": "CLSD",
-      "event_date": "2026-09-14",
-      "event_hour": "amc",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Clearside Biomedical, Inc."
-    },
     {
       "ticker": "ALPS",
       "event_date": "2026-09-15",
@@ -56,15 +47,6 @@
       "company_name": "FedEx Corp"
     },
     {
-      "ticker": "IPHA",
-      "event_date": "2026-09-17",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Innate Pharma SA"
-    },
-    {
       "ticker": "TLSA",
       "event_date": "2026-09-18",
       "event_hour": "",
@@ -99,6 +81,15 @@
       "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "Palatin Technologies Inc"
+    },
+    {
+      "ticker": "AYTU",
+      "event_date": "2026-09-22",
+      "event_hour": "amc",
+      "tier": 3,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Aytu Biopharma Inc"
     },
     {
       "ticker": "BRTX",
@@ -180,15 +171,6 @@
       "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "Repositrak Inc"
-    },
-    {
-      "ticker": "AYTU",
-      "event_date": "2026-09-29",
-      "event_hour": "amc",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Aytu Biopharma Inc"
     },
     {
       "ticker": "NBTX",
