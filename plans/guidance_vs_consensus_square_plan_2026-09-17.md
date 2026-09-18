@@ -416,3 +416,56 @@ Acceptance before the flag goes on in CI:
    vs only the day before (~1k). **Default: every run.** Well inside 300/min.
 5. **Non-USD reporters** (NVO, CP, ADRs). v1 abstains. **Default: accept for v1.** A v2
    could compare in reported currency once ADR ratios and `$`=CAD are handled.
+
+---
+
+## v2 — Fable round 1 (2026-09-17 23:xx): design verdict + corrections
+
+Round 1: **NOT BUILDABLE, 2 Critical + 4 High.** **v2 wins over everything above.**
+
+### Design verdict (Fable as tie-breaker, adopted)
+**Build it, reshaped.** (1) Ship the **pre-print consensus snapshot FIRST** — it is the only piece
+that is lossy if deferred (~5k FMP calls/season vs 300/min). (2) The square ships in v1 for the
+**Tier 1 ∪ Position-list cohort only (~85 names)**; the slot renders on every line for alignment.
+(3) Every 🟩/🟥/🟨 carries the **verbatim guide sentence + both snapshot figures** in the footer so
+a colour is checkable in five seconds — the hedge JP's own "a wrong number is worse than an absent
+one" rule demands. Expand to Tier 2/3 after two weeks at zero wrong colours. An 86%-neutral column
+is acceptable: a rare 🟥 in a white column stands out more, not less.
+
+### Criticals
+- **C1 — FY mapping is STRUCTURAL, never from the label.** Jan-FYE names split both ways (FIVE,
+  LULU name the year they start; WMT, NVDA, CRM, WDAY and **ADSK — held** — the year they end).
+  Match = the first `fiscal_period_end` after `extract_period_end(text, event_date)` within 380 days
+  (the second one for a Q4 "initial next-year outlook"); the explicit year is used only to ABSTAIN
+  when it fits neither convention.
+- **C2 — quarter-as-FY.** (a) `daily_summary.py:712`: accept a `_GUIDANCE_PERIOD` match as a
+  sub-heading with or without a trailing colon; (b) the FY range must be the **largest** same-metric
+  currency range in the release; (c) G6 ratio floor 0.2× → **0.4×** (JP's example is 0.5×).
+
+### Highs
+- **H1** — snapshot lookup by `ticker + fiscal_period_end + taken_at < cutoff`; `event_date` is
+  provenance only (FMP moves dates after the snapshot — FIVE 06-02→05-27).
+- **H2** — EDGAR enrichment inside `notify_results` gets a global budget (~150 s) and a circuit
+  breaker on `get_request_stats()` failures; unfetched rows render ⚠️ "budget". The results post
+  and `run()`'s critical sync must never wait on a hanging SEC.
+- **H3** — G6 requires `sign(guide mid) == sign(consensus)`; `_is_loss` ignores a parenthetical
+  "(loss)" (probed: "net income (loss) per diluted share of $0.10 to $0.20" → −0.2..−0.1).
+- **H4** — when `event_hour_yf` ≠ `event_hour`, or `date_confirmed=0`, the snapshot cutoff is
+  00:00 ET of the event date, not 16:00 ET.
+
+### Mediums (adopted)
+M1 scope-narrower DENYlist instead of the G3 allowlist, and re-measure coverage IN CODE before
+quoting it · M2 from/to gate only when `from` precedes the first range · M3 ⬜ labelled "no FY $
+range parsed", with `at least / up to` hits counted in the footer · M4 a distinct glyph for "not
+comparable" (not ⬜ vs ◻️) · M5 snapshot window +10 d for `date_confirmed=0` · M6 new FMP pacing
+(4/s, 5/15/30 s backoff) with `continue-on-error` + `if: failure()` alert.
+Lows: ZoneInfo not fixed offsets (Nov DST); never use `universe.csv` Currency (trading ccy) for G5;
+schema v14 = migration AND fresh-DB CREATE.
+
+### Defaults taken for JP (batched, reversible)
+1. Reaffirmation scored on LEVEL (a reaffirmed $2.0–2.1B vs $2.08B renders 🟨).
+2. v1 cohort = Tier 1 ∪ Position lists (Fable's recommendation).
+3. GAAP-only EPS reporters (IDXX): abstain.
+
+### Build order
+Phase A: snapshot table + CI step + tests (no rendering change). Phase B: the square for the cohort.
