@@ -556,3 +556,30 @@ sentences → elements ≤2000, footer survives the slice, ≤48 blocks · 8 FY 
 and the floor · 9 53-week footnote leaves the label alone · 10 `Full-Year 2026 Guidance` caption +
 `Previous | Updated` header keeps FY evidence · 11 mutations: delete the column guard → 1 fails;
 delete the footer budget → 7 fails.
+
+---
+
+## v5 — Phase B, Fable round 4 (2026-09-18 04:00): 0 Critical, 1 High → corrections
+
+**Phase B build is carried to the next session; this section is the operative delta.** v5 > v4.
+
+- **H-A (fix to C1's mechanism).** Header capture must NOT depend on `_OUTLOOK_HEADING`: FICO
+  `Previous Fiscal 2026 | Updated Fiscal 2026` (previous-FIRST, 3 releases), VRTX `Current FY |
+  Previous FY` (3), `GAAP | Non-GAAP` (8) contain neither "outlook" nor "guidance" and are dropped at
+  `daily_summary.py:730/737` with no record. Capture any short (<110 chars), figure-free line inside or
+  immediately above a block carrying ≥2 column tokens {current, updated, revised, new, prior,
+  previous, original, initial, gaap, adjusted, non-gaap, low, high}. **Test 12:** FICO verbatim
+  header → abstain `columns`.
+- **M — `Low | High` is ONE current range**, not a prior/current pair (18 docs; would be over-blocked).
+  Measured C1 cost ≈ 0: all 7 current-first FY-parsing docs pass; previous-first 3 docs, 0 FY-parsing.
+- **M — truncate AROUND the figure.** `GuidanceRange.figure_span`; render `…` +
+  `line[max(0,end-130):end+25]` + `…` (4 of 67 FY ranges end past char 160). Test 7 asserts both low
+  and high figures survive.
+- **M — systemic-empty alarm.** The checked fetcher stamps a 200 non-list body `error:body` (today
+  `consensus_preview.py:817` → `[]` → `empty`); alert when `empty` ≥ max(5, 50%) of a run; render ⚠️,
+  not 🔲, when the same `(ticker, period_end)` was `ok` in its prior snapshot. Both into test 4.
+  (FMP non-200 for a revoked key is documented but unverified — no metered call tonight.)
+- **L** — assert on a real EX-99 HTML fixture which converter shape reaches the parser (`:730`
+  discards any `|` line; pipe tables would vanish).
+
+Gate status: one more narrow round on v5 before build (expected small).
