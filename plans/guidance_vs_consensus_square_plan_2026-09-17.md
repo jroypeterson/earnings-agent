@@ -469,3 +469,42 @@ schema v14 = migration AND fresh-DB CREATE.
 
 ### Build order
 Phase A: snapshot table + CI step + tests (no rendering change). Phase B: the square for the cohort.
+
+---
+
+## v3 — Fable round 2 (2026-09-17): PHASE A BUILDABLE · PHASE B not yet
+
+Verdict: **PHASE A buildable** (its one High is a one-line rule, encoded below); **PHASE B NOT
+buildable (1 Critical, 3 High)**. v3 > v2 > v1.
+
+### Phase A — final spec (build this now)
+- Schema **v14**: `consensus_snapshot(ticker, fiscal_period_end, taken_at, event_date, revenue_avg,
+  eps_avg, num_analysts_revenue, num_analysts_eps, currency, fetch_status)`; migration AND fresh-DB
+  CREATE (`test_fresh_db_schema_matches_migration_path`, `test_dedup.py:1818`).
+- **Scope: ALL tiers** (M3 — snapshots are lossy; Tier 2/3 expansion must not start with no
+  history). ~4.3–5k FMP calls/season, under 300/min.
+- `snapshot_annual_consensus(conn, today, fetcher)` selects open rows in `(today, today+4]` ∪
+  today-AMC, `+10d` when `date_confirmed=0`; one row per `(ticker, fiscal_period_end, taken_at)`;
+  an empty window makes zero fetcher calls.
+- `fetch_status`: `ok` · `empty` · `error:<code>` — a 429 and an empty list are DISTINGUISHABLE
+  (today `fetch_fmp_annual_estimates` collapses both to `[]`; surface the status code, L2).
+- `latest_pre_release_snapshot(conn, ticker, fiscal_period_end, cutoff)`: newest `taken_at < cutoff`,
+  `event_date` ignored (H1). **Cutoff rule (H1-NEW):** 16:00 ET of the event date for AMC; 00:00 ET
+  for BMO, for `date_confirmed=0`, or when `event_hour_yf` and `event_hour` are **both non-empty
+  AND differ** — a NULL `event_hour_yf` (80% of rows) is "no second opinion", not a disagreement.
+  ET via `ZoneInfo`.
+- CI: a new flag on `main.py`, invoked in `daily_earnings_check.yml` AFTER "Run earnings agent",
+  with `FMP_API_KEY`, `continue-on-error: true` and an `if: failure()` alert; FMP pacing 4/s with
+  5/15/30 s backoff. Source-scan test on the workflow (new pattern, L1).
+- **No rendering change in Phase A.** Nothing in the Slack output moves.
+
+### Phase B — carried forward (fix before building the square)
+- **C1-NEW:** "largest same-metric range" only among ranges whose explicit year maps to the SAME
+  period as the structural match; two mapped periods for one metric → compare only the one equal
+  to the first period end; ambiguous → abstain `period`.
+- **H2-NEW:** floor 0.4× only when FY evidence is heading-only; source line says full year/fiscal
+  20xx → accept down to 0.2×; any sub-floor abstention carries the verbatim sentence.
+- **H3-NEW:** relax the colon only inside the `_GUIDANCE_PERIOD` branch at `daily_summary.py:712-720`;
+  keep `endswith(":")` on the terminator branch; FIVE fixture must still attribute adjusted EPS.
+- M1 FYE-change stub: matched end must be 330–400d after the previous period end, else abstain.
+- M2 enrich cohort rows only, sorted `(tier, position_rank)`, before spending the budget.
