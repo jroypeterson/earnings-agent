@@ -243,6 +243,60 @@ def latest_pre_release_snapshot(
     return periods.get(fiscal_period_end) if status == "ok" else None
 
 
+# Status values returned by pre_release_snapshot_set. Phase B renders each one
+# differently, and the distinction is the point (plan v4 H2):
+#   ok            -> compare against the returned period set
+#   empty         -> FMP had no Street FY consensus: a COVERAGE fact, not comparable, no alert
+#   suspect_empty -> newest attempt empty but an earlier one was ok: a pipeline gap (v5 M)
+#   error         -> every pre-cutoff attempt failed: a pipeline gap
+#   missing       -> no snapshot attempt before the cutoff at all: a pipeline gap
+SNAPSHOT_SET_STATUSES = ("ok", "empty", "suspect_empty", "error", "missing")
+
+
+def pre_release_snapshot_set(
+    conn: sqlite3.Connection,
+    ticker: str,
+    cutoff: datetime,
+) -> tuple[str, dict[str, dict]]:
+    """``(status, {fiscal_period_end: row})`` from the newest pre-cutoff snapshot.
+
+    The structural FY match (plan v2 C1) runs over the whole period SET taken
+    at one instant, so the set must come from ONE ``taken_at`` -- mixing
+    periods from two fetches could pair a revenue figure with a period the
+    later fetch no longer carries.
+
+    - The newest ``ok`` fetch before ``cutoff`` wins, even when a LATER
+      pre-cutoff attempt errored: a 429 an hour before the print does not
+      invalidate yesterday's clean pre-print figure.
+    - When the newest attempt is ``empty`` and an ``ok`` preceded it, that is
+      ``suspect_empty`` -- consensus does not usually vanish overnight, so the
+      vendor, not the company, is the likelier cause (plan v5).
+    - ``event_date`` is ignored, as in ``latest_pre_release_snapshot`` (H1).
+    """
+    stamp = _utc_stamp(cutoff)
+    attempts = conn.execute(
+        "SELECT taken_at, fiscal_period_end, fetch_status FROM consensus_snapshot "
+        "WHERE ticker = ? AND taken_at < ? ORDER BY taken_at DESC",
+        (ticker, stamp),
+    ).fetchall()
+    if not attempts:
+        return "missing", {}
+    newest_ok = next((a[0] for a in attempts if a[2] == "ok" and a[1]), None)
+    newest_status = attempts[0][2] or ""
+    if newest_status == "empty" and attempts[0][0] != newest_ok:
+        return ("suspect_empty" if newest_ok else "empty"), {}
+    if newest_ok is None:
+        return "error", {}
+    rows = conn.execute(
+        f"SELECT {', '.join(_SNAPSHOT_COLS)} FROM consensus_snapshot "
+        "WHERE ticker = ? AND taken_at = ? AND fetch_status = 'ok' "
+        "AND fiscal_period_end != ''",
+        (ticker, newest_ok),
+    ).fetchall()
+    out = {r[1]: dict(zip(_SNAPSHOT_COLS, r)) for r in rows}
+    return ("ok" if out else "error"), out
+
+
 # ---------------------------------------------------------------------------
 # Write side
 # ---------------------------------------------------------------------------

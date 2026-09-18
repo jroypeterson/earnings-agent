@@ -130,6 +130,7 @@ from notifications import (
     build_email_text,
     build_results_slack_blocks,
     build_results_fallback_text,
+    guidance_square_enabled,
     build_move_unavailable_blocks,
     build_move_unavailable_fallback,
     build_reconcile_blocks,
@@ -2494,6 +2495,114 @@ def run_consensus_preview(
 # ---------------------------------------------------------------------------
 
 
+# Board #298 Phase B -- the guidance square's EDGAR enrichment.
+GUIDANCE_ENRICH_BUDGET_S = 150.0
+GUIDANCE_EDGAR_FAILURE_BREAKER = 5
+_GUIDANCE_COHORT_POSITIONS = (
+    "Portfolio", "Researching", "Ready to Buy", "Ready to Short",
+    "Following for Interest",
+)
+
+
+def _in_guidance_cohort(r: ResultRow) -> bool:
+    """v1 cohort = Tier 1 ∪ Position lists (plan v2 design verdict)."""
+    return r.tier == 1 or (r.position or "") in _GUIDANCE_COHORT_POSITIONS
+
+
+def _guidance_cohort_key(r: ResultRow):
+    pos = r.position or ""
+    rank = (_GUIDANCE_COHORT_POSITIONS.index(pos)
+            if pos in _GUIDANCE_COHORT_POSITIONS else len(_GUIDANCE_COHORT_POSITIONS))
+    return (r.tier, rank, r.ticker)
+
+
+def attach_guidance_verdicts(
+    conn, results: list[ResultRow], *, budget_s: float = GUIDANCE_ENRICH_BUDGET_S,
+    clock=time.monotonic,
+) -> list[str]:
+    """Set ``r.guidance_verdict`` on every row; return pipeline-gap alerts.
+
+    Cohort rows only, sorted (tier, position rank) BEFORE the budget is spent
+    (plan v3 M2), so a hanging SEC costs Tier 3 detail and never a Portfolio
+    name. A global wall-clock budget and a circuit breaker on EDGAR hard
+    failures (v2 H2) bound the whole pass; a row left unfetched renders ⚠️
+    "budget" -- never a guess. Reads the DB snapshot only: 0 FMP calls.
+    """
+    import consensus_snapshot as cs
+    import edgar_client
+    import guidance_compare as gc
+
+    cohort = []
+    for r in results:
+        r.guidance_verdict = None
+        if _in_guidance_cohort(r):
+            cohort.append(r)
+        else:
+            r.guidance_verdict = gc.outside_cohort()
+    cohort.sort(key=_guidance_cohort_key)
+
+    alerts: list[str] = []
+    start = clock()
+    _, fail0 = edgar_client.get_request_stats()
+    for r in cohort:
+        if clock() - start > budget_s:
+            r.guidance_verdict = gc.could_not_check("budget")
+        elif edgar_client.get_request_stats()[1] - fail0 >= GUIDANCE_EDGAR_FAILURE_BREAKER:
+            r.guidance_verdict = gc.could_not_check("EDGAR failing (breaker)")
+        else:
+            try:
+                r.guidance_verdict = _guidance_verdict_for(conn, r, cs, edgar_client, gc)
+            except Exception as exc:  # per row: never blocks the post
+                logger.warning("guidance square: %s parser/enrichment error: %s",
+                               r.ticker, exc)
+                r.guidance_verdict = gc.could_not_check("parser error")
+        if r.guidance_verdict.state == "no_check":
+            alerts.append(f"{r.ticker}: {r.guidance_verdict.reason}")
+    return alerts
+
+
+def _guidance_verdict_for(conn, r: ResultRow, cs, edgar_client, gc):
+    ev = conn.execute(
+        "SELECT event_hour, event_hour_yf, date_confirmed FROM events "
+        # A closed event never reports, so it has no cutoff to read.
+        "WHERE ticker = ? AND event_date = ? AND closed_reason IS NULL",
+        (r.ticker, r.event_date),
+    ).fetchone()
+    if ev is None:
+        # No record row: the conservative 00:00 ET cutoff (unconfirmed).
+        ev = (r.event_hour, None, 0)
+    cutoff = cs.pre_release_cutoff(r.event_date, ev[0], ev[1], ev[2])
+    status, snaps = cs.pre_release_snapshot_set(conn, r.ticker, cutoff)
+    evd = date.fromisoformat(r.event_date)
+    lo, hi = evd - timedelta(days=1), evd + timedelta(days=2)
+    filing = (edgar_client.find_earnings_release_filing(r.ticker, lo, hi)
+              or edgar_client.find_results_6k(r.ticker, lo, hi))
+    if not filing:
+        return gc.could_not_check("no release on EDGAR")
+    doc = edgar_client.fetch_release_document(r.ticker, filing)
+    if not doc or not doc.text:
+        return gc.could_not_check("release fetch failed")
+    return gc.assess(doc.text, evd, status, snaps, cs._utc_stamp(cutoff))
+
+
+def _alert_guidance_gaps(alerts: list[str], as_of: date) -> None:
+    """#status-reports: every ⚠️ in the square is a pipeline gap and must be
+    visible outside the card too (plan section 7). Best-effort; never raises."""
+    if not alerts:
+        return
+    webhook = SLACK_WEBHOOK_STATUS or SLACK_WEBHOOK_EARNINGS
+    text = (f":warning: FY guide square ({as_of.isoformat()}): "
+            f"{len(alerts)} row(s) could not be checked -- " + "; ".join(alerts[:30]))
+    if not webhook:
+        logger.warning("Guidance-gap alert suppressed (no webhook): %s", text)
+        return
+    try:
+        post_slack(webhook, [{"type": "section",
+                              "text": {"type": "mrkdwn", "text": text[:2900]}}], text)
+    except Exception as exc:
+        logger.error(f"Guidance-gap Slack post failed: {exc}")
+
+
 def notify_results(
     conn, results: list[ResultRow], as_of: date
 ) -> bool:
@@ -2523,8 +2632,21 @@ def notify_results(
         also_reported={r.ticker for r in results},
     )
 
+    # Board #298 Phase B. The results post must NEVER depend on this feature:
+    # a raise here leaves every verdict None (renders ⚠️) and alerts.
+    guidance_alerts: list[str] = []
+    if guidance_square_enabled():
+        try:
+            guidance_alerts = attach_guidance_verdicts(conn, results)
+        except Exception as exc:
+            logger.error(f"Guidance square enrichment failed: {exc}")
+            for r in results:
+                r.guidance_verdict = None
+            guidance_alerts = [f"enrichment raised {type(exc).__name__}: {exc}"]
+
     blocks = build_results_slack_blocks(results, as_of, season_stats)
     fallback = build_results_fallback_text(results, as_of)
+    _alert_guidance_gaps(guidance_alerts, as_of)
 
     posted = False
     if SLACK_WEBHOOK_EARNINGS:
