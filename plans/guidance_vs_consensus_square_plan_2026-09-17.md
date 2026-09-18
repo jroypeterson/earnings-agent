@@ -583,3 +583,11 @@ delete the footer budget → 7 fails.
   discards any `|` line; pipe tables would vanish).
 
 Gate status: one more narrow round on v5 before build (expected small).
+
+### Round 5 (2026-09-18): **PHASE B BUILDABLE (no Critical/High)** — two Mediums folded into the build
+- Header capture skips lines matching `\breconcil` ("Reconciliation of GAAP to Non-GAAP…" fired in 5
+  VRTX blocks); when several header lines fire, the nearest figure-free line ABOVE the first figure
+  line wins. `adjusted`-first headers are explicitly non-abstaining.
+- Systemic-empty alarm counts `empty` over the trailing 7 days of runs (≥5), not per run — the cohort
+  is 3–11 fetches a day, so a per-run floor of 5 is dead most days.
+Measured: the v5 capture turns 0 of 47 currently-comparable FY ranges into `columns` abstentions.
