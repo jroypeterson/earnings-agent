@@ -508,3 +508,51 @@ buildable (1 Critical, 3 High)**. v3 > v2 > v1.
   keep `endswith(":")` on the terminator branch; FIVE fixture must still attribute adjusted EPS.
 - M1 FYE-change stub: matched end must be 330–400d after the previous period end, else abstain.
 - M2 enrich cohort rows only, sorted `(tier, position_rank)`, before spending the budget.
+
+---
+
+## v4 — Phase B, Fable round 3 (2026-09-17): 1 Critical + 4 High → corrections
+
+Measured: peak-day cohort = 7 of 163 rows (2026-08-06), max observed 11 (2026-07-29). v4 > v3 > v2.
+
+### Critical
+- **C1 — table column order.** EHC (Portfolio) prints `Previous Guidance | Updated Guidance`; the
+  first-range rule takes the PREVIOUS range as current. SPGI prints `GAAP | Adjusted`.
+  `extract_guidance_blocks` records the dropped multi-column header line on the block; `assess()`
+  abstains `columns` unless column 1 is unambiguously current/updated (and adjusted, for EPS).
+  FIVE's `Current Outlook | Prior Outlook` still passes.
+
+### Highs
+- **H1** "Largest same-metric range" is applied ONLY among ranges that already passed G1–G5
+  (FIVE: GAAP $12.10–12.58 > adjusted $9.83–10.31 would otherwise win and abstain).
+- **H2** Phase A gains `pre_release_snapshot_set(conn, ticker, cutoff) -> (status, {period_end: row})`
+  from the newest pre-cutoff `taken_at`, so Phase B can (a) tell FMP-`empty` (render "no Street
+  consensus", NO alert) from no-snapshot (⚠️ + alert) and (b) run the structural FY match over the
+  period SET. Lands on the Phase A branch before Phase B code.
+- **H3** Non-cohort rows render ⬛ "not checked (outside v1 cohort)"; it is in `_MARKER_COLOUR_KEY`.
+- **H4** Footer budget: each verbatim sentence truncated to ~160 chars; chunked ≤2000 chars per
+  context element and ≤10 elements; its blocks counted in `_OVERFLOW_RESERVE`; full text logged.
+  Must survive the final `blocks[:SLACK_MAX_BLOCKS]` slice.
+
+### Mediums
+- **M1** One `_FY_EVIDENCE` regex in `guidance_compare`, used by G1 AND the 0.2×/0.4× floor split;
+  tested per spelling (`full year`, `full-year`, `annual`, `for the year`, `FY26`, `FY'26`,
+  `fiscal 2026`, `fiscal year`).
+- **M2** The colon relaxation also requires heading shape (starts `For the|Fiscal|Full|FY`, no verb) —
+  a footnote "Fiscal 2026 is a 53-week year" must not relabel a block.
+- **M3** Glyphs: 🔲 = not comparable; ⬜ in slot 4 = "no FY $ range parsed"; the key states slot-4
+  meanings separately.
+- **M4** Generic branch sets `period_label = bool(_GUIDANCE_PERIOD.search(label))`, so a
+  `Full-Year 2026 Guidance` caption keeps its FY evidence when the next column-header line arrives.
+- Lows: `_is_loss` change tested in `earnings_review` too; escape `<`/`&` in verbatim text;
+  FYE-change stub abstains only when a previous period exists; `sign(0)` matches either.
+
+### Tests that must fail on a naive Phase B (write first)
+1 EHC verbatim table → current EPS 5.89–6.11 or abstain `columns`, never 5.81–6.10 ·
+2 SPGI `GAAP | Adjusted` → abstain `columns` · 3 FIVE Q2 FY26 → adjusted 9.83–10.31 compared ·
+4 snapshot `empty` → 🔲 no alert; no row → ⚠️ + alert · 5 structural match from a period set ·
+6 non-cohort → ⬛; every emittable glyph is in the legend · 7 11 coloured rows × 400-char
+sentences → elements ≤2000, footer survives the slice, ≤48 blocks · 8 FY spellings agree under G1
+and the floor · 9 53-week footnote leaves the label alone · 10 `Full-Year 2026 Guidance` caption +
+`Previous | Updated` header keeps FY evidence · 11 mutations: delete the column guard → 1 fails;
+delete the footer budget → 7 fails.
