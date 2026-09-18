@@ -276,6 +276,14 @@ def snapshot_annual_consensus(
         if summary["aborted"]:
             summary["skipped"] = len(window) - i
             break
+        # Re-check the cutoff BEFORE the metered call (Fable code review, H):
+        # a run that straddles 16:00 ET must not spend a request on a figure it
+        # will refuse, and a missed cutoff is a SKIP, not a fetch failure -- it
+        # must never feed the breaker, the error count or the "retried next
+        # run" status post (it is never retried: the release has happened).
+        if clock() >= cutoff:
+            summary["skipped_post_cutoff"] = summary.get("skipped_post_cutoff", 0) + 1
+            continue
         try:
             rows, status = fetcher(ticker)
         except Exception as exc:  # noqa: BLE001 -- one ticker never stops the run
@@ -289,7 +297,13 @@ def snapshot_annual_consensus(
         fetched_at = clock()
         taken_at = _utc_stamp(fetched_at)
         if status == "ok" and fetched_at >= cutoff:
-            rows, status = [], "error:post_cutoff"
+            # Crossed the cutoff DURING the call: refuse the figure, record it,
+            # but as a skip (never an error -- see above).
+            summary["skipped_post_cutoff"] = summary.get("skipped_post_cutoff", 0) + 1
+            conn.execute(insert, (ticker, STATUS_ROW_PERIOD, taken_at, event_date,
+                                  None, None, None, None, None, "skipped:post_cutoff"))
+            conn.commit()
+            continue
         consecutive_errors = consecutive_errors + 1 if status.startswith("error:") else 0
 
         if status == "ok":

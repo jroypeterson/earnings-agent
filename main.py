@@ -2180,7 +2180,8 @@ def run_snapshot_consensus(dry_run: bool = False) -> dict:
                 f"Consensus snapshot ABORTED ({summary['aborted']}): "
                 f"{summary['skipped']} of {summary['tickers']} ticker(s) not attempted"
             )
-        if summary["tickers"] and summary["ok"] + summary["empty"] == 0:
+        attempted = summary["tickers"] - summary.get("skipped_post_cutoff", 0)
+        if attempted and summary["ok"] + summary["empty"] == 0:
             raise RuntimeError(
                 f"Consensus snapshot: every one of {summary['tickers']} FMP "
                 f"fetch(es) failed ({summary['failed'][:5]}) -- systemic, not a "

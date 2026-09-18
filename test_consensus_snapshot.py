@@ -419,7 +419,10 @@ def test_workflow_runs_the_snapshot_step_after_the_sync_with_an_alert():
     # `if: failure()` after it never fires. The alert must read the OUTCOME.
     alerts = [
         (n, b) for n, b in steps[i + 1:]
-        if f"steps.{step_id.group(1)}.outcome == 'failure'" in b
+        # != success AND != skipped, so a step-timeout that GitHub reports as
+        # `cancelled` still alerts (Fable code review).
+        if f"steps.{step_id.group(1)}.outcome != 'success'" in b
+        and f"steps.{step_id.group(1)}.outcome != 'skipped'" in b
     ]
     assert alerts, "no alert step fires on the snapshot step's failure"
     alert_text = "\n".join(b for _n, b in alerts)
@@ -523,15 +526,39 @@ def test_taken_at_is_the_fetch_time_and_a_post_cutoff_fetch_is_refused():
     from datetime import datetime, timezone
     conn = _db()
     _event(conn, "DDD", "2026-09-17", hour="amc")   # cutoff 20:00 UTC (16:00 EDT)
-    start = datetime(2026, 9, 17, 19, 59, 0, tzinfo=timezone.utc)
-    clock = _Clock(start, 90)  # each clock() call is 90 s later
+    # clock() calls: budget check 19:59:20, pre-fetch check 19:59:40 (before
+    # the cutoff, so the call is made), fetch returns 20:00:00 (at the cutoff).
+    start = datetime(2026, 9, 17, 19, 59, 20, tzinfo=timezone.utc)
+    clock = _Clock(start, 20)
     summary = _mod().snapshot_annual_consensus(
         conn, TODAY, RecordingFetcher(), now=start, clock=clock)
     rows = conn.execute(
         "SELECT taken_at, fetch_status FROM consensus_snapshot").fetchall()
-    assert rows == [(rows[0][0], "error:post_cutoff")]
-    assert rows[0][0] > "2026-09-17T20:00:00Z"  # stamped at the fetch, not the start
-    assert summary["ok"] == 0 and summary["errors"] == 1
+    # Crossed the cutoff during the call: refused, recorded as a SKIP, stamped
+    # at the fetch -- and NOT an error (it must never feed the breaker/alarm).
+    assert rows == [(rows[0][0], "skipped:post_cutoff")]
+    assert rows[0][0] >= "2026-09-17T20:00:00Z"  # stamped at the fetch, not the start
+    assert summary["ok"] == 0 and summary["errors"] == 0
+    assert summary["skipped_post_cutoff"] == 1
+
+
+def test_a_cutoff_passed_before_the_call_spends_no_request_and_is_no_error():
+    """Fable code review H: a run straddling 16:00 ET must skip today-AMC names
+    whose cutoff has passed WITHOUT a metered call, and without tripping the
+    breaker for the future-dated names behind them."""
+    from datetime import datetime, timezone
+    conn = _db()
+    for t in ("A1", "A2", "A3", "A4"):
+        _event(conn, t, "2026-09-17", hour="amc")   # cutoff 20:00 UTC
+    _event(conn, "ZZZ", "2026-09-18")                # future: must still be fetched
+    start = datetime(2026, 9, 17, 19, 59, 30, tzinfo=timezone.utc)
+    fetcher = RecordingFetcher()
+    summary = _mod().snapshot_annual_consensus(
+        conn, TODAY, fetcher, now=start, clock=_Clock(start, 60),
+        max_consecutive_errors=2)
+    assert "A1" not in fetcher.calls or len([c for c in fetcher.calls if c.startswith("A")]) <= 1
+    assert "ZZZ" in fetcher.calls
+    assert summary["aborted"] is None and summary["errors"] == 0
 
 
 def test_ok_rows_are_stamped_per_fetch_not_per_batch():

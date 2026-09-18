@@ -177,7 +177,7 @@ jobs:
       # Both alerts are themselves continue-on-error: a failed curl must not
       # skip the "Save earnings database" step below and lose this run's DB.
       - name: Notify Slack on consensus snapshot failure
-        if: steps.snapshot_consensus.outcome == 'failure'
+        if: steps.snapshot_consensus.outcome != 'success' && steps.snapshot_consensus.outcome != 'skipped'
         continue-on-error: true
         timeout-minutes: 2
         env:
@@ -195,7 +195,7 @@ jobs:
       # Out-of-band backup, inline (runner python3 + stdlib) per the workflow
       # convention -- never a call into scripts/.
       - name: Email backup on consensus snapshot failure
-        if: steps.snapshot_consensus.outcome == 'failure'
+        if: steps.snapshot_consensus.outcome != 'success' && steps.snapshot_consensus.outcome != 'skipped'
         continue-on-error: true
         timeout-minutes: 2
         env:
