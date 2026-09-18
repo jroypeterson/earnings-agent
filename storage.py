@@ -18,7 +18,7 @@ logger = logging.getLogger("earnings_agent")
 # Schema version tracking
 # ---------------------------------------------------------------------------
 
-CURRENT_SCHEMA_VERSION = 13  # Bump when adding migrations
+CURRENT_SCHEMA_VERSION = 14  # Bump when adding migrations
 
 # The one definition of "this event is still waiting to happen".
 #
@@ -46,6 +46,36 @@ OPEN_EVENT_SQL = "reported = 0 AND closed_reason IS NULL"
 CLOSED_DELISTED = "delisted"
 
 _MIGRATIONS = {
+    # Version 13 → 14: pre-print ANNUAL Street consensus snapshots (board #298
+    # Phase A). FMP keeps no estimate history, so the consensus as it stood
+    # BEFORE a release exists only if it was captured then; the post-print
+    # figure has already moved onto the guide (FIVE: $9.29 pre vs $10.25 post
+    # against a $9.83-10.31 guide). Written by consensus_snapshot.py.
+    #
+    # Keyed on (ticker, fiscal_period_end, taken_at). `event_date` is
+    # PROVENANCE ONLY -- FMP moves dates after a snapshot is taken, and a
+    # snapshot from before the move is still pre-print. A status-only row
+    # (fetch_status 'empty' / 'error:<code>') carries fiscal_period_end = ''
+    # so a failed fetch is recorded without ever posing as a figure.
+    #
+    # A CREATE TABLE here is also run by init_db's fresh-DB path, so this one
+    # statement is both the migration and the fresh CREATE.
+    14: [
+        """CREATE TABLE IF NOT EXISTS consensus_snapshot (
+            ticker               TEXT NOT NULL,
+            fiscal_period_end    TEXT NOT NULL,
+            taken_at             TEXT NOT NULL,
+            event_date           TEXT,
+            revenue_avg          REAL,
+            eps_avg              REAL,
+            num_analysts_revenue INTEGER,
+            num_analysts_eps     INTEGER,
+            currency             TEXT,
+            fetch_status         TEXT NOT NULL,
+            PRIMARY KEY (ticker, fiscal_period_end, taken_at)
+        )""",
+    ],
+
     # Version 12 → 13: a terminal state for events that can never report.
     # NULL = open. See OPEN_EVENT_SQL above for why this exists and why every
     # open-event query must go through the constant.
