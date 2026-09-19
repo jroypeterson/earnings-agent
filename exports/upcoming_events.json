@@ -1,24 +1,15 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-09-18T21:46:48Z",
+  "generated_at": "2026-09-19T14:24:54Z",
   "window": {
-    "start": "2026-09-16",
-    "end": "2026-10-02"
+    "start": "2026-09-17",
+    "end": "2026-10-03"
   },
   "counts": {
-    "events": 17
+    "events": 16
   },
   "events": [
-    {
-      "ticker": "FDX",
-      "event_date": "2026-09-16",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "FedEx Corp"
-    },
     {
       "ticker": "TLSA",
       "event_date": "2026-09-18",
