@@ -1,24 +1,15 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-09-19T14:24:54Z",
+  "generated_at": "2026-09-20T14:43:15Z",
   "window": {
-    "start": "2026-09-17",
-    "end": "2026-10-03"
+    "start": "2026-09-18",
+    "end": "2026-10-04"
   },
   "counts": {
-    "events": 16
+    "events": 15
   },
   "events": [
-    {
-      "ticker": "TLSA",
-      "event_date": "2026-09-18",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Tiziana Life Sciences Ltd - ADR"
-    },
     {
       "ticker": "ABVX",
       "event_date": "2026-09-21",
