@@ -1,24 +1,15 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-09-21T17:03:54Z",
+  "generated_at": "2026-09-21T22:39:57Z",
   "window": {
     "start": "2026-09-19",
     "end": "2026-10-05"
   },
   "counts": {
-    "events": 16
+    "events": 15
   },
   "events": [
-    {
-      "ticker": "ABVX",
-      "event_date": "2026-09-21",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Abivax S.A."
-    },
     {
       "ticker": "INM",
       "event_date": "2026-09-21",
