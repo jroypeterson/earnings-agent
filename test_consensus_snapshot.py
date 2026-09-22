@@ -725,3 +725,40 @@ def test_a_same_day_amc_sibling_before_its_cutoff_does_not_block():
     fetcher = RecordingFetcher()
     _mod().snapshot_annual_consensus(conn, TODAY, fetcher, now=NOW)
     assert fetcher.calls == ["XYZ"]
+
+
+# ---------------------------------------------------------------------------
+# Codex round 2, finding 3: a malformed HTTP-200 LIST is an error, not coverage
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("body", [
+    [{"Error Message": "Limit Reach . Please upgrade your plan"}],
+    [{"symbol": "X", "epsAvg": 1.0}],          # rows lacking `date`
+    ["not a row"],
+])
+def test_checked_fetcher_calls_a_malformed_list_an_error(body):
+    import consensus_preview as cp
+    rows, status = cp.fetch_fmp_annual_estimates_checked(
+        "X", "KEY", get_json=lambda url, *a, **k: body)
+    assert rows == [] and status.startswith("error:"), status
+
+
+def test_checked_fetcher_still_calls_an_empty_list_empty():
+    import consensus_preview as cp
+    assert cp.fetch_fmp_annual_estimates_checked(
+        "X", "KEY", get_json=lambda url, *a, **k: []) == ([], "empty")
+
+
+def test_runner_fails_when_every_ticker_gets_a_quota_shaped_200(monkeypatch):
+    """A quota failure across the whole run must fail the step (its alert
+    fires), not read as a successful run over companies with no coverage."""
+    import consensus_preview as cp
+
+    def fetcher(ticker):
+        return cp.fetch_fmp_annual_estimates_checked(
+            ticker, "KEY",
+            get_json=lambda url, *a, **k: [{"Error Message": "Limit Reach"}])
+
+    main, _conn, _posts = _runner_env(monkeypatch, fetcher=fetcher)
+    with pytest.raises(RuntimeError, match="systemic"):
+        main.run_snapshot_consensus()

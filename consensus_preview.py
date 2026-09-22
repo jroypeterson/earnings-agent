@@ -875,6 +875,17 @@ def fetch_fmp_annual_estimates_checked(
         # An analyst count of 0 is "no coverage", not a measured zero.
         return int(v) if isinstance(v, (int, float)) and v > 0 else None
 
+    # Codex round 2 (2026-09-22): a 200 LIST can be a refusal too --
+    # `[{"Error Message": "Limit Reach"}]`, or rows with no `date`. Only a
+    # genuinely empty list is "no coverage"; a non-empty list that yields no
+    # period, or that carries an error object, is `error:shape`, so a quota or
+    # API-shape failure across the run feeds the error count and its alarm.
+    if any(isinstance(r, dict) and ("Error Message" in r or "error" in r)
+           for r in rows):
+        logger.warning("FMP annual estimates for %s: error object in a 200 list",
+                       ticker)
+        return [], "error:shape"
+
     out: list[AnnualConsensus] = []
     for r in rows:
         if not isinstance(r, dict):
@@ -896,6 +907,10 @@ def fetch_fmp_annual_estimates_checked(
             eps_analysts=_count(r.get("numAnalystsEps")),
         ))
     out.sort(key=lambda a: a.fiscal_period_end)
+    if rows and not out:
+        logger.warning("FMP annual estimates for %s: %d row(s), none parseable",
+                       ticker, len(rows))
+        return [], "error:shape"
     return out, ("ok" if out else "empty")
 
 
