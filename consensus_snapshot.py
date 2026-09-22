@@ -42,6 +42,13 @@ ET = ZoneInfo("America/New_York")
 WINDOW_DAYS = 4
 UNCONFIRMED_EXTRA_DAYS = 10
 
+# Codex round 2 (2026-09-22): an OPEN event whose cutoff has passed, dated
+# within this many days before the in-window event, is the same reporting
+# cycle (a locked row + a vendor duplicate, or a moved date). The company may
+# already have printed on the earlier date, so the in-window fetch could be
+# post-print consensus. Consecutive quarterly prints are ~91 days apart.
+SAME_CYCLE_DAYS = 45
+
 # FMP Starter allows 300/min. 4/s is 240/min with headroom for the rest of the
 # run; the 429 backoff is the same schedule as notifications.post_with_retry.
 FMP_RATE_PER_SEC = 4.0
@@ -223,10 +230,52 @@ def select_snapshot_window(
     reject. One entry per ticker, carrying its NEAREST open event date.
     """
     now = now or datetime.now(timezone.utc)
-    rows = _open_window_rows(conn, today)
+    window, _blocked = _select_window(conn, today, now)
+    return [(t, d) for t, d, _ in window]
 
 
-    return [(t, d) for t, d, _ in _window_with_cutoffs(rows, now)]
+def _select_window(conn: sqlite3.Connection, today: date, now: datetime):
+    """``(window, blocked)``: the snapshot window, minus every ticker that has a
+    past-cutoff OPEN event in the same reporting cycle (``blocked``, as
+    ``(ticker, event_date, prior_event_date)``).
+
+    Fail-closed rule for Codex round 2 finding 2: an operator-locked 09-17 AMC
+    row plus a vendor duplicate at 09-20 -- on the 09-18 run the locked row is
+    no longer in the window, and if the company printed on 09-17 a fetch for
+    the 09-20 row is POST-print consensus that would be stored as pre-print.
+    An open past row within ``SAME_CYCLE_DAYS`` is exactly "not yet marked
+    reported / superseded", so the ticker is skipped until it is resolved.
+    """
+    window = _window_with_cutoffs(_open_window_rows(conn, today), now)
+    if not window:
+        return window, []
+    lookback = (today - timedelta(days=WINDOW_DAYS + UNCONFIRMED_EXTRA_DAYS
+                                  + SAME_CYCLE_DAYS)).isoformat()
+    prior: dict[str, list[str]] = {}
+    for ticker, d, hour, hour_yf, confirmed in conn.execute(
+        "SELECT ticker, event_date, event_hour, event_hour_yf, date_confirmed "
+        f"FROM events WHERE {OPEN_EVENT_SQL} AND event_date >= ? "
+        "AND event_date <= ?",
+        (lookback, today.isoformat()),
+    ).fetchall():
+        if now >= pre_release_cutoff(d, hour, hour_yf, confirmed):
+            prior.setdefault(ticker, []).append(d)
+    kept, blocked = [], []
+    for ticker, event_date, cutoff in window:
+        earliest = (date.fromisoformat(event_date)
+                    - timedelta(days=SAME_CYCLE_DAYS)).isoformat()
+        hits = sorted(p for p in prior.get(ticker, ())
+                      if earliest <= p < event_date)
+        if hits:
+            blocked.append((ticker, event_date, hits[-1]))
+        else:
+            kept.append((ticker, event_date, cutoff))
+    if blocked:
+        logger.warning(
+            "Consensus snapshot: %d ticker(s) NOT snapshotted -- an open, "
+            "past-cutoff event in the same cycle may already have printed: %s",
+            len(blocked), ", ".join(f"{t}@{d} (open {p})" for t, d, p in blocked))
+    return kept, blocked
 
 
 def _window_with_cutoffs(rows, now: datetime) -> list[tuple[str, str, datetime]]:
@@ -303,18 +352,26 @@ def snapshot_annual_consensus(
         _t0, _anchor = time.monotonic(), now
         clock = lambda: _anchor + timedelta(seconds=time.monotonic() - _t0)  # noqa: E731
     now = now or clock()
-    window = _window_with_cutoffs(_open_window_rows(conn, today), now)
+    window, blocked = _select_window(conn, today, now)
     summary = {"tickers": len(window), "ok": 0, "empty": 0, "errors": 0,
-               "rows_written": 0, "failed": [], "aborted": None, "skipped": 0}
-    if not window:
-        logger.info("Consensus snapshot: no open events in the pre-release window")
-        return summary
-
+               "rows_written": 0, "failed": [], "aborted": None, "skipped": 0,
+               "skipped_open_prior": [t for t, _d, _p in blocked]}
     insert = (
         "INSERT OR REPLACE INTO consensus_snapshot (ticker, fiscal_period_end, "
         "taken_at, event_date, revenue_avg, eps_avg, num_analysts_revenue, "
         "num_analysts_eps, currency, fetch_status) VALUES (?,?,?,?,?,?,?,?,?,?)"
     )
+    if blocked:
+        # On record, so "why is there no snapshot" has an answer -- and never
+        # an error: nothing failed, the guard refused.
+        stamp = _utc_stamp(now)
+        conn.executemany(insert, [
+            (t, STATUS_ROW_PERIOD, stamp, d, None, None, None, None, None,
+             "skipped:open_prior_event") for t, d, _p in blocked])
+        conn.commit()
+    if not window:
+        logger.info("Consensus snapshot: no open events in the pre-release window")
+        return summary
     consecutive_errors = 0
     for i, (ticker, event_date, cutoff) in enumerate(window):
         # Circuit breaker + wall-clock budget (Codex round 1): stop LOUDLY rather

@@ -675,3 +675,53 @@ def test_a_newer_error_attempt_does_not_discard_an_older_ok_in_the_same_cycle():
     _snap(conn, "XYZ", "", "2026-09-16T15:00:00Z", "2026-09-17", None, status="error:429")
     cutoff = mod.pre_release_cutoff("2026-09-17", "bmo", None, 1)
     assert mod.latest_pre_release_snapshot(conn, "XYZ", "2026-12-31", cutoff)["eps_avg"] == 1.00
+
+
+# ---------------------------------------------------------------------------
+# Codex round 2, finding 2: a past, still-open same-cycle event blocks a snapshot
+# ---------------------------------------------------------------------------
+
+def test_a_future_duplicate_behind_a_past_open_event_is_not_snapshotted():
+    """Operator-locked 09-17 AMC row + a vendor duplicate at 09-20. On the 09-18
+    run the locked row is past and drops out of the window; if XYZ printed on
+    09-17, a fetch for the 09-20 duplicate is POST-print consensus stored as
+    pre-print. Fail closed: no fetch, and the skip is on record."""
+    conn = _db()
+    _event(conn, "XYZ", "2026-09-17", hour="amc")
+    conn.execute("UPDATE events SET date_locked = 1 WHERE ticker = 'XYZ'")
+    conn.commit()
+    _event(conn, "XYZ", "2026-09-20")
+    _event(conn, "OK1", "2026-09-20")
+    run = datetime(2026, 9, 18, 11, 20, tzinfo=timezone.utc)
+    fetcher = RecordingFetcher()
+    summary = _mod().snapshot_annual_consensus(conn, date(2026, 9, 18), fetcher, now=run)
+    assert fetcher.calls == ["OK1"]
+    assert conn.execute(
+        "SELECT fetch_status FROM consensus_snapshot WHERE ticker = 'XYZ'"
+    ).fetchall() == [("skipped:open_prior_event",)]
+    assert summary["skipped_open_prior"] == ["XYZ"]
+    assert summary["errors"] == 0
+    # The dry-run / listing path applies the same rule.
+    assert [t for t, _d in _mod().select_snapshot_window(
+        conn, date(2026, 9, 18), run)] == ["OK1"]
+
+
+def test_a_previous_quarters_unreported_row_does_not_block():
+    """A past open row a full quarter back is a different cycle (measured: CTRE
+    and HYPR carry a locked May row labelled with the August quarter)."""
+    conn = _db()
+    _event(conn, "XYZ", "2026-06-18")                  # ~92 days back, never reported
+    _event(conn, "XYZ", "2026-09-18")
+    fetcher = RecordingFetcher()
+    _mod().snapshot_annual_consensus(conn, TODAY, fetcher, now=NOW)
+    assert fetcher.calls == ["XYZ"]
+
+
+def test_a_same_day_amc_sibling_before_its_cutoff_does_not_block():
+    """Today's AMC row is still ahead at 07:20 ET, so it is not a past print."""
+    conn = _db()
+    _event(conn, "XYZ", "2026-09-17", hour="amc")
+    _event(conn, "XYZ", "2026-09-19")
+    fetcher = RecordingFetcher()
+    _mod().snapshot_annual_consensus(conn, TODAY, fetcher, now=NOW)
+    assert fetcher.calls == ["XYZ"]
