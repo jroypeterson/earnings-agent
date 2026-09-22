@@ -312,8 +312,11 @@ def test_latest_pre_release_ignores_post_cutoff_same_day_row_and_event_date():
     _snap(conn, "XYZ", "2026-12-31", "2026-09-17T14:00:00Z", "2026-09-17", 1.10)
     # Same day, 17:00 EDT -- after an AMC release. Must be ignored.
     _snap(conn, "XYZ", "2026-12-31", "2026-09-17T21:00:00Z", "2026-09-17", 9.99)
-    # Other fiscal period -- never returned for this one.
-    _snap(conn, "XYZ", "2027-12-31", "2026-09-17T15:00:00Z", "2026-09-17", 7.77)
+    # Other fiscal period, same batch -- never returned for this one. (Was
+    # 15:00Z, a batch of its own holding only FY2027; one fetch writes every
+    # period at ONE taken_at, and Codex r3 makes the newest batch define the
+    # period set, so the fixture now matches what the writer produces.)
+    _snap(conn, "XYZ", "2027-12-31", "2026-09-17T14:00:00Z", "2026-09-17", 7.77)
 
     cutoff = mod.pre_release_cutoff("2026-09-17", "amc", None, 1)
     got = mod.latest_pre_release_snapshot(conn, "XYZ", "2026-12-31", cutoff)
@@ -891,3 +894,32 @@ def test_the_db_is_persisted_right_after_the_snapshot_step():
     assert "steps.snapshot_consensus.outcome" in cond
     for fn in ("always()", "failure()", "cancelled()"):
         assert fn not in cond, f"{fn} would bypass the implicit success() gate"
+
+
+# ---------------------------------------------------------------------------
+# Codex round 3, B: the NEWEST batch for the event defines the period set
+# ---------------------------------------------------------------------------
+
+def test_a_period_missing_from_the_newest_batch_is_absent():
+    """Oct 9 answered FY26+FY27; the valid Oct 12 answer has only FY27. FY26
+    must not be served from the older batch."""
+    mod = _mod()
+    conn = _db()
+    _snap(conn, "XYZ", "2026-12-31", "2026-10-09T15:00:00Z", "2026-10-14", 1.00)
+    _snap(conn, "XYZ", "2027-12-31", "2026-10-09T15:00:00Z", "2026-10-14", 2.00)
+    _snap(conn, "XYZ", "2027-12-31", "2026-10-12T15:00:00Z", "2026-10-14", 2.10)
+    cutoff = mod.pre_release_cutoff("2026-10-14", "bmo", None, 1)
+    assert mod.latest_pre_release_snapshot(conn, "XYZ", "2026-12-31", cutoff) is None
+    assert mod.latest_pre_release_snapshot(conn, "XYZ", "2027-12-31", cutoff)["eps_avg"] == 2.10
+
+
+def test_a_newer_partial_batch_is_not_backfilled_from_an_older_ok():
+    """The newest answer's figures could not be currency-tagged; an older
+    batch is not a substitute for it."""
+    mod = _mod()
+    conn = _db()
+    _snap(conn, "XYZ", "2026-12-31", "2026-10-09T15:00:00Z", "2026-10-14", 1.00)
+    _snap(conn, "XYZ", "2026-12-31", "2026-10-12T15:00:00Z", "2026-10-14", 1.10,
+          status="partial:currency_error:403")
+    cutoff = mod.pre_release_cutoff("2026-10-14", "bmo", None, 1)
+    assert mod.latest_pre_release_snapshot(conn, "XYZ", "2026-12-31", cutoff) is None

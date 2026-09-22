@@ -181,10 +181,13 @@ def latest_pre_release_snapshot(
     and would be served as this release's consensus whenever this cycle's
     captures were missed.
 
-    A newer in-cycle ``empty`` attempt supersedes an older ``ok``: the newest
-    answer FMP gave for this release is "no coverage". A newer ``error:*`` does
-    NOT -- a 429 says nothing about the consensus, and the older in-cycle
-    figure is still pre-print.
+    The NEWEST in-cycle answer defines the result (Codex round 3): the newest
+    batch whose status is ``ok``, ``empty`` or ``partial:*`` is the one read.
+    ``empty`` -> None ("no coverage"); ``partial:*`` -> None (figures not
+    currency-tagged); ``ok`` -> this period's row FROM THAT BATCH, or None when
+    the period is absent from it -- never served from an older batch. An
+    ``error:*`` / ``skipped:*`` row is not an answer and supersedes nothing: a
+    429 says nothing about the consensus.
 
     Returns None when nothing qualifies -- the caller must render "no pre-print
     consensus", never fall back to a live, post-print fetch.
@@ -193,21 +196,22 @@ def latest_pre_release_snapshot(
         return None
     floor = _utc_stamp(_cycle_floor(conn, ticker, cutoff))
     ceiling = _utc_stamp(cutoff)
+    newest = conn.execute(
+        "SELECT taken_at, MAX(fetch_status = 'ok') FROM consensus_snapshot "
+        "WHERE ticker = ? AND taken_at >= ? AND taken_at < ? "
+        "AND (fetch_status IN ('ok', 'empty') OR fetch_status LIKE 'partial:%') "
+        "GROUP BY taken_at ORDER BY taken_at DESC LIMIT 1",
+        (ticker, floor, ceiling),
+    ).fetchone()
+    if not newest or not newest[1]:
+        return None
     row = conn.execute(
         f"SELECT {', '.join(_SNAPSHOT_COLS)} FROM consensus_snapshot "
-        "WHERE ticker = ? AND fiscal_period_end = ? AND fetch_status = 'ok' "
-        "AND taken_at >= ? AND taken_at < ? ORDER BY taken_at DESC LIMIT 1",
-        (ticker, fiscal_period_end, floor, ceiling),
+        "WHERE ticker = ? AND fiscal_period_end = ? AND taken_at = ? "
+        "AND fetch_status = 'ok'",
+        (ticker, fiscal_period_end, newest[0]),
     ).fetchone()
-    if not row:
-        return None
-    got = dict(zip(_SNAPSHOT_COLS, row))
-    superseded = conn.execute(
-        "SELECT 1 FROM consensus_snapshot WHERE ticker = ? "
-        "AND fetch_status = 'empty' AND taken_at > ? AND taken_at < ? LIMIT 1",
-        (ticker, got["taken_at"], ceiling),
-    ).fetchone()
-    return None if superseded else got
+    return dict(zip(_SNAPSHOT_COLS, row)) if row else None
 
 
 # ---------------------------------------------------------------------------
