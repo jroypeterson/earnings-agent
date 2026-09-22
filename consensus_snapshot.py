@@ -480,6 +480,74 @@ def snapshot_annual_consensus(
 
 
 # ---------------------------------------------------------------------------
+# Side persistence: the snapshot rows in their OWN artifact (Codex round 3)
+# ---------------------------------------------------------------------------
+#
+# The earnings-db artifact is saved only at the END of the daily job, behind
+# steps that can fail; a pre-print snapshot that misses that save is lost for
+# good. So the CI step also writes the WHOLE consensus_snapshot table to a
+# small SQLite file, uploaded as the `consensus-snapshots` artifact whatever
+# happens later, and the next run restores the newest one and merges it back
+# BEFORE snapshotting. Because each export is taken after that merge, the
+# newest artifact is cumulative: restoring just it recovers every lost run.
+#
+# Rows are immutable once written (PK ticker, fiscal_period_end, taken_at --
+# one fetch, one instant), so the merge is INSERT OR IGNORE: idempotent, no
+# duplicates, and "newest wins" is the read side's job (newest batch in cycle).
+
+def _snapshot_create_sql() -> str:
+    from storage import _MIGRATIONS
+    return _MIGRATIONS[14][0]
+
+
+def export_snapshot_file(conn: sqlite3.Connection, path) -> int:
+    """Write every consensus_snapshot row to a fresh SQLite file at `path`
+    (written beside it, then swapped in). Returns the row count."""
+    import os
+
+    path = str(path)
+    tmp = path + ".partial"
+    if os.path.exists(tmp):
+        os.remove(tmp)
+    rows = conn.execute(
+        f"SELECT {', '.join(_SNAPSHOT_COLS)} FROM consensus_snapshot").fetchall()
+    out = sqlite3.connect(tmp)
+    try:
+        out.execute(_snapshot_create_sql())
+        out.executemany(
+            f"INSERT INTO consensus_snapshot ({', '.join(_SNAPSHOT_COLS)}) "
+            f"VALUES ({', '.join('?' * len(_SNAPSHOT_COLS))})", rows)
+        out.commit()
+    finally:
+        out.close()
+    os.replace(tmp, path)
+    return len(rows)
+
+
+def merge_snapshot_file(conn: sqlite3.Connection, path) -> int:
+    """Merge a file written by ``export_snapshot_file`` into `conn`. Returns
+    the number of rows that were new. Raises ValueError on a file that is not
+    a readable snapshot export (never merges a partial one)."""
+    src = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+    try:
+        if src.execute("PRAGMA quick_check(1)").fetchone()[0] != "ok":
+            raise ValueError(f"{path}: quick_check failed")
+        cols = {r[1] for r in src.execute("PRAGMA table_info(consensus_snapshot)")}
+        if not set(_SNAPSHOT_COLS) <= cols:
+            raise ValueError(f"{path}: no consensus_snapshot table with the v14 columns")
+        rows = src.execute(
+            f"SELECT {', '.join(_SNAPSHOT_COLS)} FROM consensus_snapshot").fetchall()
+    finally:
+        src.close()
+    before = conn.execute("SELECT COUNT(*) FROM consensus_snapshot").fetchone()[0]
+    conn.executemany(
+        f"INSERT OR IGNORE INTO consensus_snapshot ({', '.join(_SNAPSHOT_COLS)}) "
+        f"VALUES ({', '.join('?' * len(_SNAPSHOT_COLS))})", rows)
+    conn.commit()
+    return conn.execute("SELECT COUNT(*) FROM consensus_snapshot").fetchone()[0] - before
+
+
+# ---------------------------------------------------------------------------
 # Production fetcher: FMP, paced
 # ---------------------------------------------------------------------------
 

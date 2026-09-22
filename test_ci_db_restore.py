@@ -393,3 +393,36 @@ def test_corrupt_db_still_fails(tmp_path):
     res = _run(GUARD, work, _guard_env_with_artifacts(tmp_path, []))
     assert res.returncode == 1, res.stdout + res.stderr
     assert "ALARM" in res.stdout
+
+
+
+def test_a_side_artifact_restores_with_its_own_verify_table(tmp_path):
+    """Board #298: the consensus-snapshots artifact is a SQLite file with only a
+    consensus_snapshot table. EA_DB_VERIFY_TABLE lets the same restore (newest
+    by created_at, verify before overwrite) serve it; the default stays
+    `events` so the earnings-db restore is unchanged."""
+    snap = tmp_path / "consensus_snapshots.db"
+    con = sqlite3.connect(snap)
+    con.execute("CREATE TABLE consensus_snapshot (ticker TEXT, taken_at TEXT)")
+    con.execute("INSERT INTO consensus_snapshot VALUES ('XYZ', '2026-10-12T15:00:00Z')")
+    con.commit()
+    con.close()
+    with zipfile.ZipFile(tmp_path / "s.zip", "w") as z:
+        z.write(snap, "consensus_snapshots.db")
+    env = _install_fake_gh(tmp_path, [_artifact(333, "2026-10-12T16:00:00Z")],
+                           {"333": tmp_path / "s.zip"})
+    env["EA_DB_ARTIFACT_NAME"] = "consensus-snapshots"
+    env["EA_DB_PATH"] = "consensus_snapshots.db"
+    work = tmp_path / "work"
+    work.mkdir()
+
+    # Without the override it is (correctly) refused: no events table.
+    res = _run(RESTORE, work, env)
+    assert res.returncode == 1 and not (work / "consensus_snapshots.db").exists()
+
+    env["EA_DB_VERIFY_TABLE"] = "consensus_snapshot"
+    res = _run(RESTORE, work, env)
+    assert res.returncode == 0, res.stdout + res.stderr
+    got = sqlite3.connect(work / "consensus_snapshots.db").execute(
+        "SELECT COUNT(*) FROM consensus_snapshot").fetchone()[0]
+    assert got == 1

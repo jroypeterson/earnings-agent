@@ -852,51 +852,6 @@ def test_runner_fails_when_every_currency_fetch_failed(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# Codex round 2, finding 5: a captured snapshot persists whatever fails later
-# ---------------------------------------------------------------------------
-
-def _if_line(body):
-    import re
-    m = re.search(r"(?m)^        if: (.+)$", body)
-    return m.group(1).strip() if m else ""
-
-
-def test_the_db_is_persisted_right_after_the_snapshot_step():
-    """`Save earnings database` sits behind cross-check, Slack replies, exports
-    and the commit-back, and its implicit success() skips it when ANY of them
-    fails -- losing a pre-print snapshot for good. So the DB is also uploaded
-    immediately after the snapshot step, before anything that can fail the job.
-
-    Verified statically (no Actions run): the persist step must be reachable
-    from the snapshot step through continue-on-error steps only, and must keep
-    the implicit success() -- `always()` would also upload after a failed
-    restore / rollback guard (PROJECT_BRIEF #11: a failed guard's DB is never
-    uploaded)."""
-    import re
-    steps = _steps()
-    snap = next(i for i, (_n, b) in enumerate(steps) if "main.py --snapshot-consensus" in b)
-    persist = [i for i, (_n, b) in enumerate(steps)
-               if i > snap and "actions/upload-artifact" in b
-               and re.search(r"(?m)^\s+name: earnings-db\s*$", b)]
-    assert persist, "no earnings-db upload after the snapshot step"
-    p = persist[0]
-    first_hard = next(i for i, (_n, b) in enumerate(steps)
-                      if i > snap and not re.search(r"(?m)^\s+continue-on-error: true\s*$", b))
-    assert p <= first_hard, (
-        f"persist ({steps[p][0]!r}) comes after {steps[first_hard][0]!r}, "
-        "which can fail and skip it")
-    body = steps[p][1]
-    assert re.search(r"(?m)^\s+overwrite: true\s*$", body)
-    # A failed copy must not fail the job and so skip the end-of-job save.
-    assert re.search(r"(?m)^\s+continue-on-error: true\s*$", body)
-    cond = _if_line(body)
-    assert "github.ref == 'refs/heads/main'" in cond
-    assert "steps.snapshot_consensus.outcome" in cond
-    for fn in ("always()", "failure()", "cancelled()"):
-        assert fn not in cond, f"{fn} would bypass the implicit success() gate"
-
-
-# ---------------------------------------------------------------------------
 # Codex round 3, B: the NEWEST batch for the event defines the period set
 # ---------------------------------------------------------------------------
 
@@ -965,3 +920,174 @@ def test_a_move_made_before_the_old_date_arrived_does_not_block():
     fetcher = RecordingFetcher()
     _mod().snapshot_annual_consensus(conn, today, fetcher)
     assert fetcher.calls == ["XYZ"]
+
+
+# ---------------------------------------------------------------------------
+# Codex round 3, A: snapshot AFTER the date corrections; persist ONLY the
+# snapshot rows, in their own artifact, merged back on the next run
+# (replaces round 2's mid-run earnings-db upload)
+# ---------------------------------------------------------------------------
+
+SNAP_FILE = "consensus_snapshots.db"
+
+
+def _step(steps, pred):
+    hits = [i for i, (_n, b) in enumerate(steps) if pred(b)]
+    assert len(hits) == 1, hits
+    return hits[0]
+
+
+def test_snapshot_runs_after_every_date_correcting_step():
+    """The cross-check (EDGAR auto-correction) and the Slack replies (operator
+    locks / corrections) both move event dates. Snapshotting before them
+    stores consensus against an uncorrected date / window."""
+    steps = _steps()
+    names = [n for n, _ in steps]
+    snap = _step(steps, lambda b: "main.py --snapshot-consensus" in b)
+    for fixer in ("Cross-check Finnhub vs yfinance (Tier 1/2)",
+                  "Check IR-alert emails",
+                  "Check Slack replies on open questions"):
+        assert names.index(fixer) < snap, f"{fixer!r} must run before the snapshot"
+    assert snap < names.index("Save earnings database")
+
+
+def test_only_the_final_save_uploads_earnings_db():
+    """Round 2's mid-run earnings-db upload persisted PRE-cross-check state,
+    and overwrite:true DELETES the earlier copy before re-uploading."""
+    import re
+    steps = _steps()
+    uploads = [n for n, b in steps
+               if re.search(r"(?m)^\s+name: earnings-db\s*$", b)]
+    assert uploads == ["Save earnings database"]
+
+
+def test_snapshot_rows_have_their_own_artifact_restored_before_and_saved_after():
+    import re
+    steps = _steps()
+    names = [n for n, _ in steps]
+    snap = _step(steps, lambda b: "main.py --snapshot-consensus" in b)
+    snap_body = steps[snap][1]
+    assert f"CONSENSUS_SNAPSHOT_FILE: {SNAP_FILE}" in snap_body
+
+    restore = _step(steps, lambda b: "ci_restore_db_artifact.sh" in b
+                    and "EA_DB_ARTIFACT_NAME: consensus-snapshots" in b)
+    rbody = steps[restore][1]
+    assert restore < snap
+    assert f"EA_DB_PATH: {SNAP_FILE}" in rbody
+    assert "EA_DB_VERIFY_TABLE: consensus_snapshot" in rbody
+    assert re.search(r"(?m)^\s+id: restore_snapshots\s*$", rbody)
+    # A failed side-restore must never fail the critical sync.
+    assert re.search(r"(?m)^\s+continue-on-error: true\s*$", rbody)
+
+    save = _step(steps, lambda b: "actions/upload-artifact" in b
+                 and re.search(r"(?m)^\s+name: consensus-snapshots\s*$", b))
+    sbody = steps[save][1]
+    assert snap < save < names.index("Save earnings database")
+    assert f"path: {SNAP_FILE}" in sbody
+    assert "overwrite: true" not in sbody
+    assert re.search(r"(?m)^\s+id: persist_snapshots\s*$", sbody)
+    assert re.search(r"(?m)^\s+continue-on-error: true\s*$", sbody)
+    cond = re.search(r"(?m)^        if: (.+)$", sbody).group(1)
+    # Runs whatever else failed, but only when the snapshot step actually ran
+    # and exited cleanly (not `cancelled`: a killed step can leave a torn DB),
+    # and only when the restore succeeded -- an upload built WITHOUT the
+    # previous artifact merged in would become the newest, non-cumulative copy.
+    assert "always()" in cond and "github.ref == 'refs/heads/main'" in cond
+    assert "steps.restore_snapshots.outcome == 'success'" in cond
+    assert "steps.snapshot_consensus.outcome == 'success'" in cond
+    assert "steps.snapshot_consensus.outcome == 'failure'" in cond
+
+    # A failed restore or save is not silent: the snapshot alerts cover both,
+    # and run after them.
+    alerts = [i for i, (_n, b) in enumerate(steps)
+              if "steps.snapshot_consensus.outcome != 'success'" in b]
+    assert alerts and all(i > save for i in alerts)
+    for i in alerts:
+        a = steps[i][1]
+        assert "steps.restore_snapshots.outcome == 'failure'" in a
+        assert "steps.persist_snapshots.outcome == 'failure'" in a
+
+
+def _rows(conn):
+    return sorted(conn.execute(
+        "SELECT ticker, fiscal_period_end, taken_at, event_date, eps_avg, "
+        "fetch_status FROM consensus_snapshot"))
+
+
+def test_export_then_merge_is_idempotent_and_adds_no_duplicates(tmp_path):
+    mod = _mod()
+    src = _db()
+    _snap(src, "XYZ", "2026-12-31", "2026-10-09T15:00:00Z", "2026-10-14", 1.00)
+    _snap(src, "XYZ", "2026-12-31", "2026-10-12T15:00:00Z", "2026-10-14", 1.10)
+    _snap(src, "ABC", "", "2026-10-12T15:00:00Z", "2026-10-14", None, status="error:429")
+    f = tmp_path / SNAP_FILE
+    assert mod.export_snapshot_file(src, f) == 3
+
+    dst = _db()
+    # dst already holds one of the rows (the DB save of that run succeeded).
+    _snap(dst, "XYZ", "2026-12-31", "2026-10-09T15:00:00Z", "2026-10-14", 1.00)
+    assert mod.merge_snapshot_file(dst, f) == 2
+    assert mod.merge_snapshot_file(dst, f) == 0          # idempotent
+    assert _rows(dst) == _rows(src)                       # no duplicates
+
+
+def test_merge_makes_the_newest_batch_win_on_read(tmp_path):
+    """The DB save failed after a run that captured a NEWER batch; that batch
+    lives only in the side artifact. After the merge it is the one read."""
+    mod = _mod()
+    lost_run = _db()
+    _snap(lost_run, "XYZ", "2026-12-31", "2026-10-12T15:00:00Z", "2026-10-14", 1.10)
+    f = tmp_path / SNAP_FILE
+    mod.export_snapshot_file(lost_run, f)
+
+    restored = _db()                                      # the older earnings-db
+    _snap(restored, "XYZ", "2026-12-31", "2026-10-09T15:00:00Z", "2026-10-14", 1.00)
+    cutoff = mod.pre_release_cutoff("2026-10-14", "bmo", None, 1)
+    assert mod.latest_pre_release_snapshot(restored, "XYZ", "2026-12-31", cutoff)["eps_avg"] == 1.00
+    mod.merge_snapshot_file(restored, f)
+    assert mod.latest_pre_release_snapshot(restored, "XYZ", "2026-12-31", cutoff)["eps_avg"] == 1.10
+
+
+def test_merge_refuses_a_file_without_the_table(tmp_path):
+    mod = _mod()
+    f = tmp_path / SNAP_FILE
+    sqlite3.connect(f).execute("CREATE TABLE other (x)").connection.commit()
+    with pytest.raises(ValueError):
+        mod.merge_snapshot_file(_db(), f)
+
+
+def test_runner_merges_the_side_file_first_and_exports_a_cumulative_one(monkeypatch, tmp_path):
+    mod = _mod()
+    f = tmp_path / SNAP_FILE
+    prior = _db()
+    _snap(prior, "OLD", "2026-12-31", "2026-09-01T15:00:00Z", "2026-09-03", 3.0)
+    mod.export_snapshot_file(prior, f)
+
+    main, conn, _posts = _runner_env(monkeypatch, fetcher=RecordingFetcher())
+    monkeypatch.setenv("CONSENSUS_SNAPSHOT_FILE", str(f))
+    main.run_snapshot_consensus()
+    tickers = {r[0] for r in _rows(conn)}
+    assert tickers == {"OLD", "AAA", "BBB"}                # merged + this run
+    out = sqlite3.connect(f)
+    assert {r[0] for r in out.execute("SELECT ticker FROM consensus_snapshot")} == tickers
+
+
+def test_runner_still_exports_when_the_step_fails(monkeypatch, tmp_path):
+    """Every fetch failed -> the step raises; the error rows are still exported
+    so the artifact stays cumulative."""
+    f = tmp_path / SNAP_FILE
+    fetcher = RecordingFetcher({"AAA": ([], "error:401"), "BBB": ([], "error:401")})
+    main, _conn, _posts = _runner_env(monkeypatch, fetcher=fetcher)
+    monkeypatch.setenv("CONSENSUS_SNAPSHOT_FILE", str(f))
+    with pytest.raises(RuntimeError):
+        main.run_snapshot_consensus()
+    assert sqlite3.connect(f).execute(
+        "SELECT COUNT(*) FROM consensus_snapshot").fetchone()[0] == 2
+
+
+def test_runner_without_the_env_var_writes_no_side_file(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("CONSENSUS_SNAPSHOT_FILE", raising=False)
+    main, _conn, _posts = _runner_env(monkeypatch, fetcher=RecordingFetcher())
+    main.run_snapshot_consensus()
+    assert not (tmp_path / SNAP_FILE).exists()

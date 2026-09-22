@@ -2120,7 +2120,9 @@ def run_snapshot_consensus(dry_run: bool = False) -> dict:
     from datetime import datetime, timezone
     from zoneinfo import ZoneInfo
     from consensus_snapshot import (
+        export_snapshot_file,
         make_fmp_fetcher,
+        merge_snapshot_file,
         select_snapshot_window,
         snapshot_annual_consensus,
     )
@@ -2130,6 +2132,19 @@ def run_snapshot_consensus(dry_run: bool = False) -> dict:
     today = now.astimezone(ZoneInfo("America/New_York")).date()
 
     conn = init_db()
+    # CI side-persistence (Codex round 3; see consensus_snapshot.py): the
+    # workflow restores the newest `consensus-snapshots` artifact to this path;
+    # merge it BEFORE snapshotting and export the whole table after, so the
+    # artifact stays cumulative. Unset (local runs) -> neither happens.
+    side_file = os.environ.get("CONSENSUS_SNAPSHOT_FILE", "").strip()
+    merge_failed = None
+    if side_file and not dry_run and os.path.exists(side_file):
+        try:
+            added = merge_snapshot_file(conn, side_file)
+            logger.info("Consensus snapshot: merged %d row(s) from %s", added, side_file)
+        except Exception as exc:  # noqa: BLE001 -- snapshot anyway, fail after
+            merge_failed = exc
+            logger.error("Consensus snapshot: merge of %s FAILED: %s", side_file, exc)
     try:
         window = select_snapshot_window(conn, today, now)
         if dry_run:
@@ -2187,8 +2202,21 @@ def run_snapshot_consensus(dry_run: bool = False) -> dict:
                 f"fetch(es) failed ({summary['failed'][:5]}) -- systemic, not a "
                 f"flaky ticker"
             )
+        if merge_failed is not None:
+            raise RuntimeError(
+                f"Consensus snapshot: merge of {side_file} failed "
+                f"({merge_failed}); side artifact not refreshed")
         return summary
     finally:
+        # Export even when the step is failing (all-failed, breaker, no key):
+        # the rows already written must reach the side artifact. Never after a
+        # failed merge -- that export would drop the rows only the old file has.
+        if side_file and not dry_run and merge_failed is None:
+            try:
+                n = export_snapshot_file(conn, side_file)
+                logger.info("Consensus snapshot: exported %d row(s) to %s", n, side_file)
+            except Exception as exc:  # noqa: BLE001 -- the upload step fails loudly
+                logger.error("Consensus snapshot: export to %s FAILED: %s", side_file, exc)
         conn.close()
 
 

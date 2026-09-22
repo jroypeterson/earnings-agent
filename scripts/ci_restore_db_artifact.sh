@@ -73,6 +73,11 @@ DB="${EA_DB_PATH:-earnings_events.db}"
 BRANCH="${EA_DB_ARTIFACT_BRANCH:-main}"
 PAGE="${EA_DB_ARTIFACT_PAGE:-50}"
 TRIES="${EA_DB_RESTORE_TRIES:-3}"
+# The table whose presence proves the file is what it claims to be. Default
+# `events` (the earnings DB, which must also be non-empty). The board #298
+# `consensus-snapshots` side artifact passes `consensus_snapshot`: existence
+# only, since a first-season export can legitimately hold zero rows.
+VERIFY_TABLE="${EA_DB_VERIFY_TABLE:-events}"
 WORK=".db_restore"
 
 log() { echo "[db-restore] $*"; }
@@ -164,15 +169,16 @@ fetch() {
   # Verify BEFORE overwriting the working copy. A truncated download that still
   # unzips would otherwise be promoted to the live database and then re-uploaded
   # as newest -- the failure this whole file exists to stop.
-  "$PY_BIN" - "${WORK}/${DB}" <<'PY' || return 1
+  "$PY_BIN" - "${WORK}/${DB}" "$VERIFY_TABLE" <<'PY' || return 1
 import sqlite3, sys
 con = sqlite3.connect(f"file:{sys.argv[1]}?mode=ro", uri=True)
+table = sys.argv[2]
 if con.execute("PRAGMA quick_check(1)").fetchone()[0] != "ok":
     raise SystemExit("quick_check failed")
 if not con.execute(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name='events'").fetchone():
-    raise SystemExit("no events table")
-if con.execute("SELECT COUNT(*) FROM events").fetchone()[0] == 0:
+        "SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table,)).fetchone():
+    raise SystemExit(f"no {table} table")
+if table == "events" and con.execute("SELECT COUNT(*) FROM events").fetchone()[0] == 0:
     raise SystemExit("events table is empty")
 PY
 }
@@ -195,10 +201,13 @@ fi
 cp "${WORK}/${DB}" "$DB" || exit 1
 rm -rf "$WORK"
 
-STATS="$("$PY_BIN" - "$DB" <<'PY'
+STATS="$("$PY_BIN" - "$DB" "$VERIFY_TABLE" <<'PY'
 import sqlite3, sys
 con = sqlite3.connect(f"file:{sys.argv[1]}?mode=ro", uri=True)
 q = lambda s: con.execute(s).fetchone()[0]
+if sys.argv[2] != "events":
+    print(f"{sys.argv[2]}={q(f'SELECT COUNT(*) FROM {sys.argv[2]}')}")
+    raise SystemExit(0)
 tabs = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
 kv = q("SELECT COUNT(*) FROM kv_store") if "kv_store" in tabs else 0
 print(f"events={q('SELECT COUNT(*) FROM events')} "
