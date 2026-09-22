@@ -1274,3 +1274,33 @@ def test_a_different_quarter_row_54_days_back_does_not_block():
     fetcher = RecordingFetcher()
     _mod().snapshot_annual_consensus(conn, TODAY, fetcher, now=NOW)
     assert fetcher.calls == ["XYZ"]
+
+
+# ---------------------------------------------------------------------------
+# Codex round 7: a REPORTED same-quarter prior event blocks too
+# ---------------------------------------------------------------------------
+
+def test_a_reported_same_quarter_event_blocks_a_surviving_duplicate():
+    """XYZ 09-17 (2026Q3) has reported; a provider duplicate stays open on
+    09-20. The print already happened, so the 09-20 row's consensus is
+    post-print."""
+    conn = _db()
+    _qevent(conn, "XYZ", "2026-09-17", "2026Q3", hour="amc", locked=1)
+    conn.execute("UPDATE events SET reported = 1 WHERE event_date = '2026-09-17'")
+    conn.commit()
+    _qevent(conn, "XYZ", "2026-09-20", "2026Q3")
+    fetcher = RecordingFetcher()
+    run = datetime(2026, 9, 18, 11, 20, tzinfo=timezone.utc)
+    summary = _mod().snapshot_annual_consensus(conn, date(2026, 9, 18), fetcher, now=run)
+    assert fetcher.calls == [] and summary["skipped_open_prior"] == ["XYZ"]
+
+
+def test_last_quarters_reported_event_does_not_block():
+    conn = _db()
+    _qevent(conn, "XYZ", "2026-06-18", "2026Q2")
+    conn.execute("UPDATE events SET reported = 1 WHERE event_date = '2026-06-18'")
+    conn.commit()
+    _qevent(conn, "XYZ", "2026-09-19", "2026Q3")
+    fetcher = RecordingFetcher()
+    _mod().snapshot_annual_consensus(conn, TODAY, fetcher, now=NOW)
+    assert fetcher.calls == ["XYZ"]

@@ -281,15 +281,19 @@ def _select_window(conn: sqlite3.Connection, today: date, now: datetime):
     # prior[ticker] = [(date, quarter, strong)]; `strong` = confirmed or locked.
     # Both evidence paths below feed ONE rule, `_same_cycle` (Codex round 6).
     prior: dict[str, list[tuple[str, Optional[str], bool]]] = {}
-    for ticker, d, hour, hour_yf, confirmed, locked, quarter in conn.execute(
+    # Codex round 7: REPORTED rows are prior evidence too, not only open ones
+    # -- a same-quarter row that has reported means the print happened, so a
+    # later same-quarter row's consensus is post-print. Closed rows are not
+    # (a delisted event never printed). A reported row is `strong`.
+    for ticker, d, hour, hour_yf, confirmed, locked, quarter, reported in conn.execute(
         "SELECT ticker, event_date, event_hour, event_hour_yf, date_confirmed, "
-        f"date_locked, quarter FROM events WHERE {OPEN_EVENT_SQL} "
+        "date_locked, quarter, reported FROM events WHERE closed_reason IS NULL "
         "AND event_date >= ? AND event_date <= ?",
         (lookback, today.isoformat()),
     ).fetchall():
         if now >= pre_release_cutoff(d, hour, hour_yf, confirmed):
             prior.setdefault(ticker, []).append(
-                (d, quarter, bool(confirmed) or bool(locked)))
+                (d, quarter, bool(confirmed) or bool(locked) or bool(reported)))
     # Codex round 3: an unlocked same-quarter row moved LATER is DELETED by
     # upsert_event, taking the evidence above with it; storage records each
     # such move. A move made on/after the old date's 00:00 ET (hour unknown
