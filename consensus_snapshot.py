@@ -8,11 +8,13 @@ inverts the verdict). So the only pre-print consensus that will ever exist is
 one captured beforehand. This module captures it, every run, while an event is
 ahead; the square (Phase B) only ever READS what was stored here.
 
-Three public pieces:
+Four public pieces:
 
 - ``snapshot_annual_consensus(conn, today, fetcher)`` -- the write side.
 - ``pre_release_cutoff(...)`` -- the instant a snapshot stops being pre-print.
-- ``latest_pre_release_snapshot(conn, ticker, fiscal_period_end, cutoff)`` --
+- ``pre_release_snapshot_set(conn, ticker, cutoff)`` -- the read side: the
+  newest in-cycle answer as ``(status, {period: row})``; and
+  ``latest_pre_release_snapshot(conn, ticker, fiscal_period_end, cutoff)`` --
   the read side, keyed on the FISCAL PERIOD; ``event_date`` is provenance only,
   and bounded to the release's own reporting cycle (Codex round 2).
 
@@ -169,56 +171,70 @@ def _cycle_floor(conn: sqlite3.Connection, ticker: str, cutoff: datetime) -> dat
     return floor
 
 
+def pre_release_snapshot_set(
+    conn: sqlite3.Connection,
+    ticker: str,
+    cutoff: datetime,
+) -> tuple[str, dict]:
+    """The newest in-cycle, pre-cutoff ANSWER for this release, as a period set
+    (plan v4 H2): ``(status, {fiscal_period_end: row})``.
+
+    - ``("ok", {period: row, ...})`` -- every period of that ONE batch. A
+      period absent from it is absent; it is never served from an older batch.
+    - ``("empty", {})`` -- FMP answered "no coverage". Phase B renders "no
+      Street consensus", NO alert: a fact about the company.
+    - ``("partial:currency_error:<code>", {})`` -- figures fetched, currency
+      not; not comparable. A pipeline gap.
+    - ``("missing", {})`` -- no answer in this cycle at all (never snapshotted,
+      or only ``error:*`` / ``skipped:*`` rows). A pipeline gap: alert.
+
+    Bounds: ``taken_at < cutoff`` and ``>= _cycle_floor`` (Codex round 2): a
+    quarter-old snapshot from before the PREVIOUS print is not this release's.
+    ``event_date`` is deliberately NOT in the predicate (Fable round 1, H1):
+    FMP moves dates after a snapshot is taken (FIVE 06-02 -> 05-27), and a
+    snapshot taken before the move is still pre-print. An ``error:*`` row is
+    not an answer and supersedes nothing: a 429 says nothing about the
+    consensus. The caller must never fall back to a live, post-print fetch.
+    """
+    floor = _utc_stamp(_cycle_floor(conn, ticker, cutoff))
+    ceiling = _utc_stamp(cutoff)
+    newest = conn.execute(
+        "SELECT taken_at FROM consensus_snapshot "
+        "WHERE ticker = ? AND taken_at >= ? AND taken_at < ? "
+        "AND (fetch_status IN ('ok', 'empty') OR fetch_status LIKE 'partial:%') "
+        "ORDER BY taken_at DESC LIMIT 1",
+        (ticker, floor, ceiling),
+    ).fetchone()
+    if not newest:
+        return "missing", {}
+    rows = [dict(zip(_SNAPSHOT_COLS, r)) for r in conn.execute(
+        f"SELECT {', '.join(_SNAPSHOT_COLS)} FROM consensus_snapshot "
+        "WHERE ticker = ? AND taken_at = ? "
+        "AND (fetch_status IN ('ok', 'empty') OR fetch_status LIKE 'partial:%')",
+        (ticker, newest[0]),
+    )]
+    statuses = {r["fetch_status"] for r in rows}
+    if statuses == {"ok"}:
+        return "ok", {r["fiscal_period_end"]: r for r in rows}
+    if "empty" in statuses:
+        return "empty", {}
+    return sorted(s for s in statuses if s != "ok")[0], {}
+
+
 def latest_pre_release_snapshot(
     conn: sqlite3.Connection,
     ticker: str,
     fiscal_period_end: str,
     cutoff: datetime,
 ) -> Optional[dict]:
-    """Newest successful snapshot for this fiscal period taken before `cutoff`
-    and inside the release's own reporting cycle.
-
-    ``event_date`` is deliberately NOT in the predicate (Fable round 1, H1):
-    FMP moves dates after a snapshot is taken (FIVE 06-02 -> 05-27), and a
-    snapshot taken before the move is still pre-print. Matching on it would
-    discard exactly those.
-
-    Bounded BELOW by ``_cycle_floor`` (Codex round 2, 2026-09-22): without it a
-    quarter-old snapshot from before the PREVIOUS print is still "pre-cutoff"
-    and would be served as this release's consensus whenever this cycle's
-    captures were missed.
-
-    The NEWEST in-cycle answer defines the result (Codex round 3): the newest
-    batch whose status is ``ok``, ``empty`` or ``partial:*`` is the one read.
-    ``empty`` -> None ("no coverage"); ``partial:*`` -> None (figures not
-    currency-tagged); ``ok`` -> this period's row FROM THAT BATCH, or None when
-    the period is absent from it -- never served from an older batch. An
-    ``error:*`` / ``skipped:*`` row is not an answer and supersedes nothing: a
-    429 says nothing about the consensus.
-
-    Returns None when nothing qualifies -- the caller must render "no pre-print
-    consensus", never fall back to a live, post-print fetch.
-    """
+    """One period's row from ``pre_release_snapshot_set`` -- built on it, so
+    the two readers cannot disagree. None unless that set is ``ok`` and holds
+    the period; the caller renders "no pre-print consensus" and must never fall
+    back to a live, post-print fetch."""
     if not fiscal_period_end:
         return None
-    floor = _utc_stamp(_cycle_floor(conn, ticker, cutoff))
-    ceiling = _utc_stamp(cutoff)
-    newest = conn.execute(
-        "SELECT taken_at, MAX(fetch_status = 'ok') FROM consensus_snapshot "
-        "WHERE ticker = ? AND taken_at >= ? AND taken_at < ? "
-        "AND (fetch_status IN ('ok', 'empty') OR fetch_status LIKE 'partial:%') "
-        "GROUP BY taken_at ORDER BY taken_at DESC LIMIT 1",
-        (ticker, floor, ceiling),
-    ).fetchone()
-    if not newest or not newest[1]:
-        return None
-    row = conn.execute(
-        f"SELECT {', '.join(_SNAPSHOT_COLS)} FROM consensus_snapshot "
-        "WHERE ticker = ? AND fiscal_period_end = ? AND taken_at = ? "
-        "AND fetch_status = 'ok'",
-        (ticker, fiscal_period_end, newest[0]),
-    ).fetchone()
-    return dict(zip(_SNAPSHOT_COLS, row)) if row else None
+    status, periods = pre_release_snapshot_set(conn, ticker, cutoff)
+    return periods.get(fiscal_period_end) if status == "ok" else None
 
 
 # ---------------------------------------------------------------------------

@@ -1177,3 +1177,67 @@ def test_the_side_upload_fails_when_there_is_no_file():
     save = _step(steps, lambda b: "actions/upload-artifact" in b
                  and re.search(r"(?m)^\s+name: consensus-snapshots\s*$", b))
     assert re.search(r"(?m)^\s+if-no-files-found: error\s*$", steps[save][1])
+
+
+# ---------------------------------------------------------------------------
+# Codex round 5
+# ---------------------------------------------------------------------------
+
+def test_a_confirmed_same_quarter_move_blocks_beyond_45_days():
+    """Confirmed 2026Q3 row moved 09-01 -> 10-20 after 09-01, run 10-16: the
+    record is same-quarter provenance; a 45-day window must not drop it."""
+    from datetime import timedelta
+    from storage import upsert_event
+    today = _et_today()
+    old, new = (today - timedelta(days=50)).isoformat(), (today + timedelta(days=4)).isoformat()
+    conn = _db()
+    upsert_event(conn, "XYZ", old, "bmo", None, quarter="2026Q3", tier=1)
+    upsert_event(conn, "XYZ", new, "bmo", None, quarter="2026Q3", tier=1)
+    fetcher = RecordingFetcher()
+    summary = _mod().snapshot_annual_consensus(conn, today, fetcher)
+    assert fetcher.calls == [] and summary["skipped_open_prior"] == ["XYZ"]
+
+
+def test_an_unmergeable_side_file_fails_loud_even_on_an_empty_window(monkeypatch, tmp_path):
+    """Passes restore verification (table exists) but lacks v14 columns; with
+    an empty window the command used to return before the merge-failure raise,
+    and the workflow republished the unmergeable file as newest."""
+    f = tmp_path / SNAP_FILE
+    bad = sqlite3.connect(f)
+    bad.execute("CREATE TABLE consensus_snapshot (ticker TEXT, taken_at TEXT)")
+    bad.commit()
+    bad.close()
+    main, conn, _posts = _runner_env(monkeypatch, fetcher=RecordingFetcher())
+    conn.execute("DELETE FROM events")
+    conn.commit()
+    monkeypatch.setenv("CONSENSUS_SNAPSHOT_FILE", str(f))
+    with pytest.raises(RuntimeError, match="merge"):
+        main.run_snapshot_consensus()
+    assert not f.exists(), "an unmergeable file must not be re-uploaded as newest"
+
+
+def test_pre_release_snapshot_set_three_outcomes():
+    """Plan v4 H2: Phase B must tell FMP-`empty` ("no Street consensus", no
+    alert) from no snapshot at all (a pipeline gap, alert) -- and run the FY
+    match over the whole period SET of the newest batch."""
+    mod = _mod()
+    conn = _db()
+    cutoff = mod.pre_release_cutoff("2026-10-14", "bmo", None, 1)
+
+    assert mod.pre_release_snapshot_set(conn, "XYZ", cutoff) == ("missing", {})
+
+    _snap(conn, "XYZ", "2026-12-31", "2026-10-09T15:00:00Z", "2026-10-14", 1.00)
+    _snap(conn, "XYZ", "2027-12-31", "2026-10-09T15:00:00Z", "2026-10-14", 2.00)
+    status, periods = mod.pre_release_snapshot_set(conn, "XYZ", cutoff)
+    assert status == "ok" and set(periods) == {"2026-12-31", "2027-12-31"}
+    assert periods["2027-12-31"]["eps_avg"] == 2.00
+
+    _snap(conn, "XYZ", "", "2026-10-12T15:00:00Z", "2026-10-14", None, status="empty")
+    assert mod.pre_release_snapshot_set(conn, "XYZ", cutoff) == ("empty", {})
+    # The per-period reader is built on the set reader, so they cannot disagree.
+    assert mod.latest_pre_release_snapshot(conn, "XYZ", "2027-12-31", cutoff) is None
+
+    _snap(conn, "XYZ", "2026-12-31", "2026-10-13T15:00:00Z", "2026-10-14", 1.1,
+          status="partial:currency_error:403")
+    assert mod.pre_release_snapshot_set(conn, "XYZ", cutoff) == (
+        "partial:currency_error:403", {})
