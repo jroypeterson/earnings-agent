@@ -621,3 +621,57 @@ def test_snapshot_alert_curl_is_bounded_and_the_step_has_a_ceiling():
     step = wf[wf.index("id: snapshot_consensus"):wf.index("Email backup on consensus snapshot failure")]
     assert "timeout-minutes: 20" in step
     assert "--max-time" in step and "--connect-timeout" in step
+
+
+# ---------------------------------------------------------------------------
+# Codex round 2 (2026-09-22), finding 1: a read is bound to ITS reporting cycle
+# ---------------------------------------------------------------------------
+
+def test_a_previous_cycles_snapshot_is_not_served_for_this_event():
+    """XYZ had an ok FY2026 snapshot before its Q1 print; the Q2 window was
+    missed. The Q1 row is pre-cutoff for Q2 too -- but it is a QUARTER old,
+    and serving it as Q2's pre-print consensus is the stale-as-current case."""
+    mod = _mod()
+    conn = _db()
+    _event(conn, "XYZ", "2026-04-22", reported=1)            # Q1, printed
+    _snap(conn, "XYZ", "2026-12-31", "2026-04-20T15:00:00Z", "2026-04-22", 1.00)
+    cutoff = mod.pre_release_cutoff("2026-07-22", "bmo", None, 1)
+    assert mod.latest_pre_release_snapshot(conn, "XYZ", "2026-12-31", cutoff) is None
+
+
+def test_a_snapshot_taken_before_the_previous_print_is_out_of_cycle():
+    """Even inside the age bound: a snapshot taken before the ticker's PREVIOUS
+    reported release belongs to that release's cycle, not this one."""
+    mod = _mod()
+    conn = _db()
+    _event(conn, "XYZ", "2026-09-01", reported=1)            # previous print
+    _snap(conn, "XYZ", "2026-12-31", "2026-08-30T15:00:00Z", "2026-09-01", 1.00)
+    cutoff = mod.pre_release_cutoff("2026-09-17", "bmo", None, 1)
+    assert mod.latest_pre_release_snapshot(conn, "XYZ", "2026-12-31", cutoff) is None
+    # A snapshot taken AFTER that print, before this cutoff, is this cycle's.
+    _snap(conn, "XYZ", "2026-12-31", "2026-09-15T15:00:00Z", "2026-09-17", 1.20)
+    got = mod.latest_pre_release_snapshot(conn, "XYZ", "2026-12-31", cutoff)
+    assert got["eps_avg"] == 1.20
+
+
+def test_a_newer_empty_attempt_supersedes_an_older_ok_in_the_same_cycle():
+    """The newest usable answer for this event is "FMP has no coverage": the
+    older figure must not be served over it."""
+    mod = _mod()
+    conn = _db()
+    _snap(conn, "XYZ", "2026-12-31", "2026-09-14T15:00:00Z", "2026-09-17", 1.00)
+    _snap(conn, "XYZ", "", "2026-09-16T15:00:00Z", "2026-09-17", None, status="empty")
+    cutoff = mod.pre_release_cutoff("2026-09-17", "bmo", None, 1)
+    assert mod.latest_pre_release_snapshot(conn, "XYZ", "2026-12-31", cutoff) is None
+
+
+def test_a_newer_error_attempt_does_not_discard_an_older_ok_in_the_same_cycle():
+    """A 429 says nothing about the consensus. An in-cycle, pre-cutoff figure
+    from two days earlier is still the pre-print figure (adjudicated: the
+    finding asked for ANY non-ok to mean none; an error does not qualify)."""
+    mod = _mod()
+    conn = _db()
+    _snap(conn, "XYZ", "2026-12-31", "2026-09-14T15:00:00Z", "2026-09-17", 1.00)
+    _snap(conn, "XYZ", "", "2026-09-16T15:00:00Z", "2026-09-17", None, status="error:429")
+    cutoff = mod.pre_release_cutoff("2026-09-17", "bmo", None, 1)
+    assert mod.latest_pre_release_snapshot(conn, "XYZ", "2026-12-31", cutoff)["eps_avg"] == 1.00

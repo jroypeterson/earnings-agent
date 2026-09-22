@@ -13,7 +13,8 @@ Three public pieces:
 - ``snapshot_annual_consensus(conn, today, fetcher)`` -- the write side.
 - ``pre_release_cutoff(...)`` -- the instant a snapshot stops being pre-print.
 - ``latest_pre_release_snapshot(conn, ticker, fiscal_period_end, cutoff)`` --
-  the read side, keyed on the FISCAL PERIOD; ``event_date`` is provenance only.
+  the read side, keyed on the FISCAL PERIOD; ``event_date`` is provenance only,
+  and bounded to the release's own reporting cycle (Codex round 2).
 
 No rendering. Nothing here posts to Slack or changes a results card.
 """
@@ -60,6 +61,13 @@ _CURRENCY_KV = "fmp_reported_currency:"
 # record, and it can never be returned as a figure: the read side filters to
 # fetch_status = 'ok' and a real fiscal_period_end.
 STATUS_ROW_PERIOD = ""
+
+# Codex round 2 (2026-09-22): a read is bounded BELOW as well as above. The
+# write window is at most 14 days ahead of an event, so an in-cycle capture is
+# days old at the cutoff; one older than this is from an earlier cycle (or the
+# captures stopped) and is not "the consensus before THIS print". Consecutive
+# quarterly prints are ~91 days apart, so 30 cannot reach the previous cycle.
+MAX_SNAPSHOT_AGE_DAYS = 30
 
 _TS_FMT = "%Y-%m-%dT%H:%M:%SZ"
 
@@ -126,31 +134,73 @@ _SNAPSHOT_COLS = (
 )
 
 
+def _cycle_floor(conn: sqlite3.Connection, ticker: str, cutoff: datetime) -> datetime:
+    """The earliest instant a snapshot can belong to the release at `cutoff`.
+
+    The later of (a) ``cutoff - MAX_SNAPSHOT_AGE_DAYS`` and (b) 00:00 ET on the
+    day AFTER the ticker's most recent REPORTED event dated before this one --
+    anything taken on or before a previous print day is that print's cycle.
+    """
+    floor = cutoff - timedelta(days=MAX_SNAPSHOT_AGE_DAYS)
+    event_day = cutoff.astimezone(ET).date()
+    row = conn.execute(
+        "SELECT MAX(event_date) FROM events WHERE ticker = ? AND reported = 1 "
+        "AND event_date < ?",
+        (ticker, event_day.isoformat()),
+    ).fetchone()
+    if row and row[0]:
+        prev_end = datetime.combine(
+            date.fromisoformat(row[0]) + timedelta(days=1), dtime(0, 0), tzinfo=ET)
+        floor = max(floor, prev_end.astimezone(timezone.utc))
+    return floor
+
+
 def latest_pre_release_snapshot(
     conn: sqlite3.Connection,
     ticker: str,
     fiscal_period_end: str,
     cutoff: datetime,
 ) -> Optional[dict]:
-    """Newest successful snapshot for this fiscal period taken before `cutoff`.
+    """Newest successful snapshot for this fiscal period taken before `cutoff`
+    and inside the release's own reporting cycle.
 
     ``event_date`` is deliberately NOT in the predicate (Fable round 1, H1):
     FMP moves dates after a snapshot is taken (FIVE 06-02 -> 05-27), and a
     snapshot taken before the move is still pre-print. Matching on it would
     discard exactly those.
 
+    Bounded BELOW by ``_cycle_floor`` (Codex round 2, 2026-09-22): without it a
+    quarter-old snapshot from before the PREVIOUS print is still "pre-cutoff"
+    and would be served as this release's consensus whenever this cycle's
+    captures were missed.
+
+    A newer in-cycle ``empty`` attempt supersedes an older ``ok``: the newest
+    answer FMP gave for this release is "no coverage". A newer ``error:*`` does
+    NOT -- a 429 says nothing about the consensus, and the older in-cycle
+    figure is still pre-print.
+
     Returns None when nothing qualifies -- the caller must render "no pre-print
     consensus", never fall back to a live, post-print fetch.
     """
     if not fiscal_period_end:
         return None
+    floor = _utc_stamp(_cycle_floor(conn, ticker, cutoff))
+    ceiling = _utc_stamp(cutoff)
     row = conn.execute(
         f"SELECT {', '.join(_SNAPSHOT_COLS)} FROM consensus_snapshot "
         "WHERE ticker = ? AND fiscal_period_end = ? AND fetch_status = 'ok' "
-        "AND taken_at < ? ORDER BY taken_at DESC LIMIT 1",
-        (ticker, fiscal_period_end, _utc_stamp(cutoff)),
+        "AND taken_at >= ? AND taken_at < ? ORDER BY taken_at DESC LIMIT 1",
+        (ticker, fiscal_period_end, floor, ceiling),
     ).fetchone()
-    return dict(zip(_SNAPSHOT_COLS, row)) if row else None
+    if not row:
+        return None
+    got = dict(zip(_SNAPSHOT_COLS, row))
+    superseded = conn.execute(
+        "SELECT 1 FROM consensus_snapshot WHERE ticker = ? "
+        "AND fetch_status = 'empty' AND taken_at > ? AND taken_at < ? LIMIT 1",
+        (ticker, got["taken_at"], ceiling),
+    ).fetchone()
+    return None if superseded else got
 
 
 # ---------------------------------------------------------------------------
