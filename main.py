@@ -2211,13 +2211,30 @@ def run_snapshot_consensus(dry_run: bool = False) -> dict:
         # Export even when the step is failing (all-failed, breaker, no key):
         # the rows already written must reach the side artifact. Never after a
         # failed merge -- that export would drop the rows only the old file has.
+        export_failed = None
         if side_file and not dry_run and merge_failed is None:
             try:
                 n = export_snapshot_file(conn, side_file)
                 logger.info("Consensus snapshot: exported %d row(s) to %s", n, side_file)
-            except Exception as exc:  # noqa: BLE001 -- the upload step fails loudly
+            except Exception as exc:  # noqa: BLE001 -- re-raised below, loudly
+                export_failed = exc
                 logger.error("Consensus snapshot: export to %s FAILED: %s", side_file, exc)
+                # Codex round 4: the file on disk is now the RESTORED old copy;
+                # left in place the upload would publish it as the newest
+                # artifact. Remove it so the upload (if-no-files-found: error)
+                # fails too, and nothing stale is published.
+                try:
+                    os.remove(side_file)
+                except FileNotFoundError:
+                    pass
         conn.close()
+        if export_failed is not None:
+            # Non-zero for the step, so its Slack/email alerts fire. (Raised
+            # from `finally`, so an in-flight error is chained as __context__
+            # and the traceback still shows both.)
+            raise RuntimeError(
+                f"Consensus snapshot: export to {side_file} failed "
+                f"({export_failed}); side artifact NOT refreshed")
 
 
 def run_consensus_preview(

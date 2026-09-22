@@ -1125,3 +1125,55 @@ def test_an_unconfirmed_rolling_date_is_still_snapshotted():
     fetcher = RecordingFetcher()
     _mod().snapshot_annual_consensus(conn, today, fetcher)
     assert fetcher.calls == ["XYZ"]
+
+
+# ---------------------------------------------------------------------------
+# Codex round 4
+# ---------------------------------------------------------------------------
+
+def test_a_confirmed_move_survives_25_later_unconfirmed_rolls():
+    """The move record list is capped. Unconfirmed rolls are ignored by the
+    guard, so they must not be able to evict the confirmed move it needs."""
+    from datetime import timedelta
+    from storage import upsert_event
+    today = _et_today()
+    d = lambda n: (today + timedelta(days=n)).isoformat()  # noqa: E731
+    conn = _db()
+    upsert_event(conn, "XYZ", d(-1), "bmo", None, quarter="2026Q3", tier=1)  # confirmed
+    upsert_event(conn, "XYZ", d(1), "", None, quarter="2026Q3", tier=1)      # moved later
+    for _ in range(25):                                   # 25 unconfirmed rolls
+        upsert_event(conn, "XYZ", d(2), "", None, quarter="2026Q3", tier=1)
+        upsert_event(conn, "XYZ", d(1), "", None, quarter="2026Q3", tier=1)
+    upsert_event(conn, "XYZ", d(2), "", None, quarter="2026Q3", tier=1)
+    fetcher = RecordingFetcher()
+    _mod().snapshot_annual_consensus(conn, today, fetcher)
+    assert fetcher.calls == []
+
+
+def test_an_export_failure_fails_the_step_and_leaves_no_stale_file(monkeypatch, tmp_path):
+    """A suppressed export left the RESTORED old file on disk; the upload then
+    published it as the newest artifact and nothing alerted."""
+    import consensus_snapshot
+    mod = _mod()
+    f = tmp_path / SNAP_FILE
+    old = _db()
+    _snap(old, "OLD", "2026-12-31", "2026-09-01T15:00:00Z", "2026-09-03", 3.0)
+    mod.export_snapshot_file(old, f)                       # the restored artifact
+
+    main, _conn, _posts = _runner_env(monkeypatch, fetcher=RecordingFetcher())
+    monkeypatch.setenv("CONSENSUS_SNAPSHOT_FILE", str(f))
+
+    def boom(*a, **k):
+        raise OSError("disk full")
+    monkeypatch.setattr(consensus_snapshot, "export_snapshot_file", boom)
+    with pytest.raises(RuntimeError, match="export"):
+        main.run_snapshot_consensus()
+    assert not f.exists(), "a stale side file would be uploaded as the newest"
+
+
+def test_the_side_upload_fails_when_there_is_no_file():
+    import re
+    steps = _steps()
+    save = _step(steps, lambda b: "actions/upload-artifact" in b
+                 and re.search(r"(?m)^\s+name: consensus-snapshots\s*$", b))
+    assert re.search(r"(?m)^\s+if-no-files-found: error\s*$", steps[save][1])
