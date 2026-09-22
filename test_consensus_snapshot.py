@@ -762,3 +762,87 @@ def test_runner_fails_when_every_ticker_gets_a_quota_shaped_200(monkeypatch):
     main, _conn, _posts = _runner_env(monkeypatch, fetcher=fetcher)
     with pytest.raises(RuntimeError, match="systemic"):
         main.run_snapshot_consensus()
+
+
+# ---------------------------------------------------------------------------
+# Codex round 2, finding 4: a currency that could not be FETCHED is not "ok"
+# ---------------------------------------------------------------------------
+
+_EST_BODY = [{"date": "2026-12-31", "epsAvg": 2.0, "revenueAvg": 1e9,
+              "numAnalystsEps": 5, "numAnalystsRevenue": 5}]
+
+
+def _routed(currency_behaviour):
+    """A pacer stand-in: estimates succeed; the currency call does whatever
+    `currency_behaviour` says (an exception to raise, or a body to return)."""
+    def get_json(url, *a, **k):
+        if "analyst-estimates" in url:
+            return _EST_BODY
+        assert "income-statement" in url, url
+        if isinstance(currency_behaviour, Exception):
+            raise currency_behaviour
+        return currency_behaviour
+    return get_json
+
+
+@pytest.mark.parametrize("failure", [
+    _http_error(403), TimeoutError("read timed out"), {"Error Message": "Limit Reach"},
+])
+def test_a_failed_currency_fetch_never_yields_an_ok_snapshot(failure):
+    mod = _mod()
+    conn = _db()
+    _event(conn, "XYZ", "2026-09-18")
+    fetch = mod.make_fmp_fetcher(conn, "KEY", TODAY, pacer=_routed(failure))
+    summary = mod.snapshot_annual_consensus(conn, TODAY, fetch, now=NOW)
+    statuses = {r[0] for r in conn.execute(
+        "SELECT fetch_status FROM consensus_snapshot WHERE ticker = 'XYZ'")}
+    assert "ok" not in statuses and len(statuses) == 1
+    assert statuses.pop().startswith("partial:currency")
+    # Seen by the error counter and the status post ...
+    assert summary["ok"] == 0 and summary["errors"] == 1
+    assert summary["failed"][0][0] == "XYZ"
+    # ... and never served as a pre-print figure.
+    cutoff = mod.pre_release_cutoff("2026-09-18", "bmo", None, 1)
+    assert mod.latest_pre_release_snapshot(conn, "XYZ", "2026-12-31", cutoff) is None
+    # The figures themselves are kept (a pre-print figure is unrecoverable).
+    assert conn.execute(
+        "SELECT eps_avg, currency FROM consensus_snapshot WHERE ticker='XYZ'"
+    ).fetchone() == (2.0, None)
+
+
+@pytest.mark.parametrize("body", [[], [{"symbol": "XYZ"}]])
+def test_a_legitimately_absent_currency_is_ok_with_null(body):
+    """FMP answered and has no reportedCurrency: a fact, not a failure. It is
+    stored ok with currency NULL (Phase B abstains on None), distinguishable
+    from the partial status above."""
+    mod = _mod()
+    conn = _db()
+    _event(conn, "XYZ", "2026-09-18")
+    fetch = mod.make_fmp_fetcher(conn, "KEY", TODAY, pacer=_routed(body))
+    summary = mod.snapshot_annual_consensus(conn, TODAY, fetch, now=NOW)
+    assert conn.execute(
+        "SELECT fetch_status, currency FROM consensus_snapshot WHERE ticker='XYZ'"
+    ).fetchall() == [("ok", None)]
+    assert summary["ok"] == 1 and summary["errors"] == 0
+
+
+def test_a_fetched_currency_is_stored():
+    mod = _mod()
+    conn = _db()
+    _event(conn, "XYZ", "2026-09-18")
+    fetch = mod.make_fmp_fetcher(
+        conn, "KEY", TODAY, pacer=_routed([{"reportedCurrency": "DKK"}]))
+    mod.snapshot_annual_consensus(conn, TODAY, fetch, now=NOW)
+    assert conn.execute(
+        "SELECT fetch_status, currency FROM consensus_snapshot WHERE ticker='XYZ'"
+    ).fetchall() == [("ok", "DKK")]
+
+
+def test_runner_fails_when_every_currency_fetch_failed(monkeypatch):
+    fetcher = RecordingFetcher({
+        "AAA": ([_consensus("AAA", "2026-12-31", cur=None)], "partial:currency_error:403"),
+        "BBB": ([_consensus("BBB", "2026-12-31", cur=None)], "partial:currency_error:403"),
+    })
+    main, _conn, _posts = _runner_env(monkeypatch, fetcher=fetcher)
+    with pytest.raises(RuntimeError, match="systemic"):
+        main.run_snapshot_consensus()

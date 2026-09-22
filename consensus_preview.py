@@ -779,20 +779,58 @@ def fetch_fmp_reported_currency(
 
     `get_json` is injectable so the consensus snapshot can route this call
     through its 4/s pacer; the default is looked up at call time.
+
+    ⚠ Collapses "could not fetch" and "FMP has none" into None. A caller that
+    must tell them apart uses `fetch_fmp_reported_currency_checked`.
     """
+    cur, _status = fetch_fmp_reported_currency_checked(
+        ticker, api_key, get_json=get_json)
+    return cur
+
+
+def fetch_fmp_reported_currency_checked(
+    ticker: str, api_key: str, *, get_json=None,
+) -> tuple[Optional[str], str]:
+    """`fetch_fmp_reported_currency`, plus WHY (Codex round 2, 2026-09-22).
+
+    Returns `(currency, status)`, status one of:
+      - ``ok``            -- FMP answered with a reportedCurrency
+      - ``absent``        -- FMP answered (a list) and has none: a fact
+      - ``error:<code>``  -- HTTP status, ``timeout``, ``network``, ``shape``
+        (a non-list body such as ``{"Error Message": ...}``) or the exception
+        name. The currency COULD NOT BE FETCHED, which is not "absent".
+
+    Never raises.
+    """
+    import socket
+    import urllib.error
+
     fetch = get_json if get_json is not None else _fmp_get_json
     try:
         rows = fetch(
             f"https://financialmodelingprep.com/stable/income-statement"
             f"?symbol={ticker}&limit=1&apikey={api_key}"
         )
+    except urllib.error.HTTPError as exc:
+        logger.warning("FMP reportedCurrency failed for %s: HTTP %s", ticker, exc.code)
+        return None, f"error:{exc.code}"
+    except (TimeoutError, socket.timeout) as exc:
+        logger.warning("FMP reportedCurrency timed out for %s: %s", ticker, exc)
+        return None, "error:timeout"
+    except urllib.error.URLError as exc:
+        logger.warning("FMP reportedCurrency failed for %s: %s", ticker, exc)
+        return None, "error:network"
     except Exception as exc:  # noqa: BLE001 — module convention: never raise
         logger.warning("FMP reportedCurrency failed for %s: %s", ticker, exc)
-        return None
-    if not isinstance(rows, list) or not rows:
-        return None
+        return None, f"error:{type(exc).__name__}"
+    if not isinstance(rows, list):
+        return None, "error:shape"
+    if not rows:
+        return None, "absent"
+    if not isinstance(rows[0], dict) or "Error Message" in rows[0]:
+        return None, "error:shape"
     cur = rows[0].get("reportedCurrency")
-    return cur or None
+    return (cur, "ok") if cur else (None, "absent")
 
 
 def fetch_fmp_annual_estimates(

@@ -411,17 +411,26 @@ def snapshot_annual_consensus(
                                   None, None, None, None, None, "skipped:post_cutoff"))
             conn.commit()
             continue
-        consecutive_errors = consecutive_errors + 1 if status.startswith("error:") else 0
+        if status.startswith("partial:") and not rows:
+            status = "error:" + status[len("partial:"):]
+        failed = status.startswith(("error:", "partial:"))
+        consecutive_errors = consecutive_errors + 1 if failed else 0
 
-        if status == "ok":
+        if status == "ok" or status.startswith("partial:"):
+            # A `partial:*` row keeps its figures but is NOT `ok`: the read
+            # side filters to ok, and the run counts it as an error.
             conn.executemany(insert, [
                 (ticker, r.fiscal_period_end, taken_at, event_date,
                  r.revenue_avg, r.eps_avg, r.revenue_analysts, r.eps_analysts,
-                 r.currency, "ok")
+                 r.currency, status)
                 for r in rows
             ])
-            summary["ok"] += 1
             summary["rows_written"] += len(rows)
+            if status == "ok":
+                summary["ok"] += 1
+            else:
+                summary["errors"] += 1
+                summary["failed"].append((ticker, status))
         else:
             conn.execute(insert, (ticker, STATUS_ROW_PERIOD, taken_at, event_date,
                                   None, None, None, None, None, status))
@@ -486,11 +495,16 @@ class FmpPacer:
                 self._sleep(delay)
 
 
-def _cached_currency(conn, ticker, api_key, get_json, today: date) -> Optional[str]:
-    """Reported currency, cached 30 days in kv_store. A failed or absent
-    lookup is NOT cached (it is retried next run) and yields None, which the
-    square treats as abstain -- never as USD."""
-    from consensus_preview import fetch_fmp_reported_currency
+def _cached_currency(conn, ticker, api_key, get_json, today: date):
+    """``(currency, status)`` -- reported currency, cached 30 days in kv_store.
+
+    ``status`` is ``ok`` / ``absent`` / ``error:<code>`` (see
+    ``fetch_fmp_reported_currency_checked``). A failed or absent lookup is NOT
+    cached (it is retried next run) and yields None, which the square treats as
+    abstain -- never as USD. A FAILED lookup must also never let the snapshot
+    pass as ``ok`` (Codex round 2); the caller turns it into a partial status.
+    """
+    from consensus_preview import fetch_fmp_reported_currency_checked
 
     key = _CURRENCY_KV + ticker
     raw = kv_get(conn, key)
@@ -499,13 +513,14 @@ def _cached_currency(conn, ticker, api_key, get_json, today: date) -> Optional[s
             rec = json.loads(raw)
             fetched = date.fromisoformat(rec["fetched"])
             if (today - fetched).days < CURRENCY_CACHE_DAYS and rec.get("currency"):
-                return rec["currency"]
+                return rec["currency"], "ok"
         except (ValueError, KeyError, TypeError):
             pass
-    cur = fetch_fmp_reported_currency(ticker, api_key, get_json=get_json)
+    cur, status = fetch_fmp_reported_currency_checked(
+        ticker, api_key, get_json=get_json)
     if cur:
         kv_set(conn, key, json.dumps({"currency": cur, "fetched": today.isoformat()}))
-    return cur
+    return cur, status
 
 
 def make_fmp_fetcher(conn: sqlite3.Connection, api_key: str, today: date,
@@ -513,7 +528,13 @@ def make_fmp_fetcher(conn: sqlite3.Connection, api_key: str, today: date,
     """The production ``fetcher`` for ``snapshot_annual_consensus``: FMP annual
     estimates through the 4/s pacer, joined to the cached reported currency.
     The currency is only looked up after a successful estimates call, so a
-    429'd or uncovered ticker costs one request, not two."""
+    429'd or uncovered ticker costs one request, not two.
+
+    A currency that could not be FETCHED returns the rows with status
+    ``partial:currency_<error>`` (Codex round 2): the figures are kept, since a
+    pre-print figure cannot be recaptured, but the row is not ``ok`` -- the
+    read side never serves it and the run counts it as an error. A currency
+    FMP legitimately does not have stays ``ok`` with currency None."""
     from consensus_preview import fetch_fmp_annual_estimates_checked
     import consensus_preview as cp
 
@@ -524,9 +545,11 @@ def make_fmp_fetcher(conn: sqlite3.Connection, api_key: str, today: date,
             ticker, api_key, get_json=pacer)
         if status != "ok":
             return rows, status
-        cur = _cached_currency(conn, ticker, api_key, pacer, today)
+        cur, cur_status = _cached_currency(conn, ticker, api_key, pacer, today)
         for r in rows:
             r.currency = cur
+        if cur_status.startswith("error:"):
+            return rows, "partial:currency_" + cur_status
         return rows, status
 
     return fetch
