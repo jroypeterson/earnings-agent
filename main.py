@@ -2202,10 +2202,6 @@ def run_snapshot_consensus(dry_run: bool = False) -> dict:
                 f"fetch(es) failed ({summary['failed'][:5]}) -- systemic, not a "
                 f"flaky ticker"
             )
-        if merge_failed is not None:
-            raise RuntimeError(
-                f"Consensus snapshot: merge of {side_file} failed "
-                f"({merge_failed}); side artifact not refreshed")
         return summary
     finally:
         # Export even when the step is failing (all-failed, breaker, no key):
@@ -2228,6 +2224,19 @@ def run_snapshot_consensus(dry_run: bool = False) -> dict:
                 except FileNotFoundError:
                     pass
         conn.close()
+        # Codex round 5: checked HERE, not on the normal path only -- every
+        # exit of this command (dry-run return, empty-window return, missing
+        # key sys.exit, breaker / all-failed raise, normal return) passes
+        # through `finally`. An unmergeable side file is removed so the upload
+        # (if-no-files-found: error) cannot republish it as the newest.
+        if merge_failed is not None:
+            try:
+                os.remove(side_file)
+            except FileNotFoundError:
+                pass
+            raise RuntimeError(
+                f"Consensus snapshot: merge of {side_file} failed "
+                f"({merge_failed}); side artifact NOT refreshed")
         if export_failed is not None:
             # Non-zero for the step, so its Slack/email alerts fire. (Raised
             # from `finally`, so an in-flight error is chained as __context__
