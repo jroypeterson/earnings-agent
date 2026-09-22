@@ -30,7 +30,7 @@ from datetime import date, datetime, time as dtime, timedelta, timezone
 from typing import Callable, Optional
 from zoneinfo import ZoneInfo
 
-from storage import OPEN_EVENT_SQL, kv_get, kv_set
+from storage import EVENT_MOVED_LATER_KV, OPEN_EVENT_SQL, kv_get, kv_set
 
 logger = logging.getLogger("earnings_agent")
 
@@ -264,6 +264,26 @@ def _select_window(conn: sqlite3.Connection, today: date, now: datetime):
     ).fetchall():
         if now >= pre_release_cutoff(d, hour, hour_yf, confirmed):
             prior.setdefault(ticker, []).append(d)
+    # Codex round 3: an unlocked same-quarter row moved LATER is DELETED by
+    # upsert_event, taking the evidence above with it; storage records each
+    # such move. A move made on/after the old date's 00:00 ET (hour unknown
+    # once the row is gone, so the earliest cutoff is assumed) is a possible
+    # print on the old date -- same rule, fail closed. A move made BEFORE the
+    # old date arrived is an ordinary reschedule and blocks nothing.
+    for ticker, _d, _c in window:
+        raw = kv_get(conn, EVENT_MOVED_LATER_KV + ticker)
+        try:
+            moves = json.loads(raw) if raw else []
+        except (ValueError, TypeError):
+            moves = []
+        for m in moves if isinstance(moves, list) else []:
+            try:
+                old_start = _utc_stamp(datetime.combine(
+                    date.fromisoformat(m["from"]), dtime(0, 0), tzinfo=ET))
+            except (KeyError, TypeError, ValueError):
+                continue
+            if str(m.get("at", "")) >= old_start and _utc_stamp(now) >= old_start:
+                prior.setdefault(ticker, []).append(m["from"])
     kept, blocked = [], []
     for ticker, event_date, cutoff in window:
         earliest = (date.fromisoformat(event_date)

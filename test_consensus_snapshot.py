@@ -923,3 +923,45 @@ def test_a_newer_partial_batch_is_not_backfilled_from_an_older_ok():
           status="partial:currency_error:403")
     cutoff = mod.pre_release_cutoff("2026-10-14", "bmo", None, 1)
     assert mod.latest_pre_release_snapshot(conn, "XYZ", "2026-12-31", cutoff) is None
+
+
+# ---------------------------------------------------------------------------
+# Codex round 3, C: an ordinary date move must not erase the guard's evidence
+# ---------------------------------------------------------------------------
+
+def _et_today():
+    from zoneinfo import ZoneInfo
+    return datetime.now(timezone.utc).astimezone(ZoneInfo("America/New_York")).date()
+
+
+def test_a_vendor_move_later_after_the_old_date_blocks_the_snapshot():
+    """Unlocked same-quarter row at D-1 moved by the vendor to D+2 AFTER D-1
+    arrived: upsert_event DELETES the D-1 row, so the open-prior-event guard
+    saw nothing and fetched possibly post-print consensus as ok."""
+    from datetime import timedelta
+    from storage import upsert_event
+    today = _et_today()
+    old, new = (today - timedelta(days=1)).isoformat(), (today + timedelta(days=2)).isoformat()
+    conn = _db()
+    upsert_event(conn, "XYZ", old, "bmo", None, quarter="2026Q3", tier=1)
+    upsert_event(conn, "XYZ", new, "bmo", None, quarter="2026Q3", tier=1)
+    assert [r[0] for r in conn.execute(
+        "SELECT event_date FROM events WHERE ticker = 'XYZ'")] == [new]  # evidence gone
+    fetcher = RecordingFetcher()
+    summary = _mod().snapshot_annual_consensus(conn, today, fetcher)
+    assert fetcher.calls == []
+    assert summary["skipped_open_prior"] == ["XYZ"]
+
+
+def test_a_move_made_before_the_old_date_arrived_does_not_block():
+    """A reschedule announced ahead of the old date is not a possible print."""
+    from datetime import timedelta
+    from storage import upsert_event
+    today = _et_today()
+    old, new = (today + timedelta(days=1)).isoformat(), (today + timedelta(days=3)).isoformat()
+    conn = _db()
+    upsert_event(conn, "XYZ", old, "bmo", None, quarter="2026Q3", tier=1)
+    upsert_event(conn, "XYZ", new, "bmo", None, quarter="2026Q3", tier=1)
+    fetcher = RecordingFetcher()
+    _mod().snapshot_annual_consensus(conn, today, fetcher)
+    assert fetcher.calls == ["XYZ"]

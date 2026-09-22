@@ -863,6 +863,7 @@ def upsert_event(
             # provider date — that would silently move the locked task in
             # TickTick on the next reconcile). Worst case: a harmless duplicate,
             # same as the reported-row guard.
+            _record_moves_later(conn, ticker, quarter, event_date)
             conn.execute(
                 "DELETE FROM events WHERE ticker = ? AND quarter = ? "
                 f"AND event_date != ? AND {OPEN_EVENT_SQL} AND date_locked = 0",
@@ -892,6 +893,47 @@ def upsert_event(
         )
 
     conn.commit()
+
+
+# The DELETE above erases the only trace that an event was ever dated earlier.
+# The consensus snapshot's same-cycle guard (board #298, Codex round 3) needs
+# that trace: a vendor moving an unlocked row LATER after its old date arrived
+# means the company may already have printed, and a snapshot for the new date
+# would store post-print consensus as pre-print. Recorded in kv_store (no
+# schema change) under this prefix as a JSON list of {"from", "to", "at"}.
+EVENT_MOVED_LATER_KV = "event_moved_later:"
+_MOVES_KEPT = 20
+
+
+def _record_moves_later(conn, ticker: str, quarter: str, event_date: str) -> None:
+    """Append every same-quarter open, unlocked row about to be deleted in
+    favour of a LATER ``event_date``. No commit: rides upsert_event's."""
+    import json
+    from datetime import datetime, timezone
+
+    olds = [r[0] for r in conn.execute(
+        "SELECT event_date FROM events WHERE ticker = ? AND quarter = ? "
+        f"AND event_date < ? AND {OPEN_EVENT_SQL} AND date_locked = 0",
+        (ticker, quarter, event_date),
+    )]
+    if not olds:
+        return
+    key = EVENT_MOVED_LATER_KV + ticker
+    row = conn.execute("SELECT value FROM kv_store WHERE key = ?", (key,)).fetchone()
+    try:
+        moves = json.loads(row[0]) if row else []
+        if not isinstance(moves, list):
+            moves = []
+    except (ValueError, TypeError):
+        moves = []
+    at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    moves.extend({"from": d, "to": event_date, "at": at} for d in olds)
+    conn.execute(
+        "INSERT INTO kv_store (key, value, updated_at) VALUES (?, ?, datetime('now')) "
+        "ON CONFLICT(key) DO UPDATE SET value = excluded.value, "
+        "updated_at = excluded.updated_at",
+        (key, json.dumps(moves[-_MOVES_KEPT:])),
+    )
 
 
 # ---------------------------------------------------------------------------
