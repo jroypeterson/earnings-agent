@@ -270,6 +270,11 @@ def _select_window(conn: sqlite3.Connection, today: date, now: datetime):
     # once the row is gone, so the earliest cutoff is assumed) is a possible
     # print on the old date -- same rule, fail closed. A move made BEFORE the
     # old date arrived is an ordinary reschedule and blocks nothing.
+    # JP 2026-09-22: only a CONFIRMED moved-from date blocks (a locked row is
+    # never deleted, so the surviving-row rule above covers it). Unconfirmed
+    # estimates the vendor rolls forward daily are the no-print case, and
+    # blocking them skipped 180 of 1,089 companies (Jul-Sep 2026).
+    # RESIDUAL: a print on an UNCONFIRMED date the vendor then moves later is not caught.
     for ticker, _d, _c in window:
         raw = kv_get(conn, EVENT_MOVED_LATER_KV + ticker)
         try:
@@ -281,6 +286,8 @@ def _select_window(conn: sqlite3.Connection, today: date, now: datetime):
                 old_start = _utc_stamp(datetime.combine(
                     date.fromisoformat(m["from"]), dtime(0, 0), tzinfo=ET))
             except (KeyError, TypeError, ValueError):
+                continue
+            if not m.get("confirmed", True):  # absent flag -> fail closed
                 continue
             if str(m.get("at", "")) >= old_start and _utc_stamp(now) >= old_start:
                 prior.setdefault(ticker, []).append(m["from"])

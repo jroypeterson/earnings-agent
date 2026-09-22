@@ -900,7 +900,8 @@ def upsert_event(
 # that trace: a vendor moving an unlocked row LATER after its old date arrived
 # means the company may already have printed, and a snapshot for the new date
 # would store post-print consensus as pre-print. Recorded in kv_store (no
-# schema change) under this prefix as a JSON list of {"from", "to", "at"}.
+# schema change) under this prefix as a JSON list of
+# {"from", "to", "at", "confirmed"} -- `confirmed` is the OLD row's flag.
 EVENT_MOVED_LATER_KV = "event_moved_later:"
 _MOVES_KEPT = 20
 
@@ -911,11 +912,12 @@ def _record_moves_later(conn, ticker: str, quarter: str, event_date: str) -> Non
     import json
     from datetime import datetime, timezone
 
-    olds = [r[0] for r in conn.execute(
-        "SELECT event_date FROM events WHERE ticker = ? AND quarter = ? "
+    olds = conn.execute(
+        "SELECT event_date, COALESCE(date_confirmed, 0) FROM events "
+        "WHERE ticker = ? AND quarter = ? "
         f"AND event_date < ? AND {OPEN_EVENT_SQL} AND date_locked = 0",
         (ticker, quarter, event_date),
-    )]
+    ).fetchall()
     if not olds:
         return
     key = EVENT_MOVED_LATER_KV + ticker
@@ -927,7 +929,8 @@ def _record_moves_later(conn, ticker: str, quarter: str, event_date: str) -> Non
     except (ValueError, TypeError):
         moves = []
     at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    moves.extend({"from": d, "to": event_date, "at": at} for d in olds)
+    moves.extend({"from": d, "to": event_date, "at": at, "confirmed": bool(c)}
+                 for d, c in olds)
     conn.execute(
         "INSERT INTO kv_store (key, value, updated_at) VALUES (?, ?, datetime('now')) "
         "ON CONFLICT(key) DO UPDATE SET value = excluded.value, "

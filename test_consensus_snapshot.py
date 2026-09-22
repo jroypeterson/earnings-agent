@@ -1091,3 +1091,37 @@ def test_runner_without_the_env_var_writes_no_side_file(monkeypatch, tmp_path):
     main, _conn, _posts = _runner_env(monkeypatch, fetcher=RecordingFetcher())
     main.run_snapshot_consensus()
     assert not (tmp_path / SNAP_FILE).exists()
+
+
+# ---------------------------------------------------------------------------
+# JP decision on round 3 C: only a CONFIRMED moved-from date blocks
+# ---------------------------------------------------------------------------
+
+def test_a_confirmed_date_moved_later_after_it_arrived_blocks():
+    from datetime import timedelta
+    from storage import upsert_event
+    today = _et_today()
+    old, new = (today - timedelta(days=1)).isoformat(), (today + timedelta(days=2)).isoformat()
+    conn = _db()
+    upsert_event(conn, "XYZ", old, "amc", None, quarter="2026Q3", tier=1)  # confirmed
+    upsert_event(conn, "XYZ", new, "amc", None, quarter="2026Q3", tier=1)
+    fetcher = RecordingFetcher()
+    _mod().snapshot_annual_consensus(conn, today, fetcher)
+    assert fetcher.calls == []
+
+
+def test_an_unconfirmed_rolling_date_is_still_snapshotted():
+    """The vendor rolling an unannounced estimate forward day by day is the
+    no-print case (measured: 180 of 1,089 companies would otherwise skip)."""
+    from datetime import timedelta
+    from storage import upsert_event
+    today = _et_today()
+    conn = _db()
+    for back in (3, 2, 1):
+        upsert_event(conn, "XYZ", (today - timedelta(days=back)).isoformat(), "",
+                     None, quarter="2026Q3", tier=1)                     # unconfirmed
+    upsert_event(conn, "XYZ", (today + timedelta(days=2)).isoformat(), "",
+                 None, quarter="2026Q3", tier=1)
+    fetcher = RecordingFetcher()
+    _mod().snapshot_annual_consensus(conn, today, fetcher)
+    assert fetcher.calls == ["XYZ"]
