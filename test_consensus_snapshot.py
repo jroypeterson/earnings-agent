@@ -1241,3 +1241,36 @@ def test_pre_release_snapshot_set_three_outcomes():
           status="partial:currency_error:403")
     assert mod.pre_release_snapshot_set(conn, "XYZ", cutoff) == (
         "partial:currency_error:403", {})
+
+
+# ---------------------------------------------------------------------------
+# Codex round 6: the surviving-row check uses the same quarter rule
+# ---------------------------------------------------------------------------
+
+def _qevent(conn, ticker, event_date, quarter, *, hour="bmo", confirmed=1, locked=0):
+    conn.execute(
+        "INSERT INTO events (ticker, event_date, event_hour, date_confirmed, "
+        "reported, tier, quarter, date_locked) VALUES (?,?,?,?,0,1,?,?)",
+        (ticker, event_date, hour, confirmed, quarter, locked))
+    conn.commit()
+
+
+def test_a_locked_same_quarter_event_54_days_back_blocks():
+    """Locked, confirmed 2026Q3 row on 07-25 is never deleted (so no move is
+    recorded); a new same-quarter row on 09-19 is 56 days later, past the
+    45-day filter, and was snapshotted although the company may have printed."""
+    conn = _db()
+    _qevent(conn, "XYZ", "2026-07-25", "2026Q3", locked=1)
+    _qevent(conn, "XYZ", "2026-09-19", "2026Q3")
+    fetcher = RecordingFetcher()
+    summary = _mod().snapshot_annual_consensus(conn, TODAY, fetcher, now=NOW)
+    assert fetcher.calls == [] and summary["skipped_open_prior"] == ["XYZ"]
+
+
+def test_a_different_quarter_row_54_days_back_does_not_block():
+    conn = _db()
+    _qevent(conn, "XYZ", "2026-07-25", "2026Q2", locked=1)
+    _qevent(conn, "XYZ", "2026-09-19", "2026Q3")
+    fetcher = RecordingFetcher()
+    _mod().snapshot_annual_consensus(conn, TODAY, fetcher, now=NOW)
+    assert fetcher.calls == ["XYZ"]

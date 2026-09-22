@@ -277,16 +277,19 @@ def _select_window(conn: sqlite3.Connection, today: date, now: datetime):
     if not window:
         return window, []
     lookback = (today - timedelta(days=WINDOW_DAYS + UNCONFIRMED_EXTRA_DAYS
-                                  + SAME_CYCLE_DAYS)).isoformat()
-    prior: dict[str, list[str]] = {}
-    for ticker, d, hour, hour_yf, confirmed in conn.execute(
-        "SELECT ticker, event_date, event_hour, event_hour_yf, date_confirmed "
-        f"FROM events WHERE {OPEN_EVENT_SQL} AND event_date >= ? "
-        "AND event_date <= ?",
+                                  + MOVED_SAME_QUARTER_MAX_DAYS)).isoformat()
+    # prior[ticker] = [(date, quarter, strong)]; `strong` = confirmed or locked.
+    # Both evidence paths below feed ONE rule, `_same_cycle` (Codex round 6).
+    prior: dict[str, list[tuple[str, Optional[str], bool]]] = {}
+    for ticker, d, hour, hour_yf, confirmed, locked, quarter in conn.execute(
+        "SELECT ticker, event_date, event_hour, event_hour_yf, date_confirmed, "
+        f"date_locked, quarter FROM events WHERE {OPEN_EVENT_SQL} "
+        "AND event_date >= ? AND event_date <= ?",
         (lookback, today.isoformat()),
     ).fetchall():
         if now >= pre_release_cutoff(d, hour, hour_yf, confirmed):
-            prior.setdefault(ticker, []).append(d)
+            prior.setdefault(ticker, []).append(
+                (d, quarter, bool(confirmed) or bool(locked)))
     # Codex round 3: an unlocked same-quarter row moved LATER is DELETED by
     # upsert_event, taking the evidence above with it; storage records each
     # such move. A move made on/after the old date's 00:00 ET (hour unknown
@@ -298,7 +301,6 @@ def _select_window(conn: sqlite3.Connection, today: date, now: datetime):
     # estimates the vendor rolls forward daily are the no-print case, and
     # blocking them skipped 180 of 1,089 companies (Jul-Sep 2026).
     # RESIDUAL: a print on an UNCONFIRMED date the vendor then moves later is not caught.
-    moved: dict[str, list[tuple[str, Optional[str]]]] = {}
     for ticker, _d, _c in window:
         raw = kv_get(conn, EVENT_MOVED_LATER_KV + ticker)
         try:
@@ -314,28 +316,16 @@ def _select_window(conn: sqlite3.Connection, today: date, now: datetime):
             if not m.get("confirmed", True):  # absent flag -> fail closed
                 continue
             if str(m.get("at", "")) >= old_start and _utc_stamp(now) >= old_start:
-                moved.setdefault(ticker, []).append((m["from"], m.get("quarter")))
+                prior.setdefault(ticker, []).append(
+                    (m["from"], m.get("quarter"), True))
     kept, blocked = [], []
     for ticker, event_date, cutoff in window:
-        earliest = (date.fromisoformat(event_date)
-                    - timedelta(days=SAME_CYCLE_DAYS)).isoformat()
-        hits = [p for p in prior.get(ticker, ()) if earliest <= p < event_date]
-        if moved.get(ticker):
-            row = conn.execute(
-                "SELECT quarter FROM events WHERE ticker = ? AND event_date = ?",
-                (ticker, event_date)).fetchone()
-            quarter = row[0] if row else None
-            bound = (date.fromisoformat(event_date)
-                     - timedelta(days=MOVED_SAME_QUARTER_MAX_DAYS)).isoformat()
-            for p, q in moved[ticker]:
-                if not p < event_date:
-                    continue
-                if q and quarter:
-                    if q == quarter and p >= bound:
-                        hits.append(p)
-                elif p >= earliest:  # no label on a side: the day window
-                    hits.append(p)
-        hits = sorted(hits)
+        row = conn.execute(
+            "SELECT quarter FROM events WHERE ticker = ? AND event_date = ?",
+            (ticker, event_date)).fetchone()
+        quarter = row[0] if row else None
+        hits = sorted(p for p, q, strong in prior.get(ticker, ())
+                      if _same_cycle(p, q, strong, event_date, quarter))
         if hits:
             blocked.append((ticker, event_date, hits[-1]))
         else:
@@ -346,6 +336,28 @@ def _select_window(conn: sqlite3.Connection, today: date, now: datetime):
             "past-cutoff event in the same cycle may already have printed: %s",
             len(blocked), ", ".join(f"{t}@{d} (open {p})" for t, d, p in blocked))
     return kept, blocked
+
+
+def _same_cycle(prior_date: str, prior_quarter: Optional[str], strong: bool,
+                event_date: str, event_quarter: Optional[str]) -> bool:
+    """Is a past event (surviving open row, or recorded confirmed move) in the
+    same reporting cycle as the upcoming ``event_date``? ONE rule for both
+    evidence paths, so they cannot diverge again (Codex round 6).
+
+    - Within ``SAME_CYCLE_DAYS`` (45) before it: always (any label, any
+      confirmation -- the round-2 rule, unchanged).
+    - Beyond that, up to ``MOVED_SAME_QUARTER_MAX_DAYS`` (135): only a
+      ``strong`` (confirmed or locked) prior event whose quarter label equals
+      the upcoming event's. No label on either side -> the 45-day rule only.
+    """
+    if not prior_date < event_date:
+        return False
+    ed, pd = date.fromisoformat(event_date), date.fromisoformat(prior_date)
+    if pd >= ed - timedelta(days=SAME_CYCLE_DAYS):
+        return True
+    return (strong and bool(prior_quarter) and bool(event_quarter)
+            and prior_quarter == event_quarter
+            and pd >= ed - timedelta(days=MOVED_SAME_QUARTER_MAX_DAYS))
 
 
 def _window_with_cutoffs(rows, now: datetime) -> list[tuple[str, str, datetime]]:
