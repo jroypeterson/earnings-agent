@@ -846,3 +846,48 @@ def test_runner_fails_when_every_currency_fetch_failed(monkeypatch):
     main, _conn, _posts = _runner_env(monkeypatch, fetcher=fetcher)
     with pytest.raises(RuntimeError, match="systemic"):
         main.run_snapshot_consensus()
+
+
+# ---------------------------------------------------------------------------
+# Codex round 2, finding 5: a captured snapshot persists whatever fails later
+# ---------------------------------------------------------------------------
+
+def _if_line(body):
+    import re
+    m = re.search(r"(?m)^        if: (.+)$", body)
+    return m.group(1).strip() if m else ""
+
+
+def test_the_db_is_persisted_right_after_the_snapshot_step():
+    """`Save earnings database` sits behind cross-check, Slack replies, exports
+    and the commit-back, and its implicit success() skips it when ANY of them
+    fails -- losing a pre-print snapshot for good. So the DB is also uploaded
+    immediately after the snapshot step, before anything that can fail the job.
+
+    Verified statically (no Actions run): the persist step must be reachable
+    from the snapshot step through continue-on-error steps only, and must keep
+    the implicit success() -- `always()` would also upload after a failed
+    restore / rollback guard (PROJECT_BRIEF #11: a failed guard's DB is never
+    uploaded)."""
+    import re
+    steps = _steps()
+    snap = next(i for i, (_n, b) in enumerate(steps) if "main.py --snapshot-consensus" in b)
+    persist = [i for i, (_n, b) in enumerate(steps)
+               if i > snap and "actions/upload-artifact" in b
+               and re.search(r"(?m)^\s+name: earnings-db\s*$", b)]
+    assert persist, "no earnings-db upload after the snapshot step"
+    p = persist[0]
+    first_hard = next(i for i, (_n, b) in enumerate(steps)
+                      if i > snap and not re.search(r"(?m)^\s+continue-on-error: true\s*$", b))
+    assert p <= first_hard, (
+        f"persist ({steps[p][0]!r}) comes after {steps[first_hard][0]!r}, "
+        "which can fail and skip it")
+    body = steps[p][1]
+    assert re.search(r"(?m)^\s+overwrite: true\s*$", body)
+    # A failed copy must not fail the job and so skip the end-of-job save.
+    assert re.search(r"(?m)^\s+continue-on-error: true\s*$", body)
+    cond = _if_line(body)
+    assert "github.ref == 'refs/heads/main'" in cond
+    assert "steps.snapshot_consensus.outcome" in cond
+    for fn in ("always()", "failure()", "cancelled()"):
+        assert fn not in cond, f"{fn} would bypass the implicit success() gate"

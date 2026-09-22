@@ -221,6 +221,35 @@ jobs:
           print(f"email backup: sent to {to}")
           PY
 
+      # Persist the DB NOW, not only at the end (Codex round 2, 2026-09-22).
+      # 'Save earnings database' sits behind the cross-check, Slack replies,
+      # exports and the commit-back; its implicit success() skips it when ANY
+      # of those fails, and a pre-print snapshot that is not persisted is lost
+      # for good (FMP keeps no history). Same artifact name + overwrite, so the
+      # final save still replaces this copy on a clean run.
+      #
+      # Gates, each load-bearing:
+      # - implicit success(): only reached when restore, the rollback guard and
+      #   the sync all succeeded -- never always(), which would also publish a
+      #   failed guard's DB (PROJECT_BRIEF #11). Everything between the
+      #   snapshot step and here is continue-on-error, so nothing can skip it.
+      # - outcome success|failure: a clean exit either way (sqlite committed or
+      #   rolled back). NOT `cancelled` -- a step killed at timeout-minutes can
+      #   leave a hot journal, and uploading the .db alone could publish a torn
+      #   file; the end-of-job save runs after later steps have reopened (and
+      #   so recovered) the DB.
+      # - continue-on-error: an artifact-service hiccup here must not fail the
+      #   job and so skip the end-of-job save it is a copy of.
+      - name: Persist earnings database after consensus snapshot
+        if: github.ref == 'refs/heads/main' && (steps.snapshot_consensus.outcome == 'success' || steps.snapshot_consensus.outcome == 'failure')
+        continue-on-error: true
+        uses: actions/upload-artifact@v6
+        with:
+          name: earnings-db
+          path: earnings_events.db
+          retention-days: 90
+          overwrite: true
+
       # Description drift: the daily sync's existing-event fast path
       # only triggers calendar updates on date or hour changes, so
       # description-only changes (e.g., newly-populated call_datetime_utc
