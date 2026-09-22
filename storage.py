@@ -912,10 +912,14 @@ def _record_moves_later(conn, ticker: str, quarter: str, event_date: str) -> Non
     import json
     from datetime import datetime, timezone
 
+    # Only CONFIRMED moved-from dates are recorded (Codex round 4): they are
+    # the only ones the guard acts on, and an unconfirmed estimate rolled
+    # forward daily would otherwise fill the capped list and evict them.
     olds = conn.execute(
         "SELECT event_date, COALESCE(date_confirmed, 0) FROM events "
         "WHERE ticker = ? AND quarter = ? "
-        f"AND event_date < ? AND {OPEN_EVENT_SQL} AND date_locked = 0",
+        f"AND event_date < ? AND {OPEN_EVENT_SQL} AND date_locked = 0 "
+        "AND COALESCE(date_confirmed, 0) = 1",
         (ticker, quarter, event_date),
     ).fetchall()
     if not olds:
