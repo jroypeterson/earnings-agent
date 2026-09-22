@@ -901,7 +901,8 @@ def upsert_event(
 # means the company may already have printed, and a snapshot for the new date
 # would store post-print consensus as pre-print. Recorded in kv_store (no
 # schema change) under this prefix as a JSON list of
-# {"from", "to", "at", "confirmed"} -- `confirmed` is the OLD row's flag.
+# {"from", "to", "at", "confirmed", "quarter"} -- `confirmed` is the OLD
+# row's flag; `quarter` is the reporting cycle both rows belonged to.
 EVENT_MOVED_LATER_KV = "event_moved_later:"
 _MOVES_KEPT = 20
 
@@ -933,7 +934,8 @@ def _record_moves_later(conn, ticker: str, quarter: str, event_date: str) -> Non
     except (ValueError, TypeError):
         moves = []
     at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    moves.extend({"from": d, "to": event_date, "at": at, "confirmed": bool(c)}
+    moves.extend({"from": d, "to": event_date, "at": at, "confirmed": bool(c),
+                  "quarter": quarter}
                  for d, c in olds)
     conn.execute(
         "INSERT INTO kv_store (key, value, updated_at) VALUES (?, ?, datetime('now')) "

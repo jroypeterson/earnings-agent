@@ -49,6 +49,13 @@ UNCONFIRMED_EXTRA_DAYS = 10
 # post-print consensus. Consecutive quarterly prints are ~91 days apart.
 SAME_CYCLE_DAYS = 45
 
+# Codex round 5: a RECORDED confirmed move is same-quarter by construction
+# (upsert_event only deletes same-quarter rows), so it is scoped by the
+# quarter label, not by SAME_CYCLE_DAYS -- a confirmed 09-01 date moved to
+# 10-20 is still that cycle. This is only an upper sanity bound on a label
+# that spans implausibly far (> a season and a half apart).
+MOVED_SAME_QUARTER_MAX_DAYS = 135
+
 # FMP Starter allows 300/min. 4/s is 240/min with headroom for the rest of the
 # run; the 429 backoff is the same schedule as notifications.post_with_retry.
 FMP_RATE_PER_SEC = 4.0
@@ -275,6 +282,7 @@ def _select_window(conn: sqlite3.Connection, today: date, now: datetime):
     # estimates the vendor rolls forward daily are the no-print case, and
     # blocking them skipped 180 of 1,089 companies (Jul-Sep 2026).
     # RESIDUAL: a print on an UNCONFIRMED date the vendor then moves later is not caught.
+    moved: dict[str, list[tuple[str, Optional[str]]]] = {}
     for ticker, _d, _c in window:
         raw = kv_get(conn, EVENT_MOVED_LATER_KV + ticker)
         try:
@@ -290,13 +298,28 @@ def _select_window(conn: sqlite3.Connection, today: date, now: datetime):
             if not m.get("confirmed", True):  # absent flag -> fail closed
                 continue
             if str(m.get("at", "")) >= old_start and _utc_stamp(now) >= old_start:
-                prior.setdefault(ticker, []).append(m["from"])
+                moved.setdefault(ticker, []).append((m["from"], m.get("quarter")))
     kept, blocked = [], []
     for ticker, event_date, cutoff in window:
         earliest = (date.fromisoformat(event_date)
                     - timedelta(days=SAME_CYCLE_DAYS)).isoformat()
-        hits = sorted(p for p in prior.get(ticker, ())
-                      if earliest <= p < event_date)
+        hits = [p for p in prior.get(ticker, ()) if earliest <= p < event_date]
+        if moved.get(ticker):
+            row = conn.execute(
+                "SELECT quarter FROM events WHERE ticker = ? AND event_date = ?",
+                (ticker, event_date)).fetchone()
+            quarter = row[0] if row else None
+            bound = (date.fromisoformat(event_date)
+                     - timedelta(days=MOVED_SAME_QUARTER_MAX_DAYS)).isoformat()
+            for p, q in moved[ticker]:
+                if not p < event_date:
+                    continue
+                if q and quarter:
+                    if q == quarter and p >= bound:
+                        hits.append(p)
+                elif p >= earliest:  # no label on a side: the day window
+                    hits.append(p)
+        hits = sorted(hits)
         if hits:
             blocked.append((ticker, event_date, hits[-1]))
         else:
