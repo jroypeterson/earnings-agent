@@ -2162,8 +2162,12 @@ def run_snapshot_consensus(dry_run: bool = False) -> dict:
                 "window -- pre-print consensus NOT captured", len(window))
             sys.exit(1)
 
+        # Codex r8: a FRESH clock read -- `now` above predates the side-DB
+        # merge and the window query; passing it would backdate every cutoff
+        # check and taken_at (15:59:55 captured, fetch made after 16:00 ET).
         summary = snapshot_annual_consensus(
-            conn, today, make_fmp_fetcher(conn, FMP_API_KEY, today), now=now)
+            conn, today, make_fmp_fetcher(conn, FMP_API_KEY, today),
+            now=datetime.now(timezone.utc))
 
         if summary["errors"]:
             webhook = SLACK_WEBHOOK_STATUS or SLACK_WEBHOOK_EARNINGS
@@ -2212,6 +2216,13 @@ def run_snapshot_consensus(dry_run: bool = False) -> dict:
             try:
                 n = export_snapshot_file(conn, side_file)
                 logger.info("Consensus snapshot: exported %d row(s) to %s", n, side_file)
+                # Codex r8: the side upload is gated on THIS marker, not on
+                # the step outcome -- a timed-out step reports `failure` and
+                # would republish the untouched restored file.
+                gh_out = os.environ.get("GITHUB_OUTPUT", "").strip()
+                if gh_out:
+                    with open(gh_out, "a", encoding="utf-8") as fh:
+                        fh.write("exported=true\n")
             except Exception as exc:  # noqa: BLE001 -- re-raised below, loudly
                 export_failed = exc
                 logger.error("Consensus snapshot: export to %s FAILED: %s", side_file, exc)

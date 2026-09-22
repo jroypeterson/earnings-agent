@@ -276,8 +276,10 @@ jobs:
         run: python main.py --snapshot-consensus
 
       # Uploaded whatever fails later (always()), but only when:
-      # - the snapshot step RAN and exited cleanly (success|failure). Not
-      #   `cancelled`: a step killed at timeout-minutes never reached its export.
+      # - the snapshot step's EXPORT completed this run (it writes
+      #   `exported=true` to GITHUB_OUTPUT). Not the step outcome: a step
+      #   killed at timeout-minutes reports `failure` (Codex r8) and would
+      #   republish the untouched restored file.
       # - the restore SUCCEEDED (a clean bootstrap counts): an export built
       #   without the previous artifact merged in would become the newest,
       #   NON-cumulative copy and hide the rows only the old one holds.
@@ -285,7 +287,7 @@ jobs:
       # artifact or an earlier snapshot copy.
       - name: Save consensus snapshots side artifact
         id: persist_snapshots
-        if: always() && github.ref == 'refs/heads/main' && steps.restore_snapshots.outcome == 'success' && (steps.snapshot_consensus.outcome == 'success' || steps.snapshot_consensus.outcome == 'failure')
+        if: always() && github.ref == 'refs/heads/main' && steps.restore_snapshots.outcome == 'success' && steps.snapshot_consensus.outputs.exported == 'true'
         continue-on-error: true
         uses: actions/upload-artifact@v6
         with:

@@ -994,8 +994,8 @@ def test_snapshot_rows_have_their_own_artifact_restored_before_and_saved_after()
     # previous artifact merged in would become the newest, non-cumulative copy.
     assert "always()" in cond and "github.ref == 'refs/heads/main'" in cond
     assert "steps.restore_snapshots.outcome == 'success'" in cond
-    assert "steps.snapshot_consensus.outcome == 'success'" in cond
-    assert "steps.snapshot_consensus.outcome == 'failure'" in cond
+    # Codex r8: gated on this run's export marker, not the step outcome.
+    assert "steps.snapshot_consensus.outputs.exported == 'true'" in cond
 
     # A failed restore or save is not silent: the snapshot alerts cover both,
     # and run after them.
@@ -1304,3 +1304,90 @@ def test_last_quarters_reported_event_does_not_block():
     fetcher = RecordingFetcher()
     _mod().snapshot_annual_consensus(conn, TODAY, fetcher, now=NOW)
     assert fetcher.calls == ["XYZ"]
+
+
+# ---------------------------------------------------------------------------
+# Codex round 8 (NOT yet reviewed by Codex)
+# ---------------------------------------------------------------------------
+
+def test_a_reported_same_quarter_row_blocks_before_its_scheduled_cutoff():
+    """09-17 AMC row marked reported=1 after an EARLY release; at 15:30 ET its
+    scheduled 16:00 cutoff has not passed, but the print has happened."""
+    conn = _db()
+    _qevent(conn, "XYZ", "2026-09-17", "2026Q3", hour="amc")
+    conn.execute("UPDATE events SET reported = 1 WHERE event_date = '2026-09-17'")
+    conn.commit()
+    _qevent(conn, "XYZ", "2026-09-20", "2026Q3")
+    fetcher = RecordingFetcher()
+    run = datetime(2026, 9, 17, 19, 30, tzinfo=timezone.utc)   # 15:30 EDT
+    _mod().snapshot_annual_consensus(conn, TODAY, fetcher, now=run)
+    assert fetcher.calls == []
+
+
+def test_runner_passes_a_clock_read_after_the_merge(monkeypatch, tmp_path):
+    """`now` captured before a slow side-DB merge backdated every cutoff check
+    and taken_at; the snapshot must start from the clock as it is then."""
+    import time
+    import consensus_snapshot
+    mod = _mod()
+    f = tmp_path / SNAP_FILE
+    mod.export_snapshot_file(_db(), f)
+    stamps = {}
+    real_merge = consensus_snapshot.merge_snapshot_file
+
+    def slow_merge(conn, path):
+        time.sleep(0.2)
+        stamps["merged"] = datetime.now(timezone.utc)
+        return real_merge(conn, path)
+
+    def spy(conn, today, fetcher, **kw):
+        stamps["now"] = kw.get("now")
+        return {"tickers": 0, "ok": 0, "empty": 0, "errors": 0, "failed": [],
+                "aborted": None, "skipped": 0}
+
+    main, _conn, _posts = _runner_env(monkeypatch, fetcher=RecordingFetcher())
+    monkeypatch.setenv("CONSENSUS_SNAPSHOT_FILE", str(f))
+    monkeypatch.setattr(consensus_snapshot, "merge_snapshot_file", slow_merge)
+    monkeypatch.setattr(consensus_snapshot, "snapshot_annual_consensus", spy)
+    main.run_snapshot_consensus()
+    assert stamps["now"] is None or stamps["now"] >= stamps["merged"]
+
+
+def test_runner_marks_a_completed_export_in_github_output(monkeypatch, tmp_path):
+    f = tmp_path / SNAP_FILE
+    out = tmp_path / "gh_output"
+    out.write_text("", encoding="utf-8")
+    main, _conn, _posts = _runner_env(monkeypatch, fetcher=RecordingFetcher())
+    monkeypatch.setenv("CONSENSUS_SNAPSHOT_FILE", str(f))
+    monkeypatch.setenv("GITHUB_OUTPUT", str(out))
+    main.run_snapshot_consensus()
+    assert "exported=true" in out.read_text(encoding="utf-8").splitlines()
+
+
+def test_runner_does_not_mark_a_failed_export(monkeypatch, tmp_path):
+    import consensus_snapshot
+    f = tmp_path / SNAP_FILE
+    out = tmp_path / "gh_output"
+    out.write_text("", encoding="utf-8")
+    main, _conn, _posts = _runner_env(monkeypatch, fetcher=RecordingFetcher())
+    monkeypatch.setenv("CONSENSUS_SNAPSHOT_FILE", str(f))
+    monkeypatch.setenv("GITHUB_OUTPUT", str(out))
+
+    def boom(*a, **k):
+        raise OSError("disk full")
+    monkeypatch.setattr(consensus_snapshot, "export_snapshot_file", boom)
+    with pytest.raises(RuntimeError):
+        main.run_snapshot_consensus()
+    assert "exported=true" not in out.read_text(encoding="utf-8")
+
+
+def test_side_upload_is_gated_on_this_runs_export_not_the_step_outcome():
+    """A step TIMEOUT reports `failure`; gating on outcome republished the
+    untouched restored file."""
+    import re
+    steps = _steps()
+    save = _step(steps, lambda b: "actions/upload-artifact" in b
+                 and re.search(r"(?m)^\s+name: consensus-snapshots\s*$", b))
+    cond = re.search(r"(?m)^        if: (.+)$", steps[save][1]).group(1)
+    assert "steps.snapshot_consensus.outputs.exported == 'true'" in cond
+    assert "steps.snapshot_consensus.outcome" not in cond

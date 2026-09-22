@@ -291,7 +291,9 @@ def _select_window(conn: sqlite3.Connection, today: date, now: datetime):
         "AND event_date >= ? AND event_date <= ?",
         (lookback, today.isoformat()),
     ).fetchall():
-        if now >= pre_release_cutoff(d, hour, hour_yf, confirmed):
+        # Codex r8: a REPORTED row blocks regardless of its scheduled cutoff
+        # (an early release marked reported before 16:00 ET has printed).
+        if reported or now >= pre_release_cutoff(d, hour, hour_yf, confirmed):
             prior.setdefault(ticker, []).append(
                 (d, quarter, bool(confirmed) or bool(locked) or bool(reported)))
     # Codex round 3: an unlocked same-quarter row moved LATER is DELETED by
