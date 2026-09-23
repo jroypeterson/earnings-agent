@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-09-22T22:21:37Z",
+  "generated_at": "2026-09-23T15:28:49Z",
   "window": {
-    "start": "2026-09-20",
-    "end": "2026-10-06"
+    "start": "2026-09-21",
+    "end": "2026-10-07"
   },
   "counts": {
-    "events": 13
+    "events": 16
   },
   "events": [
     {
@@ -20,13 +20,13 @@
       "company_name": "Palatin Technologies Inc"
     },
     {
-      "ticker": "AYTU",
+      "ticker": "SHPH",
       "event_date": "2026-09-22",
-      "event_hour": "amc",
+      "event_hour": "",
       "tier": 3,
-      "date_confirmed": true,
+      "date_confirmed": false,
       "call_datetime_utc": null,
-      "company_name": "Aytu Biopharma Inc"
+      "company_name": "Shuttle Pharmaceuticals Holdings, Inc."
     },
     {
       "ticker": "YDES",
@@ -126,6 +126,33 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "NanoViricides, Inc"
+    },
+    {
+      "ticker": "NRIX",
+      "event_date": "2026-10-07",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Nurix Therapeutics Inc"
+    },
+    {
+      "ticker": "TLRY",
+      "event_date": "2026-10-07",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Tilray Brands Inc"
+    },
+    {
+      "ticker": "TLSA",
+      "event_date": "2026-10-07",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Tiziana Life Sciences Ltd - ADR"
     }
   ]
 }
