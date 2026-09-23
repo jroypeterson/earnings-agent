@@ -108,6 +108,12 @@ def _install_fake_gh(tmp_path: Path, listing: list[dict], zips: dict[str, Path])
         '    pg=$(printf "%s" "$path" | sed -nE "s/.*[?&]page=([0-9]+).*/\\1/p")\n'
         '    [ -n "$pp" ] || pp=50\n'
         '    [ -n "$pg" ] || pg=1\n'
+        # Record every LIST call. Without this the pagination tests can only
+        # assert WHICH artifact came back, never HOW MANY requests it took -- so
+        # deleting the short-page `break` (making the script walk to the cap on
+        # every run) leaves them green. Found by Codex round 10 reviewing round
+        # 9's own fixes: a test that cannot see the thing it is about.
+        f'    printf "%s\\n" "$pg" >> "{tmp_path / "gh_calls.log"}"\n'
         f'    python "{helper}" list "{tmp_path / "artifacts.json"}" "$pp" "$pg"\n'
         "    ;;\n"
         "esac\n",
@@ -122,6 +128,17 @@ def _install_fake_gh(tmp_path: Path, listing: list[dict], zips: dict[str, Path])
     env["EA_DB_RESTORE_TRIES"] = "1"
     env.pop("GITHUB_OUTPUT", None)
     return env
+
+
+def _list_calls(tmp_path: Path) -> list[str]:
+    """Which list PAGES the script actually requested, in order.
+
+    Asserting on this is what makes the pagination tests non-vacuous: the
+    artifact that comes back is the same whether the script stopped correctly at
+    a short page or walked every page to the cap.
+    """
+    log = tmp_path / "gh_calls.log"
+    return log.read_text(encoding="utf-8").split() if log.exists() else []
 
 
 def _artifact(aid: int, created: str, *, branch: str = "main", expired: bool = False) -> dict:
@@ -470,6 +487,9 @@ def test_the_newest_artifact_is_found_when_page_one_holds_only_expired_rows(tmp_
     assert "selected artifact 303" in res.stdout, res.stdout
     con = sqlite3.connect(work / "earnings_events.db")
     assert con.execute("SELECT COUNT(*) FROM events").fetchone()[0] == 42
+    # Page 1 is full (2 rows at per_page=2) so the walk must continue; page 2 is
+    # short, so it must stop there. Exactly two requests, in order.
+    assert _list_calls(tmp_path) == ["1", "2"], _list_calls(tmp_path)
 
 
 def test_paging_stops_on_a_short_page_not_on_an_empty_candidate_set(tmp_path):
@@ -492,6 +512,12 @@ def test_paging_stops_on_a_short_page_not_on_an_empty_candidate_set(tmp_path):
     res = _run(RESTORE, work, env)
     assert res.returncode == 0, res.stdout + res.stderr
     assert "selected artifact 900" in res.stdout, res.stdout
+    # THE POINT OF THIS TEST. One row against per_page=2 is a short page, so the
+    # walk ends immediately. Without this assertion the test passes whether the
+    # script stops here or grinds to EA_DB_ARTIFACT_MAX_PAGES on every single
+    # run -- which costs needless API calls and turns a healthy page-1 listing
+    # into a restore FAILURE if any later call happens to fail.
+    assert _list_calls(tmp_path) == ["1"], _list_calls(tmp_path)
 
 
 def test_a_mandatory_artifact_refuses_an_empty_listing(tmp_path):
