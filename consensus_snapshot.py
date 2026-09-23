@@ -325,6 +325,7 @@ def _select_window(conn: sqlite3.Connection, today: date, now: datetime):
                 prior.setdefault(ticker, []).append(
                     (m["from"], m.get("quarter"), True))
     kept, blocked = [], []
+    cross_label_kept, cross_label_ghost = [], []
     for ticker, event_date, cutoff in window:
         row = conn.execute(
             "SELECT quarter FROM events WHERE ticker = ? AND event_date = ?",
@@ -334,13 +335,62 @@ def _select_window(conn: sqlite3.Connection, today: date, now: datetime):
                       if _same_cycle(p, q, strong, event_date, quarter))
         if hits:
             blocked.append((ticker, event_date, hits[-1]))
+            # GHOST branch. A cross-label UNCONFIRMED prior that blocks through
+            # the 45-day arm is very likely a row nothing could delete: the
+            # same-quarter DELETE in `storage.upsert_event` is keyed on the
+            # label, so an unconfirmed roll that crosses a quarter boundary
+            # leaves its old row behind. Measured 2026-09-22 on the live DB: 1
+            # ticker today (INM, 44 days), and 6 ghosts at the 06-30 boundary of
+            # which one would have blocked a real print (HCM). It is NOT cheap to
+            # fix, because a ghost and a silent print with a cross-label
+            # successor are indistinguishable on the current columns -- the same
+            # identity gap as the residual below.
+            ghosts = [p for p, q, strong in prior.get(ticker, ())
+                      if p == hits[-1] and not strong and q and quarter and q != quarter]
+            if ghosts:
+                cross_label_ghost.append((ticker, event_date, hits[-1]))
         else:
             kept.append((ticker, event_date, cutoff))
+            # RESIDUAL measurement. A strong, past-cutoff prior beyond the
+            # 45-day arm that was let through ONLY because the two calendar-month
+            # labels differ. That is the known hole: `quarter` is a display label
+            # (`storage.date_to_quarter`, whose docstring says so) being used as a
+            # cycle identity, so a report slipping across a quarter boundary is
+            # invisible to `_same_cycle`.
+            #
+            # This fires on real occurrences only -- never always-true -- so after
+            # one season the CI logs price the fix with a count instead of a
+            # hypothesis. Today the only log here names the BLOCKED set, which
+            # makes the residual's incidence structurally invisible.
+            ed = date.fromisoformat(event_date)
+            near = sorted(
+                p for p, q, strong in prior.get(ticker, ())
+                if strong and p < event_date and q and quarter and q != quarter
+                and date.fromisoformat(p) >= ed - timedelta(days=MOVED_SAME_QUARTER_MAX_DAYS))
+            if near:
+                cross_label_kept.append((ticker, event_date, near[-1], quarter))
     if blocked:
         logger.warning(
             "Consensus snapshot: %d ticker(s) NOT snapshotted -- an open, "
             "past-cutoff event in the same cycle may already have printed: %s",
             len(blocked), ", ".join(f"{t}@{d} (open {p})" for t, d, p in blocked))
+    if cross_label_kept:
+        logger.warning(
+            "Consensus snapshot: %d ticker(s) snapshotted DESPITE a strong prior "
+            "event beyond %dd, because the two calendar-quarter labels differ -- "
+            "the known cycle-identity hole (board: keep the vendor fiscal period). "
+            "If the prior already printed, this snapshot is post-print: %s",
+            len(cross_label_kept), SAME_CYCLE_DAYS,
+            ", ".join(f"{t}@{d} (prior {p}, upcoming label {q})"
+                      for t, d, p, q in cross_label_kept))
+    if cross_label_ghost:
+        logger.warning(
+            "Consensus snapshot: %d ticker(s) blocked by a cross-label UNCONFIRMED "
+            "prior, which is the signature of a ghost row the same-quarter DELETE "
+            "could not reach (it is keyed on the label). These may be blocked for "
+            "up to %dd with no print behind them: %s",
+            len(cross_label_ghost), SAME_CYCLE_DAYS,
+            ", ".join(f"{t}@{d} (ghost {p})" for t, d, p in cross_label_ghost))
     return kept, blocked
 
 

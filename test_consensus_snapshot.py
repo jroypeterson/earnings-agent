@@ -1183,19 +1183,26 @@ def test_the_side_upload_fails_when_there_is_no_file():
 # Codex round 5
 # ---------------------------------------------------------------------------
 
-def test_a_confirmed_same_quarter_move_blocks_beyond_45_days():
-    """Confirmed 2026Q3 row moved 09-01 -> 10-20 after 09-01, run 10-16: the
-    record is same-quarter provenance; a 45-day window must not drop it."""
-    from datetime import timedelta
-    from storage import upsert_event
-    today = _et_today()
-    old, new = (today - timedelta(days=50)).isoformat(), (today + timedelta(days=4)).isoformat()
-    conn = _db()
-    upsert_event(conn, "XYZ", old, "bmo", None, quarter="2026Q3", tier=1)
-    upsert_event(conn, "XYZ", new, "bmo", None, quarter="2026Q3", tier=1)
-    fetcher = RecordingFetcher()
-    summary = _mod().snapshot_annual_consensus(conn, today, fetcher)
-    assert fetcher.calls == [] and summary["skipped_open_prior"] == ["XYZ"]
+# DELETED 2026-09-22: test_a_confirmed_same_quarter_move_blocks_beyond_45_days.
+#
+# It asserted that a confirmed row moved 09-01 -> 10-20 still blocks at 49 days,
+# and it passed — but only because it hand-assigned `quarter="2026Q3"` to BOTH
+# `upsert_event` calls. Production derives the label from the release month
+# (`main.py:972` -> `storage.date_to_quarter`), so it would label 09-01 `2026Q2`
+# and 10-20 `2026Q3`. Under real labels the long arm of `_same_cycle` cannot
+# fire, the 45-day arm has lapsed at 49 days, and the snapshot proceeds.
+#
+# The test described a world production cannot produce, and asserted the
+# behaviour we want in it. That is `a-check-that-silently-matches-nothing` — and
+# it survived eight rounds of adversarial review because a green test attracts no
+# attention.
+#
+# It is DELETED rather than rewritten because there is nothing honest to rewrite
+# it to: with production labels this scenario proceeds, and asserting that would
+# pin a defect as though it were intended. The behaviour that IS pinned lives in
+# `test_a_real_cross_quarter_consecutive_print_is_still_snapshotted` below, which
+# names this case as the residual. The real fix needs a vendor fiscal period —
+# see the board row.
 
 
 def test_an_unmergeable_side_file_fails_loud_even_on_an_empty_window(monkeypatch, tmp_path):
@@ -1247,11 +1254,43 @@ def test_pre_release_snapshot_set_three_outcomes():
 # Codex round 6: the surviving-row check uses the same quarter rule
 # ---------------------------------------------------------------------------
 
-def _qevent(conn, ticker, event_date, quarter, *, hour="bmo", confirmed=1, locked=0):
+def _qevent(conn, ticker, event_date, quarter=None, *, hour="bmo", confirmed=1,
+            locked=0, reported=0):
+    """Insert an event whose `quarter` is DERIVED, exactly as production does.
+
+    ⛑ The label is no longer a parameter, and that is the point. Before this,
+    every call here hand-assigned one — and a sweep on 2026-09-22 found **9 of
+    11 carrying a label `date_to_quarter` would never produce for that date**.
+    Mostly harmless (both rows in a fixture shared the same wrong label, as
+    production shares the same right one), but not always: one test asserted the
+    snapshot PROCEEDS for a pair that production labels identically, so under
+    real labels it blocks — and its neighbour asserted the opposite outcome for
+    the same shape. Two tests, the same impossible world, contradicting each
+    other, both green.
+
+    A test that can express a world production cannot produce is not a test of
+    production. Deriving the label makes that whole class unrepresentable, which
+    is why this refuses an override rather than defaulting to one: a default is a
+    suggestion, and the next round writes past it.
+
+    (The `upsert_event` call sites elsewhere in this file are a separate case and
+    are deliberately NOT forced — they are clock-relative because
+    `_record_moves_later` stamps `datetime.now()`, so a fixed-date fixture cannot
+    express "moved before the old date arrived". Forcing derivation there creates
+    a real two-days-per-quarter boundary failure. That needs an injectable clock;
+    it is on the board row, not here.)
+    """
+    if quarter is not None:
+        raise AssertionError(
+            "_qevent derives `quarter` from the date, like production does. "
+            "Passing one lets a fixture describe a world production cannot "
+            "produce, which is the defect this helper exists to prevent.")
+    from storage import date_to_quarter
     conn.execute(
         "INSERT INTO events (ticker, event_date, event_hour, date_confirmed, "
-        "reported, tier, quarter, date_locked) VALUES (?,?,?,?,0,1,?,?)",
-        (ticker, event_date, hour, confirmed, quarter, locked))
+        "reported, tier, quarter, date_locked) VALUES (?,?,?,?,?,1,?,?)",
+        (ticker, event_date, hour, confirmed, reported,
+         date_to_quarter(event_date), locked))
     conn.commit()
 
 
@@ -1260,20 +1299,66 @@ def test_a_locked_same_quarter_event_54_days_back_blocks():
     recorded); a new same-quarter row on 09-19 is 56 days later, past the
     45-day filter, and was snapshotted although the company may have printed."""
     conn = _db()
-    _qevent(conn, "XYZ", "2026-07-25", "2026Q3", locked=1)
-    _qevent(conn, "XYZ", "2026-09-19", "2026Q3")
+    _qevent(conn, "XYZ", "2026-07-25", locked=1)
+    _qevent(conn, "XYZ", "2026-09-19")
     fetcher = RecordingFetcher()
     summary = _mod().snapshot_annual_consensus(conn, TODAY, fetcher, now=NOW)
     assert fetcher.calls == [] and summary["skipped_open_prior"] == ["XYZ"]
 
 
-def test_a_different_quarter_row_54_days_back_does_not_block():
+def test_a_real_cross_quarter_consecutive_print_is_still_snapshotted():
+    """The REPL case, with REPL's real dates, pinning what the code does TODAY.
+
+    This replaces a test that hand-labelled 07-25 as `2026Q2` and 09-19 as
+    `2026Q3` and asserted the snapshot proceeds. Production labels BOTH dates
+    `2026Q2`, so under real labels that scenario BLOCKS — and its neighbour
+    asserted the opposite for the same shape. Deriving the label in `_qevent`
+    made that contradiction visible: the whole file went 84 pass / 1 fail, and
+    the 1 was this test.
+
+    REPL really did report on 2026-06-29 and again on 2026-08-14 — 46 days, and a
+    genuine cross-label pair (`2026Q1` -> `2026Q2`). It MUST be snapshotted: it is
+    two consecutive prints, not one that moved. Measured over 700 consecutive
+    reported-print pairs in the live DB, **9 are under 60 days apart and 3 under
+    50** (REPL 46d, OKYO 47d, NBP 30d), so this shape is ordinary, not exotic.
+
+    ⚑ THE RESIDUAL, named here because this test is exactly where a future reader
+    will look: a report that SLIPS across a quarter boundary produces the same
+    observable — strong prior, >45 days, differing labels — and must NOT be
+    snapshotted. Nothing in the current columns separates the two. So this test
+    pins today's behaviour and the hole at once, and it is deliberately a plain
+    green test rather than an xfail: an xfail would assert a correct expectation
+    that does not exist yet, and the day it XPASSed it would be certifying a rule
+    that also breaks REPL. The fix must key on a VENDOR FISCAL PERIOD (both
+    providers send one and the code discards it) — see the board row.
+    """
+    from datetime import date as _date, datetime as _dt, timedelta as _td
+    from storage import date_to_quarter
+    mod = _mod()
+
+    prior, upcoming = "2026-06-29", "2026-08-14"
+    today = _date(2026, 8, 10)
+    now = _dt(2026, 8, 10, 11, 20, tzinfo=timezone.utc)
+
+    # Preconditions, so a pass here means what the docstring says rather than
+    # passing for some incidental reason (an out-of-window date would also make
+    # `calls` empty, for instance).
+    q_prior, q_up = date_to_quarter(prior), date_to_quarter(upcoming)
+    assert q_prior != q_up, "the point of the fixture is that the LABELS differ"
+    gap = (_date.fromisoformat(upcoming) - _date.fromisoformat(prior)).days
+    assert gap > mod.SAME_CYCLE_DAYS, "must be past the 45-day arm to be interesting"
+    assert gap < mod.MOVED_SAME_QUARTER_MAX_DAYS, "and inside the long arm's reach"
+    # The counterfactual is what proves the prior WAS evidence and only the label
+    # let it through: same shape, labels forced equal, and it blocks.
+    assert mod._same_cycle(prior, q_up, True, upcoming, q_up) is True
+    assert mod._same_cycle(prior, q_prior, True, upcoming, q_up) is False
+
     conn = _db()
-    _qevent(conn, "XYZ", "2026-07-25", "2026Q2", locked=1)
-    _qevent(conn, "XYZ", "2026-09-19", "2026Q3")
+    _qevent(conn, "REPL", prior, reported=1)
+    _qevent(conn, "REPL", upcoming)
     fetcher = RecordingFetcher()
-    _mod().snapshot_annual_consensus(conn, TODAY, fetcher, now=NOW)
-    assert fetcher.calls == ["XYZ"]
+    mod.snapshot_annual_consensus(conn, today, fetcher, now=now)
+    assert fetcher.calls == ["REPL"]
 
 
 # ---------------------------------------------------------------------------
@@ -1285,10 +1370,10 @@ def test_a_reported_same_quarter_event_blocks_a_surviving_duplicate():
     09-20. The print already happened, so the 09-20 row's consensus is
     post-print."""
     conn = _db()
-    _qevent(conn, "XYZ", "2026-09-17", "2026Q3", hour="amc", locked=1)
+    _qevent(conn, "XYZ", "2026-09-17", hour="amc", locked=1)
     conn.execute("UPDATE events SET reported = 1 WHERE event_date = '2026-09-17'")
     conn.commit()
-    _qevent(conn, "XYZ", "2026-09-20", "2026Q3")
+    _qevent(conn, "XYZ", "2026-09-20")
     fetcher = RecordingFetcher()
     run = datetime(2026, 9, 18, 11, 20, tzinfo=timezone.utc)
     summary = _mod().snapshot_annual_consensus(conn, date(2026, 9, 18), fetcher, now=run)
@@ -1297,10 +1382,10 @@ def test_a_reported_same_quarter_event_blocks_a_surviving_duplicate():
 
 def test_last_quarters_reported_event_does_not_block():
     conn = _db()
-    _qevent(conn, "XYZ", "2026-06-18", "2026Q2")
+    _qevent(conn, "XYZ", "2026-06-18")
     conn.execute("UPDATE events SET reported = 1 WHERE event_date = '2026-06-18'")
     conn.commit()
-    _qevent(conn, "XYZ", "2026-09-19", "2026Q3")
+    _qevent(conn, "XYZ", "2026-09-19")
     fetcher = RecordingFetcher()
     _mod().snapshot_annual_consensus(conn, TODAY, fetcher, now=NOW)
     assert fetcher.calls == ["XYZ"]
@@ -1314,10 +1399,10 @@ def test_a_reported_same_quarter_row_blocks_before_its_scheduled_cutoff():
     """09-17 AMC row marked reported=1 after an EARLY release; at 15:30 ET its
     scheduled 16:00 cutoff has not passed, but the print has happened."""
     conn = _db()
-    _qevent(conn, "XYZ", "2026-09-17", "2026Q3", hour="amc")
+    _qevent(conn, "XYZ", "2026-09-17", hour="amc")
     conn.execute("UPDATE events SET reported = 1 WHERE event_date = '2026-09-17'")
     conn.commit()
-    _qevent(conn, "XYZ", "2026-09-20", "2026Q3")
+    _qevent(conn, "XYZ", "2026-09-20")
     fetcher = RecordingFetcher()
     run = datetime(2026, 9, 17, 19, 30, tzinfo=timezone.utc)   # 15:30 EDT
     _mod().snapshot_annual_consensus(conn, TODAY, fetcher, now=run)
@@ -1391,3 +1476,67 @@ def test_side_upload_is_gated_on_this_runs_export_not_the_step_outcome():
     cond = re.search(r"(?m)^        if: (.+)$", steps[save][1]).group(1)
     assert "steps.snapshot_consensus.outputs.exported == 'true'" in cond
     assert "steps.snapshot_consensus.outcome" not in cond
+
+
+# ---------------------------------------------------------------------------
+# Codex round 9 / Fable: MEASURE the residual's incidence instead of guessing it
+# ---------------------------------------------------------------------------
+
+def test_a_cross_label_strong_prior_that_is_let_through_is_logged(caplog):
+    """The hole is real but its INCIDENCE was unmeasurable: `_select_window`
+    logged only the BLOCKED set, so a ticker let through by the label gap left no
+    trace at all. After a season these lines price the fix with a count rather
+    than a hypothesis.
+
+    It fires only on real occurrences -- a strong prior, past the 45-day arm,
+    inside the long arm's reach, differing labels -- so it can never become an
+    always-true flag that readers learn to skim.
+    """
+    import logging
+    from datetime import date as _date, datetime as _dt
+    mod = _mod()
+    conn = _db()
+    _qevent(conn, "REPL", "2026-06-29", reported=1)
+    _qevent(conn, "REPL", "2026-08-14")
+
+    with caplog.at_level(logging.WARNING):
+        mod.snapshot_annual_consensus(
+            conn, _date(2026, 8, 10), RecordingFetcher(),
+            now=_dt(2026, 8, 10, 11, 20, tzinfo=timezone.utc))
+
+    hits = [r.getMessage() for r in caplog.records
+            if "calendar-quarter labels differ" in r.getMessage()]
+    assert len(hits) == 1, caplog.text
+    assert "REPL@2026-08-14" in hits[0]
+    assert "prior 2026-06-29" in hits[0]
+
+
+def test_the_residual_warning_stays_silent_when_there_is_nothing_to_report(caplog):
+    """The other half, and the one that keeps the line worth reading: an ordinary
+    window logs nothing. A warning that fires on every run is one nobody reads,
+    and this fleet has paid for that shape before.
+    """
+    import logging
+    from datetime import date as _date, datetime as _dt
+    mod = _mod()
+    conn = _db()
+    _qevent(conn, "AAA", "2026-08-14")          # no prior at all
+
+    with caplog.at_level(logging.WARNING):
+        mod.snapshot_annual_consensus(
+            conn, _date(2026, 8, 10), RecordingFetcher(),
+            now=_dt(2026, 8, 10, 11, 20, tzinfo=timezone.utc))
+
+    assert not [r for r in caplog.records
+                if "calendar-quarter labels differ" in r.getMessage()], caplog.text
+
+
+def test_qevent_refuses_a_hand_assigned_quarter():
+    """The guard that keeps this file from re-drifting. Nine of eleven `_qevent`
+    calls used to carry a label production would never produce; one rewritten
+    test beside them would drift back on the next round. A refusal is a property,
+    not a convention -- it cannot be forgotten, only deliberately removed.
+    """
+    conn = _db()
+    with pytest.raises(AssertionError, match="derives"):
+        _qevent(conn, "XYZ", "2026-09-01", "2026Q3")
