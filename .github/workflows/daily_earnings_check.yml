@@ -273,6 +273,26 @@ jobs:
           EA_DB_ARTIFACT_NAME: consensus-snapshots
           EA_DB_PATH: consensus_snapshots.db
           EA_DB_VERIFY_TABLE: consensus_snapshot
+          # Codex round 10, C1: the script's mandatory-artifact refusal was
+          # gated on this flag and NOTHING set it, so the guard was inert in
+          # production while its test injected the value by hand.
+          #
+          # ⛑ It must NOT be a literal "true". Measured 2026-09-23: the
+          # consensus-snapshots artifact has total_count = 0 -- it has never
+          # been uploaded, because this branch is unmerged. A literal would
+          # make the first post-merge run exit 1 here, which sets this step's
+          # `outcome` to failure, which skips "Save consensus snapshots side
+          # artifact" below (it is gated on outcome == 'success'), so the
+          # artifact could NEVER be created and the alert would fire twice a
+          # day forever with no manual way out. The guard would become the
+          # outage.
+          #
+          # Same bootstrap shape as vars.EA_DB_BOOTSTRAPPED. An unset repo
+          # variable renders as the empty string, which fails the script's
+          # `= "true"` test and takes the bootstrap exit-0 path. The persist
+          # step below announces the flip until it is set, so the inert window
+          # cannot be forgotten the way the earnings-db one was (~85 days).
+          EA_DB_REQUIRE_ARTIFACT: ${{ vars.EA_CONSENSUS_BOOTSTRAPPED }}
         run: bash scripts/ci_restore_db_artifact.sh
 
       - name: Snapshot pre-print annual consensus (FMP)
@@ -310,6 +330,32 @@ jobs:
           path: consensus_snapshots.db
           retention-days: 90
           if-no-files-found: error
+
+      # ⛑ The bootstrap flip must ANNOUNCE ITSELF. A repo variable a human has
+      # to remember to set is "never set in production" with extra steps --
+      # which is exactly what C1 filed as Critical. The precedent here is an
+      # ~85-day lag: the oldest expired earnings-db artifact is 2026-02-09 and
+      # EA_DB_BOOTSTRAPPED was not set until 2026-05-04. Until the variable is
+      # set, the mandatory-artifact guard above is inert; this line says so on
+      # every successful upload instead of trusting memory.
+      # Recovery from an EARLY flip (set before an artifact exists) is one
+      # command: gh variable delete EA_CONSENSUS_BOOTSTRAPPED.
+      - name: Announce consensus bootstrap until the repo variable is set
+        if: always() && steps.persist_snapshots.outcome == 'success' && vars.EA_CONSENSUS_BOOTSTRAPPED == ''
+        continue-on-error: true
+        timeout-minutes: 2
+        env:
+          SLACK_WEBHOOK_STATUS: ${{ secrets.SLACK_WEBHOOK_STATUS }}
+          SLACK_WEBHOOK_EARNINGS: ${{ secrets.SLACK_WEBHOOK_EARNINGS }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          WEBHOOK="${SLACK_WEBHOOK_STATUS:-$SLACK_WEBHOOK_EARNINGS}"
+          if [ -n "$WEBHOOK" ]; then
+            TEXT=":package: consensus-snapshots is bootstrapped (artifact uploaded). Set repo variable \`EA_CONSENSUS_BOOTSTRAPPED=true\` to arm the mandatory-artifact guard -- until then a vanished artifact restores as a silent fresh start. $RUN_URL"
+            curl -sS -X POST -H 'Content-type: application/json' \
+              --data "$(printf '{"text":%s}' "$(printf '%s' "$TEXT" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')")" \
+              "$WEBHOOK" || true
+          fi
 
       # ⚠ Why these read `steps.snapshot_consensus.outcome` and not `failure()`:
       # continue-on-error turns a failed step's CONCLUSION into success, and

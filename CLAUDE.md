@@ -404,6 +404,15 @@ Optional for Gmail IR-alert scanning: `GMAIL_TOKEN_JSON` + `GMAIL_CLIENT_CREDENT
 
 ## Required repo variables
 
+- `EA_CONSENSUS_BOOTSTRAPPED=true` — **not set yet, and deliberately so.** Arms the
+  mandatory-artifact guard on the `consensus-snapshots` restore step (board #298 Phase A).
+  Set it *after* the first successful upload, never before: the guard makes the restore step
+  exit 1, and the upload step is gated on that step succeeding, so flipping it early deadlocks
+  the lane permanently (measured 2026-09-23: `consensus-snapshots` total_count = 0). Until it
+  is set the restore takes the bootstrap exit-0 path and the upload step posts a one-line
+  reminder to `#status-reports` on every run, so the inert window cannot be forgotten the way
+  `EA_DB_BOOTSTRAPPED`'s was (~85 days: artifacts from 2026-02-09, variable set 2026-05-04).
+  Recovery from an early flip: `gh variable delete EA_CONSENSUS_BOOTSTRAPPED`.
 - `EA_DB_BOOTSTRAPPED=true` (set 2026-05-04). Activates the post-bootstrap fail-loud check on the `earnings-db` artifact restore in all three uploading workflows. Missing artifact = Slack alert + workflow failure rather than a silent fresh-DB run that loses locks/Slack-state/dedup.
 
 ## Local `.env`

@@ -635,3 +635,48 @@ def test_every_uploading_workflow_checks_out_the_branch_ref_not_the_run_sha():
                     "%s: the checkout of %s must not take THIS repo's ref -- a "
                     "branch dispatch would try to resolve that branch there"
                     % (name, w["repository"]))
+
+
+def test_the_consensus_restore_step_ACTUALLY_SETS_the_mandatory_flag():
+    """C1 (Codex round 10). The refusal above is gated on
+    EA_DB_REQUIRE_ARTIFACT, and NOTHING in production set it -- the test beside
+    it injected the value by hand, so the guard existed only inside its own
+    test. `a-check-that-silently-matches-nothing`, shipped inside the fix for
+    that class.
+
+    ⛑ It must NOT be a literal "true", and this asserts the exact expression
+    rather than merely "something is set". Measured 2026-09-23: the
+    consensus-snapshots artifact has total_count = 0 -- never uploaded. A
+    literal would exit 1 on the first post-merge run, which sets the step's
+    `outcome` to failure, which skips the upload step (gated on
+    outcome == 'success'), so the artifact could never come into existence and
+    the alert would fire twice daily forever. The guard would BE the outage.
+
+    The bootstrap variable is unset until an artifact exists, renders as the
+    empty string, fails the script's `= "true"` test, and takes the bootstrap
+    path -- and the upload step announces the flip so the inert window cannot
+    be silently forgotten (earnings-db's equivalent lagged ~85 days).
+    """
+    import yaml
+
+    doc = yaml.safe_load(
+        (REPO / ".github" / "workflows" / "daily_earnings_check.yml"
+         ).read_text(encoding="utf-8"))
+    steps = [s for job in doc["jobs"].values() for s in job.get("steps", [])]
+
+    restore = [s for s in steps if s.get("id") == "restore_snapshots"]
+    assert len(restore) == 1, "expected exactly one consensus restore step"
+    flag = (restore[0].get("env") or {}).get("EA_DB_REQUIRE_ARTIFACT")
+    assert flag == "${{ vars.EA_CONSENSUS_BOOTSTRAPPED }}", (
+        "the consensus restore step must arm the mandatory-artifact guard via "
+        "the bootstrap VARIABLE, not a literal (a literal deadlocks the lane: "
+        "total_count is 0 and the step it would fail is the only thing that "
+        "can create the artifact); got %r" % (flag,))
+
+    # ...and the inert window must announce itself, or this is just the same
+    # "never set in production" defect with an extra human step in front.
+    announce = [s for s in steps
+                if "EA_CONSENSUS_BOOTSTRAPPED == ''" in str(s.get("if", ""))]
+    assert announce, (
+        "no step announces that the bootstrap variable is still unset, so the "
+        "guard can sit inert indefinitely with nothing saying so")
