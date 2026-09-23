@@ -800,3 +800,38 @@ def test_a_per_page_above_the_api_maximum_is_clamped_not_trusted(tmp_path):
     # in miniature. The walk log echoes the EFFECTIVE page size.
     assert "page(s) of 100" in res.stdout, res.stdout
     assert "of 200" not in res.stdout, res.stdout
+
+
+def test_a_COMPLETE_listing_that_ends_exactly_at_the_cap_is_not_refused(tmp_path):
+    """Codex round 11. The first version of the exhaustion guard asked whether
+    the LAST PAGE WAS FULL -- which is true of any listing whose size is an
+    exact multiple of per_page. So a walk that consumed the ENTIRE listing was
+    refused whenever it happened to finish exactly at the cap.
+
+    Reproduced by the reviewer and confirmed here: total_count=4, per_page=2,
+    MAX_PAGES=2 reads pages 1 and 2, has the whole listing in hand, and errored.
+    Projected to reach production around 2028-05-12 at 5,000 artifacts -- the
+    guard written to prevent an outage carrying its own, which is the exact
+    class it was written against.
+
+    When total_count is known, completeness is KNOWN. The full-final-page
+    heuristic only applies in the fallback where no count was available.
+    """
+    live = tmp_path / "live.db"
+    _make_db(live, events=7, actuals=3, watermark=_recent(hours=1))
+    _zip_of(live, tmp_path / "live.zip")
+
+    listing = [_artifact(700, "2026-09-01T00:00:00Z"),
+               _artifact(800, "2026-09-05T00:00:00Z"),
+               _artifact(850, "2026-09-08T00:00:00Z"),
+               _artifact(900, "2026-09-10T00:00:00Z")]
+    env = _install_fake_gh(tmp_path, listing, {"900": tmp_path / "live.zip"})
+    env["EA_DB_ARTIFACT_PAGE"] = "2"
+    env["EA_DB_ARTIFACT_MAX_PAGES"] = "2"     # exactly ceil(4/2): complete
+    work = tmp_path / "work"
+    work.mkdir()
+
+    res = _run(RESTORE, work, env)
+    assert res.returncode == 0, res.stdout + res.stderr
+    assert "selected artifact 900" in res.stdout, res.stdout
+    assert _list_calls(tmp_path) == ["1", "2"], _list_calls(tmp_path)

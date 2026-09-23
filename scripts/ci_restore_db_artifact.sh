@@ -197,13 +197,22 @@ for attempt in $(seq 1 "$TRIES"); do
     page=$((page + 1))
   done
   if [ "$ATTEMPT_OK" -eq 1 ]; then
-    # Reaching the sanity cap with a FULL final page means the listing is
-    # longer than this script will walk, so "newest" cannot be
-    # established. With the cap at ~2 years of growth that is a genuine
-    # anomaly rather than the routine state it used to be, so it fails
-    # instead of quietly selecting from a prefix.
-    if [ "$page" -gt "$WALK_PAGES" ] && [ "${rows:-0}" -ge "$PAGE" ] \
-       && [ "$WALK_PAGES" -ge "$MAX_PAGES" ]; then
+    # TRUNCATED is not the same as "ended on a full page" (Codex r11).
+    # The first version of this check asked whether the LAST PAGE WAS
+    # FULL, which is true of ANY listing whose size is an exact multiple
+    # of PAGE -- so a COMPLETE walk was refused whenever it finished
+    # exactly at the cap. Reproduced: total_count=4, per_page=2,
+    # MAX_PAGES=2 reads both pages, consumes the entire listing, and then
+    # errored. Projected to reach production around 2028-05-12 at 5,000
+    # artifacts: the guard written to prevent an outage carrying its own.
+    #
+    # When total_count is KNOWN, completeness is known -- the walk was cut
+    # short only if more pages were NEEDED than the cap allows. The
+    # full-final-page heuristic is only meaningful in the fallback where
+    # no count was available.
+    if { [ -n "$TOTAL_COUNT" ] && [ "$NEED_PAGES" -gt "$MAX_PAGES" ]; } \
+       || { [ -z "$TOTAL_COUNT" ] && [ "$page" -gt "$WALK_PAGES" ] \
+            && [ "${rows:-0}" -ge "$PAGE" ]; }; then
       echo "ERROR: artifact listing exceeded ${MAX_PAGES} pages of ${PAGE}." >&2
       echo "  total_count=${TOTAL_COUNT:-unknown}. Cannot establish the newest" >&2
       echo "  artifact from a truncated listing; refusing to guess." >&2
