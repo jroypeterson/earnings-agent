@@ -78,7 +78,14 @@ def _install_fake_gh(tmp_path: Path, listing: list[dict], zips: dict[str, Path])
         # API pages; the stub must too, or the pagination test is vacuous.
         "import json, shutil, sys\n"
         "mode = sys.argv[1]\n"
-        "if mode == 'list':\n"
+        # The script asks for total_count in a SEPARATE call, so the row stream
+        # stays positional (NF==5) and its line count stays a page-length
+        # signal. The stub must answer that call too, or production parses a
+        # shape the tests never produce -- the seam class this repo has already
+        # paid for once.
+        "if mode == 'count':\n"
+        "    print(len(json.load(open(sys.argv[2]))['artifacts']))\n"
+        "elif mode == 'list':\n"
         "    arts = json.load(open(sys.argv[2]))['artifacts']\n"
         "    per_page = int(sys.argv[3]) if len(sys.argv) > 3 else 50\n"
         "    page = int(sys.argv[4]) if len(sys.argv) > 4 else 1\n"
@@ -104,6 +111,13 @@ def _install_fake_gh(tmp_path: Path, listing: list[dict], zips: dict[str, Path])
         f'    python "{helper}" zip "{tmp_path / "zips.json"}" "$aid"\n'
         "    ;;\n"
         "  *)\n"
+        # `--jq .total_count` is a SIZING call, not a page of the walk: answer
+        # it and return BEFORE the call log, or every test that counts pages
+        # sees a phantom request.
+        '    if [ "$4" = ".total_count" ]; then\n'
+        f'      python "{helper}" count "{tmp_path / "artifacts.json"}"\n'
+        "      exit 0\n"
+        "    fi\n"
         '    pp=$(printf "%s" "$path" | sed -nE "s/.*per_page=([0-9]+).*/\\1/p")\n'
         '    pg=$(printf "%s" "$path" | sed -nE "s/.*[?&]page=([0-9]+).*/\\1/p")\n'
         '    [ -n "$pp" ] || pp=50\n'
@@ -680,3 +694,109 @@ def test_the_consensus_restore_step_ACTUALLY_SETS_the_mandatory_flag():
     assert announce, (
         "no step announces that the bootstrap variable is still unset, so the "
         "guard can sit inert indefinitely with nothing saying so")
+
+
+def test_the_walk_is_sized_by_total_count_not_by_a_short_page(tmp_path):
+    """H5 (Codex round 10). The walk used to run to a fixed cap of 4 x 50 = 200
+    rows. Measured 2026-09-23 the live earnings-db listing holds 825 artifacts
+    and EXPIRED ROWS NEVER LEAVE IT, so it was truncated on every run -- and the
+    review's remedy, failing whenever the final page is full at the cap, would
+    have failed 100% of runs on all four restoring workflows.
+
+    Sizing the walk by `total_count` removes both the truncation and the
+    guesswork. This pins the saving: with an EXACT page multiple the short-page
+    rule alone cannot know the listing ended, so it must spend one more request
+    to discover an empty page. total_count knows in advance.
+    """
+    live = tmp_path / "live.db"
+    _make_db(live, events=7, actuals=3, watermark=_recent(hours=1))
+    _zip_of(live, tmp_path / "live.zip")
+
+    # 4 artifacts, per_page 2 -> exactly 2 full pages, no short page at all.
+    listing = [_artifact(700, "2026-09-01T00:00:00Z"),
+               _artifact(800, "2026-09-05T00:00:00Z"),
+               _artifact(850, "2026-09-08T00:00:00Z"),
+               _artifact(900, "2026-09-10T00:00:00Z")]
+    env = _install_fake_gh(tmp_path, listing, {"900": tmp_path / "live.zip"})
+    env["EA_DB_ARTIFACT_PAGE"] = "2"
+    work = tmp_path / "work"
+    work.mkdir()
+
+    res = _run(RESTORE, work, env)
+    assert res.returncode == 0, res.stdout + res.stderr
+    assert "selected artifact 900" in res.stdout, res.stdout
+    # ceil(4 / 2) = 2. A short-page-only walk would spend a third request to
+    # find the empty page; this one does not.
+    assert _list_calls(tmp_path) == ["1", "2"], _list_calls(tmp_path)
+
+
+def test_exhausting_the_sanity_cap_FAILS_instead_of_selecting_from_a_prefix(
+        tmp_path):
+    """The other half. Reaching the cap with a FULL final page means the
+    listing is longer than this script will walk, so "newest" cannot be
+    established -- and with the cap now at ~2 years of growth that is a genuine
+    anomaly rather than the routine state it used to be.
+
+    It must FAIL rather than select the newest of a prefix. Selecting would be
+    betting on the API's undocumented ordering, which this script's own header
+    says it deliberately does not do.
+    """
+    live = tmp_path / "live.db"
+    _make_db(live, events=7, actuals=3, watermark=_recent(hours=1))
+    _zip_of(live, tmp_path / "live.zip")
+
+    # ⛑ Page 1 holds only OLDER artifacts and the newest sits on page 2, and a
+    # zip is provided for BOTH. That shape is deliberate: it makes selecting
+    # from the truncated prefix SUCCEED, returning a stale artifact. Without
+    # it the mutation "delete the refusal" still exits non-zero -- because the
+    # prefix's pick has no downloadable zip -- and the test cannot tell the
+    # refusal from an unrelated failure. Verified: this mutation survived the
+    # first version of this test for exactly that reason.
+    listing = [_artifact(700, "2026-09-01T00:00:00Z"),
+               _artifact(800, "2026-09-05T00:00:00Z"),
+               _artifact(850, "2026-09-08T00:00:00Z"),
+               _artifact(900, "2026-09-10T00:00:00Z")]
+    env = _install_fake_gh(tmp_path, listing,
+                           {"800": tmp_path / "live.zip",
+                            "900": tmp_path / "live.zip"})
+    env["EA_DB_ARTIFACT_PAGE"] = "2"
+    env["EA_DB_ARTIFACT_MAX_PAGES"] = "1"        # 2 rows walked, 4 available
+    work = tmp_path / "work"
+    work.mkdir()
+
+    res = _run(RESTORE, work, env)
+    assert res.returncode == 1, res.stdout + res.stderr
+    assert "exceeded 1 pages" in res.stderr, res.stderr
+    assert "refusing to guess" in res.stderr, res.stderr
+    # It must not have picked ANYTHING -- selecting 800 here would be the
+    # stale-artifact restore this whole script exists to prevent.
+    assert "selected artifact" not in res.stdout, res.stdout
+    assert not (work / "earnings_events.db").exists()
+
+
+def test_a_per_page_above_the_api_maximum_is_clamped_not_trusted(tmp_path):
+    """The GitHub API clamps per_page at 100 silently. The walk's stop
+    condition is `rows < PAGE`, so an unclamped PAGE=200 would read the API's
+    100-row page as SHORT and declare a truncated listing COMPLETE after one
+    request -- turning the sizing fix into a new way to select a stale
+    artifact. Live-probed 2026-09-23: per_page=200 returns 100 rows.
+    """
+    live = tmp_path / "live.db"
+    _make_db(live, events=7, actuals=3, watermark=_recent(hours=1))
+    _zip_of(live, tmp_path / "live.zip")
+
+    listing = [_artifact(900, "2026-09-10T00:00:00Z")]
+    env = _install_fake_gh(tmp_path, listing, {"900": tmp_path / "live.zip"})
+    env["EA_DB_ARTIFACT_PAGE"] = "200"
+    work = tmp_path / "work"
+    work.mkdir()
+
+    res = _run(RESTORE, work, env)
+    assert res.returncode == 0, res.stdout + res.stderr
+    assert "clamping to 100" in res.stdout, res.stdout
+    # THE EFFECT, not just the message. Asserting only the log line let a
+    # mutation that deleted `PAGE=100` survive -- the announcement stayed and
+    # the clamp did not happen, which is precisely the always-true-flag shape
+    # in miniature. The walk log echoes the EFFECTIVE page size.
+    assert "page(s) of 100" in res.stdout, res.stdout
+    assert "of 200" not in res.stdout, res.stdout

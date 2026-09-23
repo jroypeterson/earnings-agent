@@ -71,7 +71,20 @@ REPO="${GITHUB_REPOSITORY:-jroypeterson/earnings-agent}"
 NAME="${EA_DB_ARTIFACT_NAME:-earnings-db}"
 DB="${EA_DB_PATH:-earnings_events.db}"
 BRANCH="${EA_DB_ARTIFACT_BRANCH:-main}"
-PAGE="${EA_DB_ARTIFACT_PAGE:-50}"
+PAGE="${EA_DB_ARTIFACT_PAGE:-100}"
+# The GitHub artifacts API CLAMPS per_page at 100 and says nothing about
+# it. That matters here because the walk stops on `rows < PAGE`: with
+# PAGE=200 the API returns 100 rows, 100 < 200 reads as a SHORT page, and
+# a truncated listing is declared COMPLETE after one request. Live-probed
+# 2026-09-23 (per_page=200 -> 100 rows). Clamped rather than refused:
+# clamping restores the comparison's meaning, while exiting here would
+# add a new way for one mistyped variable to stop four workflows.
+if [ "$PAGE" -gt 100 ]; then
+  # `log` is defined further down, so this one echoes directly rather than
+  # silently vanishing as a "command not found" on stderr.
+  echo "[db-restore] per_page ${PAGE} exceeds the API maximum; clamping to 100"
+  PAGE=100
+fi
 TRIES="${EA_DB_RESTORE_TRIES:-3}"
 # The table whose presence proves the file is what it claims to be. Default
 # `events` (the earnings DB, which must also be non-empty). The board #298
@@ -126,14 +139,50 @@ PROJECTION='.artifacts[] | "\(.id) \(.created_at) \(.expired) \(.workflow_run.he
 # no candidates". The second one stops at page 1 in exactly the scenario this
 # fixes -- an all-expired first page -- so it would reproduce the defect while
 # looking like the fix. Filtering is done once, after paging, for the same reason.
-MAX_PAGES="${EA_DB_ARTIFACT_MAX_PAGES:-4}"
+# SIZE THE WALK BY total_count; do not guess a prefix (round 10, H5).
+#
+# The old cap was 4 pages x 50 = 200 rows. Measured 2026-09-23 the
+# earnings-db listing holds 825 artifacts -- EXPIRED ROWS NEVER LEAVE IT,
+# so it only grows (~7/day). The walk was therefore truncated on every
+# run, and the review's remedy ("fail when the final page is full at the
+# cap") would have failed 100% of runs across all four restoring
+# workflows, none of which has continue-on-error on its restore step. A
+# guard that becomes the outage.
+#
+# Sizing by total_count drops the guesswork AND the ordering assumption
+# for a cost already being spent: 825/100 = 9 requests, +1 per ~14 days,
+# against a 1,000/hour GITHUB_TOKEN budget at 28 runs/day. MAX_PAGES is
+# now only a sanity bound (~2 years of growth), so reaching it is a real
+# anomaly and can fail loudly. Selecting from a truncated prefix was
+# considered and rejected: it would contradict this script's own header,
+# which sorts "rather than trusting the API's (undocumented) ordering".
+MAX_PAGES="${EA_DB_ARTIFACT_MAX_PAGES:-50}"
+# A SEPARATE call, not an extra line spliced into the row projection:
+# that stream is consumed positionally (NF==5) and its non-empty lines
+# are counted to detect a short page, so a count line would corrupt both.
+TOTAL_COUNT="$(gh api \
+  "repos/${REPO}/actions/artifacts?name=${NAME}&per_page=1" \
+  --jq '.total_count' 2>/dev/null || true)"
+case "$TOTAL_COUNT" in
+  ''|*[!0-9]*) TOTAL_COUNT='' ;;
+esac
+if [ -n "$TOTAL_COUNT" ]; then
+  NEED_PAGES=$(( (TOTAL_COUNT + PAGE - 1) / PAGE ))
+  [ "$NEED_PAGES" -lt 1 ] && NEED_PAGES=1
+  log "artifact listing: ${TOTAL_COUNT} total, walking ${NEED_PAGES} page(s) of ${PAGE}"
+else
+  NEED_PAGES="$MAX_PAGES"
+  log "artifact listing: total_count unavailable; walking up to ${MAX_PAGES} page(s)"
+fi
+WALK_PAGES="$NEED_PAGES"
+[ "$WALK_PAGES" -gt "$MAX_PAGES" ] && WALK_PAGES="$MAX_PAGES"
 RAW=""
 LIST_OK=0
 for attempt in $(seq 1 "$TRIES"); do
   RAW=""
   ATTEMPT_OK=1
   page=1
-  while [ "$page" -le "$MAX_PAGES" ]; do
+  while [ "$page" -le "$WALK_PAGES" ]; do
     if ! PAGE_RAW="$(gh api \
         "repos/${REPO}/actions/artifacts?name=${NAME}&per_page=${PAGE}&page=${page}" \
         --jq "$PROJECTION" 2>/dev/null)"; then
@@ -148,6 +197,18 @@ for attempt in $(seq 1 "$TRIES"); do
     page=$((page + 1))
   done
   if [ "$ATTEMPT_OK" -eq 1 ]; then
+    # Reaching the sanity cap with a FULL final page means the listing is
+    # longer than this script will walk, so "newest" cannot be
+    # established. With the cap at ~2 years of growth that is a genuine
+    # anomaly rather than the routine state it used to be, so it fails
+    # instead of quietly selecting from a prefix.
+    if [ "$page" -gt "$WALK_PAGES" ] && [ "${rows:-0}" -ge "$PAGE" ] \
+       && [ "$WALK_PAGES" -ge "$MAX_PAGES" ]; then
+      echo "ERROR: artifact listing exceeded ${MAX_PAGES} pages of ${PAGE}." >&2
+      echo "  total_count=${TOTAL_COUNT:-unknown}. Cannot establish the newest" >&2
+      echo "  artifact from a truncated listing; refusing to guess." >&2
+      exit 1
+    fi
     LIST_OK=1
     break
   fi
