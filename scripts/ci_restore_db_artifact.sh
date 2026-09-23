@@ -168,10 +168,28 @@ for attempt in $(seq 1 "$TRIES"); do
   # are counted to detect a short page, so a count line would corrupt both.
   TOTAL_COUNT="$(gh api \
     "repos/${REPO}/actions/artifacts?name=${NAME}&per_page=1" \
-    --jq '.total_count' 2>/dev/null || true)"
+    --jq '.total_count' 2>/dev/null)" || TOTAL_COUNT=''
   case "$TOTAL_COUNT" in
     ''|*[!0-9]*) TOTAL_COUNT='' ;;
   esac
+  # ⛑ A count failure must COST A RETRY, not silently disable the
+  # snapshot invariant below (Codex round 13). With `|| true` a transient
+  # outage on this one call downgraded the whole walk to its unchecked
+  # behaviour and said nothing -- the invariant is gated on having a
+  # count, so losing the count loses the check.
+  #
+  # On the LAST attempt, proceed degraded rather than failing the run:
+  # the listing is frozen for the walk (see the invariant below), so a
+  # walk that reaches a short page IS complete. What is lost is only the
+  # cross-check, and that is worth saying out loud, not worth an outage.
+  if [ -z "$TOTAL_COUNT" ]; then
+    if [ "$attempt" -lt "$TRIES" ]; then
+      log "artifact count unavailable (attempt ${attempt}/${TRIES}); retrying"
+      sleep "$((attempt * 5))"
+      continue
+    fi
+    log "WARNING: artifact count unavailable after ${TRIES} attempt(s); walking to a short page with the snapshot cross-check DISABLED"
+  fi
   if [ -n "$TOTAL_COUNT" ]; then
     NEED_PAGES=$(( (TOTAL_COUNT + PAGE - 1) / PAGE ))
     [ "$NEED_PAGES" -lt 1 ] && NEED_PAGES=1
@@ -200,29 +218,49 @@ for attempt in $(seq 1 "$TRIES"); do
     page=$((page + 1))
   done
   if [ "$ATTEMPT_OK" -eq 1 ]; then
-    # OFFSET PAGINATION IS MUTABLE, and the listing is written by four
-    # workflows. An artifact inserted at the front between page N and
-    # page N+1 shifts every later row down: a row already seen comes back
-    # (harmless on its own) and a row at the tail is NEVER FETCHED -- and
-    # the tail is where the NEWEST artifact sits when ordering is not
-    # newest-first. Reproduced round 12: pages [100,200] then [200,300]
-    # against total_count=4 selected 300 while 900 (2026-09-10, the
-    # newest) was never seen. The duplicate even keeps the candidate
-    # count looking right, which is what hid it.
+    # ---- SNAPSHOT INVARIANT -------------------------------------------
+    # ⛑ Rounds 12 and 13 built, and then rebuilt, a detector for a
+    # MID-WALK LISTING MUTATION. That event cannot happen here. All four
+    # workflows that upload `earnings-db` declare
+    # `concurrency: group: earnings-db-writer`, and each one RESTORES
+    # inside that same serialized job; artifacts cannot be created outside
+    # a run, and expiry never removes rows from the listing. Measured: 4 of
+    # 4 uploaders in the group, 0 job-level overlaps across 159 group runs
+    # since 2026-08-24. The listing is a frozen snapshot for the duration
+    # of the walk, BY CONSTRUCTION. `test_the_earnings_db_writers_are_
+    # SERIALIZED` pins that, because it is the real guarantee.
     #
-    # Dedupe by id, then compare against total_count: fewer UNIQUE rows
-    # than the API says exist means the listing moved under the walk. That
-    # is a failed attempt, not a result -- retry with a fresh count.
-    RAW="$(printf '%s\n' "$RAW" | awk 'NF && !seen[$1]++')"
-    uniq_rows="$(printf '%s\n' "$RAW" | awk 'NF' | wc -l | tr -d ' ')"
-    # Only when the walk was NOT deliberately truncated. A capped walk
-    # legitimately holds fewer rows than total_count, and calling that a
-    # shift would retry three times and then report the wrong cause --
-    # the truncation check below owns that case.
-    if [ -n "$TOTAL_COUNT" ] && [ "$NEED_PAGES" -le "$MAX_PAGES" ] \
-       && [ "$uniq_rows" -lt "$TOTAL_COUNT" ]; then
-      log "listing shifted mid-walk (${uniq_rows} unique of ${TOTAL_COUNT}); re-walking"
-      ATTEMPT_OK=0
+    # So this does not try to be clever about which mutation happened. It
+    # asserts the snapshot held, exactly, and stops if it did not:
+    #   count before == count after == rows collected == unique rows
+    # Modulus-independent, unlike round 12's `unique < total_count`, which
+    # could not fire at all for any listing whose size is not an exact
+    # multiple of per_page -- and production is 826 % 100 = 26.
+    #
+    # It fires only on a broken concurrency group or an operator deleting
+    # artifacts mid-walk. Stopping is right in both: the alternative is a
+    # stale restore, which has already cost 28 days once and 3.6 days once.
+    all_rows="$(printf '%s\n' "$RAW" | awk 'NF' | wc -l | tr -d ' ')"
+    uniq_rows="$(printf '%s\n' "$RAW" | awk 'NF' | sort -u | wc -l | tr -d ' ')"
+    COUNT_AFTER="$(gh api \
+      "repos/${REPO}/actions/artifacts?name=${NAME}&per_page=1" \
+      --jq '.total_count' 2>/dev/null)" || COUNT_AFTER=''
+    case "$COUNT_AFTER" in
+      ''|*[!0-9]*) COUNT_AFTER='' ;;
+    esac
+    if [ -n "$TOTAL_COUNT" ] && [ "$NEED_PAGES" -le "$MAX_PAGES" ]; then
+      if [ "$all_rows" -ne "$uniq_rows" ] \
+         || [ "$all_rows" -ne "$TOTAL_COUNT" ] \
+         || { [ -n "$COUNT_AFTER" ] && [ "$COUNT_AFTER" -ne "$TOTAL_COUNT" ]; }; then
+        echo "ERROR: the artifact listing changed during the walk." >&2
+        echo "  total_count before=${TOTAL_COUNT} after=${COUNT_AFTER:-unknown};" >&2
+        echo "  rows collected=${all_rows}, unique=${uniq_rows}." >&2
+        echo "  The earnings-db writers are serialized by the" >&2
+        echo "  'earnings-db-writer' concurrency group, so this should be" >&2
+        echo "  impossible. Check that group, or an operator deleting" >&2
+        echo "  artifacts. Refusing to select from a listing that moved." >&2
+        exit 1
+      fi
     fi
   fi
   if [ "$ATTEMPT_OK" -eq 1 ]; then

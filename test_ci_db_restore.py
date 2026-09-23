@@ -837,7 +837,12 @@ def test_a_COMPLETE_listing_that_ends_exactly_at_the_cap_is_not_refused(tmp_path
     assert _list_calls(tmp_path) == ["1", "2"], _list_calls(tmp_path)
 
 
-def _install_shifting_gh(tmp_path, pages: dict, total: int):
+def _p(path):
+    """A POSIX path for the bash stub; backslashes fail every `-f` test."""
+    return str(path).replace(chr(92), "/")
+
+
+def _install_shifting_gh(tmp_path, pages: dict, total):
     """A `gh` stub whose pages are fixed CONTENT, not slices of one listing.
 
     `_install_fake_gh` slices a single static list, so it can only model a
@@ -849,11 +854,27 @@ def _install_shifting_gh(tmp_path, pages: dict, total: int):
     for page, rows in pages.items():
         (tmp_path / f"page{page}.txt").write_text(
             "".join(f"{r}\n" for r in rows), encoding="utf-8", newline="\n")
+    totals = list(total) if isinstance(total, (list, tuple)) else [total]
+    (tmp_path / "totals.txt").write_text(
+        "".join("FAIL\n" if v is None else f"{v}\n" for v in totals),
+        encoding="utf-8", newline="\n")
     stub = bindir / "gh"
     stub.write_text(
         "#!/usr/bin/env bash\n"
         'path="$2"\n'
-        f'if [ "${{4:-}}" = ".total_count" ]; then echo {total}; exit 0; fi\n'
+        # `total` may be a SEQUENCE, consumed one value per count call, so a
+        # test can differ the before/after counts or script a transient failure
+        # (None). Without that one fixture trips several terms of the snapshot
+        # invariant at once, and a mutation to any single term survives --
+        # which is exactly what the first mutation run showed.
+        f'if [ "${{4:-}}" = ".total_count" ]; then\n'
+        f'  n=$(cat "{_p(tmp_path)}/n.txt" 2>/dev/null || echo 0); n=$((n+1))\n'
+        f'  printf "%s" "$n" > "{_p(tmp_path)}/n.txt"\n'
+        f'  v=$(sed -n "${{n}}p" "{_p(tmp_path)}/totals.txt")\n'
+        f'  [ -z "$v" ] && v=$(tail -1 "{_p(tmp_path)}/totals.txt")\n'
+        '  if [ "$v" = "FAIL" ]; then exit 1; fi\n'
+        '  echo "$v"; exit 0\n'
+        'fi\n'
         # r-string: a bare "\1" here is chr(1), not a sed backreference, and the
         # stub then reads page"\x01".txt, fails every -f test, and presents as
         # an API outage instead of a broken fixture.
@@ -874,38 +895,180 @@ def _install_shifting_gh(tmp_path, pages: dict, total: int):
     return env
 
 
-def test_a_listing_that_SHIFTS_mid_walk_is_detected_not_silently_truncated(
-        tmp_path):
-    """Codex round 12. OFFSET PAGINATION IS MUTABLE, and four workflows write
-    this listing. An artifact inserted at the front between page N and page N+1
-    shifts every later row down by one: a row already seen comes back, and a
-    row at the TAIL is never fetched.
+def test_the_snapshot_invariant_fires_in_PRODUCTION_SHAPE(tmp_path):
+    """Codex round 13, and the reason rounds 12-13's detector was replaced.
 
-    That is not cosmetic. The tail is exactly where the newest artifact sits
-    whenever the API's order is not newest-first -- and this script's own
-    header says it refuses to assume that order. Reproduced: pages [100,200]
-    then [200,300] against total_count=4 selected artifact 300 while 900
-    (2026-09-10, the newest in the listing) was never seen.
+    Round 12 compared the UNIQUE row count against total_count. That cannot
+    fire for any listing whose size is not an exact multiple of per_page: a
+    front-insertion adds one extra final-page row AND one duplicated boundary
+    row, so the unique count comes out exactly equal to total_count.
+    **Production is 826 % 100 = 26** -- the check was inert on the real
+    listing, and its regression test used 4 % 2 == 0, the one arithmetic shape
+    where it works. I chose the example that made the guard look functional.
 
-    ⛑ The duplicate is what hid it: the candidate count still read "4", so
-    every surface looked healthy. Dedupe by id, then compare the UNIQUE count
-    against total_count -- fewer means the listing moved under the walk.
+    The replacement asserts the snapshot held EXACTLY -- rows collected ==
+    unique rows == count before == count after -- which has no modulus in it.
+
+    This fixture is round 13's own reproduction, residue and all: total_count=3
+    with per_page=2, pages [900,200] then [200,100] after 999 is inserted at
+    the front. Round 12's predicate stayed silent here and selected 900.
     """
     env = _install_shifting_gh(
         tmp_path,
-        {1: ["100 2026-09-01T00:00:00Z false main 1000",
+        {1: ["900 2026-09-03T00:00:00Z false main 9000",
              "200 2026-09-02T00:00:00Z false main 2000"],
-         2: ["200 2026-09-02T00:00:00Z false main 2000",   # <- duplicate
-             "300 2026-09-03T00:00:00Z false main 3000"]},  # <- 900 fell off
-        total=4)
+         2: ["200 2026-09-02T00:00:00Z false main 2000",
+             "100 2026-09-01T00:00:00Z false main 1000"]},
+        total=3)                                   # 3 % 2 = 1: the residue case
     env["EA_DB_ARTIFACT_PAGE"] = "2"
     work = tmp_path / "work"
     work.mkdir()
 
     res = _run(RESTORE, work, env)
-    assert "shifted mid-walk (3 unique of 4)" in res.stdout, res.stdout
-    # It must NOT pick anything: selecting 300 here is the stale-artifact
-    # restore this entire script exists to prevent.
+    assert "listing changed during the walk" in res.stderr, res.stderr + res.stdout
     assert "selected artifact" not in res.stdout, res.stdout
     assert res.returncode == 1, res.stdout + res.stderr
     assert not (work / "earnings_events.db").exists()
+
+
+def test_the_earnings_db_writers_are_SERIALIZED(tmp_path):
+    """⛑ THE REAL GUARANTEE, and until now nothing pinned it.
+
+    Rounds 12 and 13 built and rebuilt a detector for a mid-walk listing
+    mutation. That event cannot happen: every workflow that uploads
+    `earnings-db` declares `concurrency: group: earnings-db-writer` and
+    RESTORES inside that same serialized job, artifacts cannot be created
+    outside a run, and expiry never removes rows from the listing. Measured
+    2026-09-23: 4 of 4 uploaders in the group, 0 job-level overlaps across 159
+    group runs since 2026-08-24.
+
+    So the listing is a frozen snapshot for the duration of the walk BY
+    CONFIGURATION -- which means the configuration is the thing to defend. If
+    a future workflow uploads `earnings-db` outside this group, the snapshot
+    invariant in the script starts firing and nobody will know why. This test
+    fails first, and says why.
+    """
+    import yaml
+
+    wf_dir = REPO / ".github" / "workflows"
+    uploaders = []
+    for path in sorted(wf_dir.glob("*.yml")):
+        doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+        steps = [s for job in doc["jobs"].values() for s in job.get("steps", [])]
+        if any((s.get("with") or {}).get("name") == "earnings-db"
+               for s in steps if "upload-artifact" in str(s.get("uses", ""))):
+            uploaders.append((path.name, doc, steps))
+
+    assert uploaders, "no workflow uploads earnings-db -- has it been renamed?"
+    for name, doc, steps in uploaders:
+        grp = (doc.get("concurrency") or {})
+        assert grp.get("group") == "earnings-db-writer", (
+            f"{name} uploads earnings-db but is not in the earnings-db-writer "
+            f"concurrency group (got {grp.get('group')!r}). Without it the "
+            f"artifact listing can change mid-walk and the restore script's "
+            f"snapshot invariant will start failing runs.")
+        assert grp.get("cancel-in-progress") in (False, None), (
+            f"{name}: cancel-in-progress must not be true -- cancelling a "
+            f"writer mid-upload is exactly the mutation the walk assumes away")
+        assert any("ci_restore_db_artifact.sh" in str(s.get("run", ""))
+                   for s in steps), (
+            f"{name} uploads earnings-db without restoring first, so it can "
+            f"publish a non-cumulative artifact as the newest")
+
+
+# --- one test per TERM of the snapshot invariant -----------------------------
+# The first mutation run showed why: a single fixture tripped several terms at
+# once, so deleting any one of them left the suite green. An OR-condition needs
+# a case that trips exactly one branch, or the other branches are decoration.
+
+def _snapshot_case(tmp_path, pages, total, per_page="2"):
+    env = _install_shifting_gh(tmp_path, pages, total)
+    env["EA_DB_ARTIFACT_PAGE"] = per_page
+    work = tmp_path / "work"
+    work.mkdir()
+    return _run(RESTORE, work, env), work
+
+
+def test_invariant_term_DUPLICATE_row_with_a_matching_count(tmp_path):
+    """Term 1 alone: rows collected != unique rows, while the count agrees.
+
+    4 rows fetched, one a duplicate, against total_count=4. `all_rows` (4)
+    equals `TOTAL_COUNT` (4) and the count does not move, so terms 2 and 3 stay
+    silent -- only the duplicate betrays that the listing moved.
+    """
+    res, work = _snapshot_case(
+        tmp_path,
+        {1: ["900 2026-09-04T00:00:00Z false main 9000",
+             "200 2026-09-02T00:00:00Z false main 2000"],
+         2: ["200 2026-09-02T00:00:00Z false main 2000",
+             "100 2026-09-01T00:00:00Z false main 1000"]},
+        total=4)
+    assert "listing changed during the walk" in res.stderr, res.stderr + res.stdout
+    assert "selected artifact" not in res.stdout, res.stdout
+    assert res.returncode == 1
+
+
+def test_invariant_term_FEWER_rows_than_the_count(tmp_path):
+    """Term 2 alone: every row distinct, but fewer than the API says exist.
+
+    A deletion moves rows UP, so a row is skipped with NO duplicate. Terms 1
+    and 3 are silent; only the count comparison sees it.
+    """
+    res, work = _snapshot_case(
+        tmp_path,
+        {1: ["900 2026-09-04T00:00:00Z false main 9000",
+             "200 2026-09-02T00:00:00Z false main 2000"],
+         2: ["100 2026-09-01T00:00:00Z false main 1000"]},
+        total=4)
+    assert "listing changed during the walk" in res.stderr, res.stderr + res.stdout
+    assert "selected artifact" not in res.stdout, res.stdout
+    assert res.returncode == 1
+
+
+def test_invariant_term_the_COUNT_MOVED_between_before_and_after(tmp_path):
+    """Term 3 alone: the walk is internally perfect -- 4 distinct rows against
+    a before-count of 4 -- but the count is 5 when re-read afterwards.
+
+    Terms 1 and 2 cannot see this: an upload that lands AFTER the last page was
+    fetched leaves the collected rows entirely self-consistent. Only asking the
+    API a second time reveals that the snapshot did not hold.
+    """
+    res, work = _snapshot_case(
+        tmp_path,
+        {1: ["900 2026-09-04T00:00:00Z false main 9000",
+             "200 2026-09-02T00:00:00Z false main 2000"],
+         2: ["300 2026-09-03T00:00:00Z false main 3000",
+             "100 2026-09-01T00:00:00Z false main 1000"]},
+        total=[4, 5])                      # before=4, after=5
+    assert "listing changed during the walk" in res.stderr, res.stderr + res.stdout
+    assert "after=5" in res.stderr, res.stderr
+    assert "selected artifact" not in res.stdout, res.stdout
+    assert res.returncode == 1
+
+
+def test_a_transient_count_failure_COSTS_A_RETRY_and_then_succeeds(tmp_path):
+    """Codex round 13's second finding. The count fetch used `|| true`, so one
+    transient outage on that single call silently disabled the whole snapshot
+    invariant -- which is gated on having a count -- and the walk carried on
+    unchecked with nothing said.
+
+    It now consumes a retry. Here the first count call fails and the second
+    succeeds, so the run completes normally WITH the invariant armed.
+    """
+    live = tmp_path / "live.db"
+    _make_db(live, events=7, actuals=3, watermark=_recent(hours=1))
+    _zip_of(live, tmp_path / "live.zip")
+    env = _install_shifting_gh(
+        tmp_path,
+        {1: ["900 2026-09-04T00:00:00Z false main 9000",
+             "200 2026-09-02T00:00:00Z false main 2000"]},
+        total=[None, 2, 2])                # fail, then 2 before and 2 after
+    env["EA_DB_ARTIFACT_PAGE"] = "2"
+    env["EA_DB_RESTORE_TRIES"] = "2"
+    work = tmp_path / "work"
+    work.mkdir()
+
+    res = _run(RESTORE, work, env)
+    assert "count unavailable (attempt 1/2); retrying" in res.stdout, res.stdout
+    assert "listing changed during the walk" not in res.stderr, res.stderr
+    assert "selected artifact 900" in res.stdout, res.stdout
