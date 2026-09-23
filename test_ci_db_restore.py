@@ -585,33 +585,53 @@ def test_every_uploading_workflow_checks_out_the_branch_ref_not_the_run_sha():
       a future "simplification" to the literal.
 
     Only the SELF checkout is constrained; the Coverage-Manager checkout in each
-    file pins someone else's repository and must not be touched.
+    file pins someone else's repository and must not be touched -- giving it
+    `ref: ${{ github.ref }}` would make a branch dispatch try to resolve THIS
+    repo's branch name inside CM, which does not have it.
+
+    ⛑ **This asserts the EFFECTIVE YAML VALUE, not the file's text** (Codex
+    round 10, C3). The previous version string-matched inside a step's text
+    block, so commenting the line out --
+
+        # ref: ${{ github.ref }}
+
+    -- left BOTH assertions true, because the comment still contains the
+    substring, while `actions/checkout` silently reverted to the run sha. A text
+    pin cannot tell a setting from a note ABOUT a setting; only the parser can.
+    Same defect shape as the `[:900]` character window this test outgrew once
+    already -- a structural property beats a text window, twice over.
     """
-    import re
+    import yaml  # declared in requirements-dev.txt; never importorskip
 
     wf_dir = REPO / ".github" / "workflows"
     for name in UPLOADING_WORKFLOWS:
-        text = (wf_dir / name).read_text(encoding="utf-8")
+        doc = yaml.safe_load((wf_dir / name).read_text(encoding="utf-8"))
+        steps = [s for job in doc["jobs"].values() for s in job.get("steps", [])]
+        checkouts = [s for s in steps
+                     if str(s.get("uses", "")).startswith("actions/checkout@")]
+        assert checkouts, "%s: no checkout step found at all" % name
 
-        # Split into checkout steps; the self checkout is the one with no
-        # `repository:` of its own.
-        blocks = re.split(r"(?m)^\s+uses: actions/checkout@", text)[1:]
-        assert blocks, "%s: no checkout step found at all" % name
-        self_blocks = [b for b in blocks if not re.match(r"(?s).{0,400}?repository:", b)]
-        assert len(self_blocks) == 1, \
-            "%s: expected exactly one self-checkout, found %d" % (name, len(self_blocks))
+        self_checkouts = [s for s in checkouts
+                          if "repository" not in (s.get("with") or {})]
+        assert len(self_checkouts) == 1, (
+            "%s: expected exactly one self-checkout, found %d"
+            % (name, len(self_checkouts)))
 
-        # Take the step's OWN body -- up to the next step boundary -- rather than
-        # a character window. The first draft of this test used `[:900]` and
-        # failed against a correct file, because the explanatory comment above
-        # the `ref:` line pushed it past the window: a fixed-size reader drifting
-        # away from the thing it reads. A structural boundary cannot drift.
-        body = re.split(r"(?m)^\s+- (?:name|uses):", self_blocks[0])[0]
+        with_block = self_checkouts[0].get("with") or {}
+        assert "ref" in with_block, (
+            "%s: the self-checkout has no EFFECTIVE `ref:`, so it defaults to "
+            "github.sha and a re-run of an old run would execute old code "
+            "against the shared artifact" % name)
+        assert with_block["ref"] == "${{ github.ref }}", (
+            "%s: the self-checkout must pin `ref: ${{ github.ref }}` exactly; "
+            "got %r. A literal branch name closes the same hole but removes "
+            "branch dispatch." % (name, with_block["ref"]))
 
-        assert "ref:" in body, \
-            ("%s: the self-checkout has no `ref:`, so it defaults to github.sha and a "
-             "re-run of an old run would execute old code against the shared artifact"
-             % name)
-        assert "ref: ${{ github.ref }}" in body, \
-            ("%s: the self-checkout must pin `ref: ${{ github.ref }}` exactly. A literal "
-             "branch name closes the same hole but removes branch dispatch." % name)
+        # ...and a FOREIGN checkout must not be handed this repo's ref.
+        for s in checkouts:
+            w = s.get("with") or {}
+            if "repository" in w:
+                assert w.get("ref") != "${{ github.ref }}", (
+                    "%s: the checkout of %s must not take THIS repo's ref -- a "
+                    "branch dispatch would try to resolve that branch there"
+                    % (name, w["repository"]))

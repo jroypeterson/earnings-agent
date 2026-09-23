@@ -1,3 +1,7 @@
 # Dev/test dependencies. Install with:  pip install -r requirements-dev.txt
 -r requirements.txt
 pytest>=8.0
+# Workflow-shape tests parse the YAML rather than string-matching it
+# (Codex round 10, C3). NOT an importorskip: a silent skip is the very
+# class those tests exist to catch.
+pyyaml>=6.0
