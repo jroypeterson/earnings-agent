@@ -1255,7 +1255,7 @@ def test_pre_release_snapshot_set_three_outcomes():
 # ---------------------------------------------------------------------------
 
 def _qevent(conn, ticker, event_date, quarter=None, *, hour="bmo", confirmed=1,
-            locked=0, reported=0):
+            locked=0, reported=0, eps_actual=None, rev_actual=None):
     """Insert an event whose `quarter` is DERIVED, exactly as production does.
 
     ⛑ The label is no longer a parameter, and that is the point. Before this,
@@ -1288,9 +1288,10 @@ def _qevent(conn, ticker, event_date, quarter=None, *, hour="bmo", confirmed=1,
     from storage import date_to_quarter
     conn.execute(
         "INSERT INTO events (ticker, event_date, event_hour, date_confirmed, "
-        "reported, tier, quarter, date_locked) VALUES (?,?,?,?,?,1,?,?)",
+        "reported, tier, quarter, date_locked, eps_actual, rev_actual) "
+        "VALUES (?,?,?,?,?,1,?,?,?,?)",
         (ticker, event_date, hour, confirmed, reported,
-         date_to_quarter(event_date), locked))
+         date_to_quarter(event_date), locked, eps_actual, rev_actual))
     conn.commit()
 
 
@@ -1482,33 +1483,118 @@ def test_side_upload_is_gated_on_this_runs_export_not_the_step_outcome():
 # Codex round 9 / Fable: MEASURE the residual's incidence instead of guessing it
 # ---------------------------------------------------------------------------
 
-def test_a_cross_label_strong_prior_that_is_let_through_is_logged(caplog):
-    """The hole is real but its INCIDENCE was unmeasurable: `_select_window`
-    logged only the BLOCKED set, so a ticker let through by the label gap left no
-    trace at all. After a season these lines price the fix with a count rather
-    than a hypothesis.
-
-    It fires only on real occurrences -- a strong prior, past the 45-day arm,
-    inside the long arm's reach, differing labels -- so it can never become an
-    always-true flag that readers learn to skim.
-    """
+def _residual_hits(mod, conn, caplog):
+    """Run the snapshot on the shared 2026-08-10 clock; return residual lines."""
     import logging
     from datetime import date as _date, datetime as _dt
-    mod = _mod()
-    conn = _db()
-    _qevent(conn, "REPL", "2026-06-29", reported=1)
-    _qevent(conn, "REPL", "2026-08-14")
-
     with caplog.at_level(logging.WARNING):
         mod.snapshot_annual_consensus(
             conn, _date(2026, 8, 10), RecordingFetcher(),
             now=_dt(2026, 8, 10, 11, 20, tzinfo=timezone.utc))
-
-    hits = [r.getMessage() for r in caplog.records
+    return [r.getMessage() for r in caplog.records
             if "calendar-quarter labels differ" in r.getMessage()]
+
+
+def test_the_residual_fires_on_a_strong_prior_that_has_NOT_printed(caplog):
+    """The measurement. A prior that is strong, past the 45-day arm and carries
+    NO actuals is the genuine ambiguity: we cannot tell whether it printed, so a
+    snapshot taken after it may be post-print.
+
+    Both fixtures are shapes measured on the live DB on 2026-09-23 (CLSD
+    2026-05-12 -> 09-14 at 125d; SGMO 2026-08-11 -> 11-04 at 85d). **85 days is
+    deliberate**: it is outside the 46-75d window an earlier draft of this fix
+    proposed, and that draft would have discarded 4 of the 9 real cases.
+    """
+    mod = _mod()
+    for label, prior_date, gap in (("CLSD", "2026-04-11", 125),
+                                   ("SGMO", "2026-05-21", 85)):
+        caplog.clear()
+        conn = _db()
+        _qevent(conn, label, prior_date, confirmed=1)   # strong, no actuals
+        _qevent(conn, label, "2026-08-14")
+        hits = _residual_hits(mod, conn, caplog)
+        assert len(hits) == 1, f"{label} ({gap}d): {caplog.text}"
+        assert f"{label}@2026-08-14" in hits[0]
+        assert f"prior {prior_date}" in hits[0]
+
+
+def test_the_residual_reads_the_KV_evidence_path_and_fails_CLOSED(caplog):
+    """⛑ The second evidence path, and the one a mutation proved untested.
+
+    `prior` is built from TWO sources that must feed one rule (round 6): DB rows,
+    and `EVENT_MOVED_LATER_KV` records. The KV path exists precisely because
+    `upsert_event` DELETED the row a move came from -- so there are no actuals to
+    read, and `printed` cannot be derived. It is hard-coded `False`, i.e. FIRES.
+
+    That default was written with nothing exercising it: the mutation "KV path
+    supplies printed=True" SURVIVED the first run of this suite while all 88
+    tests stayed green. A confirmed date moved later after it arrived is exactly
+    the possible-print case this record exists to remember, so `True` would have
+    silently deleted the whole path from the measurement -- the third
+    `a-check-that-silently-matches-nothing` on this branch, inside the fix for
+    the second one.
+
+    The KV payload is built by the REAL producer (`upsert_event` ->
+    `_record_moves_later`), not hand-written, so the shape cannot drift away
+    from what production writes. Only the cross-label state is then applied by
+    hand -- and that is itself a real production dynamic: an unlocked row's
+    label is re-derived by the next sync (`main.py:1243`), which is how a KV
+    record and its row come to disagree.
+    """
+    from storage import upsert_event, kv_get, EVENT_MOVED_LATER_KV
+    import json
+    mod = _mod()
+    conn = _db()
+    # A confirmed, open, unlocked prior 125 days before the upcoming event.
+    _qevent(conn, "MOVD", "2026-04-11", confirmed=1)
+    # The move: same quarter label, later date. upsert_event records the move
+    # in KV and DELETES the old row, so KV is the ONLY surviving evidence.
+    upsert_event(conn, "MOVD", "2026-08-14", "bmo", None,
+                 quarter="2026Q1", tier=1)
+    assert not conn.execute(
+        "SELECT 1 FROM events WHERE ticker='MOVD' AND event_date='2026-04-11'"
+    ).fetchone(), "the DB-row evidence path must be gone, or this tests nothing"
+    moves = json.loads(kv_get(conn, EVENT_MOVED_LATER_KV + "MOVD"))
+    assert [m["from"] for m in moves] == ["2026-04-11"], moves
+    # The re-derive dynamic: the surviving row's label moves to its own date.
+    conn.execute("UPDATE events SET quarter='2026Q2' WHERE ticker='MOVD'")
+    conn.commit()
+
+    hits = _residual_hits(mod, conn, caplog)
     assert len(hits) == 1, caplog.text
-    assert "REPL@2026-08-14" in hits[0]
-    assert "prior 2026-06-29" in hits[0]
+    assert "MOVD@2026-08-14" in hits[0]
+    assert "prior 2026-04-11" in hits[0]
+
+
+def test_the_residual_is_SILENT_when_the_prior_already_printed(caplog):
+    """The half that keeps the line worth reading, and the defect Codex round 10
+    found: without this term the warning fired on ORDINARY consecutive quarters.
+
+    A normal print is ~91 days after its predecessor and ALWAYS carries a
+    different calendar-quarter label, so the common case sat inside the 46-135d
+    frame. Measured over the live DB 2026-09-23: **1,477 firings, of which 1,467
+    were ordinary cadence** -- the fleet's own `a-flag-that-is-always-true`,
+    inside a warning whose own docstring claimed it "can never become" one.
+
+    Both halves of "printed" are covered, because they are different columns:
+    `reported=1`, and actuals present on a row still flagged unreported (the
+    FIVE-class lag, where the numbers are out before the flag flips).
+
+    ⛑ The 85-day case is the SAME GAP as a firing case in the test above. That
+    is the point: the instrument is the print status, not the day count.
+    """
+    mod = _mod()
+    cases = (
+        ("REPL", "2026-06-29", 46, dict(reported=1)),
+        ("LATE", "2026-05-21", 85, dict(reported=0, eps_actual=-0.72)),
+    )
+    for label, prior_date, gap, flags in cases:
+        caplog.clear()
+        conn = _db()
+        _qevent(conn, label, prior_date, confirmed=1, **flags)
+        _qevent(conn, label, "2026-08-14")
+        assert not _residual_hits(mod, conn, caplog), \
+            f"{label} ({gap}d, printed) should be silent: {caplog.text}"
 
 
 def test_the_residual_warning_stays_silent_when_there_is_nothing_to_report(caplog):

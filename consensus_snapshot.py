@@ -278,24 +278,32 @@ def _select_window(conn: sqlite3.Connection, today: date, now: datetime):
         return window, []
     lookback = (today - timedelta(days=WINDOW_DAYS + UNCONFIRMED_EXTRA_DAYS
                                   + MOVED_SAME_QUARTER_MAX_DAYS)).isoformat()
-    # prior[ticker] = [(date, quarter, strong)]; `strong` = confirmed or locked.
-    # Both evidence paths below feed ONE rule, `_same_cycle` (Codex round 6).
-    prior: dict[str, list[tuple[str, Optional[str], bool]]] = {}
+    # prior[ticker] = [(date, quarter, strong, printed)]; `strong` = confirmed
+    # or locked. Both evidence paths below feed ONE rule, `_same_cycle`
+    # (Codex round 6).
+    #
+    # `printed` = this prior event's numbers are OUT (reported, or actuals on
+    # the row). It is read ONLY by the residual measurement below, never by
+    # `_same_cycle` -- no snapshot decision depends on it.
+    prior: dict[str, list[tuple[str, Optional[str], bool, bool]]] = {}
     # Codex round 7: REPORTED rows are prior evidence too, not only open ones
     # -- a same-quarter row that has reported means the print happened, so a
     # later same-quarter row's consensus is post-print. Closed rows are not
     # (a delisted event never printed). A reported row is `strong`.
-    for ticker, d, hour, hour_yf, confirmed, locked, quarter, reported in conn.execute(
+    for (ticker, d, hour, hour_yf, confirmed, locked, quarter, reported,
+         eps_actual, rev_actual) in conn.execute(
         "SELECT ticker, event_date, event_hour, event_hour_yf, date_confirmed, "
-        "date_locked, quarter, reported FROM events WHERE closed_reason IS NULL "
-        "AND event_date >= ? AND event_date <= ?",
+        "date_locked, quarter, reported, eps_actual, rev_actual FROM events "
+        "WHERE closed_reason IS NULL AND event_date >= ? AND event_date <= ?",
         (lookback, today.isoformat()),
     ).fetchall():
         # Codex r8: a REPORTED row blocks regardless of its scheduled cutoff
         # (an early release marked reported before 16:00 ET has printed).
         if reported or now >= pre_release_cutoff(d, hour, hour_yf, confirmed):
             prior.setdefault(ticker, []).append(
-                (d, quarter, bool(confirmed) or bool(locked) or bool(reported)))
+                (d, quarter, bool(confirmed) or bool(locked) or bool(reported),
+                 bool(reported) or eps_actual is not None
+                 or rev_actual is not None))
     # Codex round 3: an unlocked same-quarter row moved LATER is DELETED by
     # upsert_event, taking the evidence above with it; storage records each
     # such move. A move made on/after the old date's 00:00 ET (hour unknown
@@ -322,8 +330,16 @@ def _select_window(conn: sqlite3.Connection, today: date, now: datetime):
             if not m.get("confirmed", True):  # absent flag -> fail closed
                 continue
             if str(m.get("at", "")) >= old_start and _utc_stamp(now) >= old_start:
+                # ⛑ `printed=False`, and it must FAIL CLOSED this way. The row
+                # this move refers to is GONE -- that is the whole reason the
+                # KV record exists -- so there are no actuals to read. A
+                # confirmed date moved later after it arrived is exactly the
+                # possible-print case this evidence path remembers; defaulting
+                # it to True would delete the entire path from the residual
+                # below while leaving it looking healthy. Third instance of
+                # `a-check-that-silently-matches-nothing` on this branch.
                 prior.setdefault(ticker, []).append(
-                    (m["from"], m.get("quarter"), True))
+                    (m["from"], m.get("quarter"), True, False))
     kept, blocked = [], []
     cross_label_kept, cross_label_ghost = [], []
     for ticker, event_date, cutoff in window:
@@ -331,7 +347,7 @@ def _select_window(conn: sqlite3.Connection, today: date, now: datetime):
             "SELECT quarter FROM events WHERE ticker = ? AND event_date = ?",
             (ticker, event_date)).fetchone()
         quarter = row[0] if row else None
-        hits = sorted(p for p, q, strong in prior.get(ticker, ())
+        hits = sorted(p for p, q, strong, _printed in prior.get(ticker, ())
                       if _same_cycle(p, q, strong, event_date, quarter))
         if hits:
             blocked.append((ticker, event_date, hits[-1]))
@@ -345,7 +361,7 @@ def _select_window(conn: sqlite3.Connection, today: date, now: datetime):
             # fix, because a ghost and a silent print with a cross-label
             # successor are indistinguishable on the current columns -- the same
             # identity gap as the residual below.
-            ghosts = [p for p, q, strong in prior.get(ticker, ())
+            ghosts = [p for p, q, strong, _printed in prior.get(ticker, ())
                       if p == hits[-1] and not strong and q and quarter and q != quarter]
             if ghosts:
                 cross_label_ghost.append((ticker, event_date, hits[-1]))
@@ -358,14 +374,31 @@ def _select_window(conn: sqlite3.Connection, today: date, now: datetime):
             # cycle identity, so a report slipping across a quarter boundary is
             # invisible to `_same_cycle`.
             #
-            # This fires on real occurrences only -- never always-true -- so after
-            # one season the CI logs price the fix with a count instead of a
-            # hypothesis. Today the only log here names the BLOCKED set, which
-            # makes the residual's incidence structurally invisible.
+            # ⛑ IT MUST ALSO NOT HAVE PRINTED, and that term is the whole
+            # measurement (Codex round 10, H6). Without it this fired on
+            # ORDINARY consecutive quarters: a normal print is ~91 days after
+            # its predecessor and ALWAYS carries a different label, so the
+            # common case sat inside the 46-135d frame. Measured 2026-09-23
+            # over the live DB -- 1,477 firings, of which 1,467 were ordinary
+            # cadence. `a-flag-that-is-always-true`, in the fleet's own terms.
+            #
+            # The right key was in this comment's own first sentence: "if the
+            # prior already printed, this snapshot is post-print". A prior
+            # carrying actuals DID print -- there is nothing ambiguous left to
+            # measure. The ambiguity is precisely a prior that is strong, past
+            # and UNPRINTED. That is a fact recorded on the row, not a guess
+            # from a day count, and unlike a gap it does not vary by season.
+            # With the term: 9 firings over the same data.
+            #
+            # A day-count narrowing was tried first and was wrong BOTH ways --
+            # a 46-75d window still admitted 22 late filers and discarded 4 of
+            # the 9 real cases, because a late 10-Q followed by an on-time
+            # 10-Q compresses an ordinary pair into the short band.
             ed = date.fromisoformat(event_date)
             near = sorted(
-                p for p, q, strong in prior.get(ticker, ())
-                if strong and p < event_date and q and quarter and q != quarter
+                p for p, q, strong, printed in prior.get(ticker, ())
+                if strong and not printed
+                and p < event_date and q and quarter and q != quarter
                 and date.fromisoformat(p) >= ed - timedelta(days=MOVED_SAME_QUARTER_MAX_DAYS))
             if near:
                 cross_label_kept.append((ticker, event_date, near[-1], quarter))
