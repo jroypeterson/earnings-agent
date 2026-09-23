@@ -11,6 +11,7 @@ nothing here can spend a metered call.
 
 import sqlite3
 import urllib.error
+from types import SimpleNamespace
 from datetime import date, datetime, timezone
 from pathlib import Path
 
@@ -1254,11 +1255,39 @@ def test_pre_release_snapshot_set_three_outcomes():
 # Codex round 6: the surviving-row check uses the same quarter rule
 # ---------------------------------------------------------------------------
 
-def _qevent(conn, ticker, event_date, quarter=None, *, hour="bmo", confirmed=1,
-            locked=0, reported=0, eps_actual=None, rev_actual=None):
-    """Insert an event whose `quarter` is DERIVED, exactly as production does.
+def _qevent(conn, ticker, event_date, quarter=None, *, moved_from=None,
+            hour="bmo", confirmed=1, locked=0, reported=0,
+            eps_actual=None, rev_actual=None):
+    """Insert an event whose `quarter` matches a shape production can produce.
 
-    ⛑ The label is no longer a parameter, and that is the point. Before this,
+    ⛑ **Production has THREE label shapes, not one** (Codex round 10, C4). An
+    earlier version of this helper refused every explicit label on the stated
+    invariant "production always derives the quarter from the date". That
+    invariant is FALSE, and the refusal made a real row unrepresentable:
+
+      1. DERIVE -- `main.py:972`, the sync. `date_to_quarter(event_date)`.
+         This is the default here.
+      2. CARRY, LOCKED -- `main.py:4269`, the operator / EDGAR move. Keeps the
+         OLD label at the NEW date; `set_date_lock` always follows at `:4283`.
+      3. CARRY, UNLOCKED -- `main.py:2797`, the `run_check_results` actuals
+         migration. Keeps the old label at the new date and NEVER locks.
+
+    So `moved_from=` expresses a carry, and `locked` is INDEPENDENT of it --
+    forcing `locked=1` would re-create the same defect through the other door,
+    because shape 3 is unlocked.
+
+    ⚠ **A fourth thing to know: an unlocked carry is TRANSIENT.** `run()`
+    skips a matched row only when `date_locked` (`main.py:1160-1167`), then
+    upserts with the derived label at `:1243`, which `COALESCE(?, quarter)`
+    takes. So shape 3's output survives only until the next sync re-emits that
+    date. That is why the live DB's only two non-derived rows are both locked:
+    the lock is what makes a carry PERSIST, not what produces one. The
+    coupling tests below pin all of this against production.
+
+    A bare `quarter=` override stays refused: an arbitrary label is still a
+    world production cannot produce.
+
+    ⛑ An arbitrary label is not a parameter, and that is the point. Before this,
     every call here hand-assigned one — and a sweep on 2026-09-22 found **9 of
     11 carrying a label `date_to_quarter` would never produce for that date**.
     Mostly harmless (both rows in a fixture shared the same wrong label, as
@@ -1269,9 +1298,10 @@ def _qevent(conn, ticker, event_date, quarter=None, *, hour="bmo", confirmed=1,
     other, both green.
 
     A test that can express a world production cannot produce is not a test of
-    production. Deriving the label makes that whole class unrepresentable, which
-    is why this refuses an override rather than defaulting to one: a default is a
-    suggestion, and the next round writes past it.
+    production. Constraining the label to production's three shapes makes that
+    whole class unrepresentable, which is why this refuses a free-form override
+    rather than defaulting to one: a default is a suggestion, and the next round
+    writes past it.
 
     (The `upsert_event` call sites elsewhere in this file are a separate case and
     are deliberately NOT forced — they are clock-relative because
@@ -1282,16 +1312,18 @@ def _qevent(conn, ticker, event_date, quarter=None, *, hour="bmo", confirmed=1,
     """
     if quarter is not None:
         raise AssertionError(
-            "_qevent derives `quarter` from the date, like production does. "
-            "Passing one lets a fixture describe a world production cannot "
-            "produce, which is the defect this helper exists to prevent.")
+            "_qevent takes the label from the date, or from `moved_from=` for "
+            "a carry. Passing a free-form one lets a fixture describe a world "
+            "production cannot produce, which is the defect this exists to "
+            "prevent. See the three shapes in the docstring.")
     from storage import date_to_quarter
+    label = date_to_quarter(moved_from if moved_from else event_date)
     conn.execute(
         "INSERT INTO events (ticker, event_date, event_hour, date_confirmed, "
         "reported, tier, quarter, date_locked, eps_actual, rev_actual) "
         "VALUES (?,?,?,?,?,1,?,?,?,?)",
         (ticker, event_date, hour, confirmed, reported,
-         date_to_quarter(event_date), locked, eps_actual, rev_actual))
+         label, locked, eps_actual, rev_actual))
     conn.commit()
 
 
@@ -1617,12 +1649,237 @@ def test_the_residual_warning_stays_silent_when_there_is_nothing_to_report(caplo
                 if "calendar-quarter labels differ" in r.getMessage()], caplog.text
 
 
-def test_qevent_refuses_a_hand_assigned_quarter():
+def test_qevent_refuses_a_FREE_FORM_quarter_but_allows_a_carry():
     """The guard that keeps this file from re-drifting. Nine of eleven `_qevent`
     calls used to carry a label production would never produce; one rewritten
     test beside them would drift back on the next round. A refusal is a property,
     not a convention -- it cannot be forgotten, only deliberately removed.
+
+    But the refusal must admit the labels production DOES produce. Blanket-
+    refusing every explicit label made the `main.py:4269` / `:2797` carry
+    unrepresentable, which is the same defect pointed the other way.
     """
+    from storage import date_to_quarter
     conn = _db()
-    with pytest.raises(AssertionError, match="derives"):
+    with pytest.raises(AssertionError, match="free-form"):
         _qevent(conn, "XYZ", "2026-09-01", "2026Q3")
+
+    # A carry is allowed, takes the OLD date's label, and does NOT imply a lock.
+    _qevent(conn, "CARRY", "2026-07-01", moved_from="2026-06-30", locked=0)
+    row = conn.execute("SELECT quarter, date_locked FROM events "
+                       "WHERE ticker='CARRY'").fetchone()
+    assert row[0] == date_to_quarter("2026-06-30") == "2026Q1"
+    assert date_to_quarter("2026-07-01") == "2026Q2", "the pair must cross a label"
+    assert row[1] == 0, "locked must stay independent of the carry"
+
+
+# ---------------------------------------------------------------------------
+# Codex round 10 / C4: COUPLE the helper to production.
+#
+# The finding was not that the helper was wrong in isolation -- it was that
+# NOTHING tied it to production, so `main.py` could stop producing a shape and
+# every fixture here would silently describe a dead world. These four tests
+# drive the real paths and assert the stored label is what `_qevent` writes.
+# ---------------------------------------------------------------------------
+
+def _label_of(db_path, ticker, ev_date):
+    import sqlite3
+    c = sqlite3.connect(db_path)
+    try:
+        r = c.execute("SELECT quarter, date_locked FROM events WHERE ticker=? "
+                      "AND event_date=?", (ticker, ev_date)).fetchone()
+        return (r[0], r[1]) if r else (None, None)
+    finally:
+        c.close()
+
+
+def _results_harness(monkeypatch, tmp_path, *, stored_date, actuals_date,
+                     locked=0):
+    """Drive `run_check_results` over a stored row whose actuals land elsewhere.
+
+    Lifted from `test_run_integration.test_check_results_fmp_corrected_date_
+    moves_calendar_first`, which already exercises this path.
+    """
+    import main
+    import storage as st
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    db_path = str(tmp_path / "c4.db")
+    c = st.init_db(db_path)
+    st.upsert_event(c, ticker="ZZZ", event_date=stored_date, event_hour="amc",
+                    gcal_id="OLD", quarter=st.date_to_quarter(stored_date),
+                    eps_estimate=1.0, reported=False, tier=1, company_name="Z")
+    if locked:
+        st.set_date_lock(c, "ZZZ", stored_date, locked=True)
+    c.close()
+
+    monkeypatch.setattr(main, "init_db", lambda *a, **k: st.init_db(db_path))
+    monkeypatch.setattr(main, "load_coverage", lambda: [
+        SimpleNamespace(ticker="ZZZ", tier=1, company_name="Z", sector=None,
+                        subsector=None, position=None)])
+    monkeypatch.setattr(main, "FINNHUB_API_KEY", "x")
+    monkeypatch.setattr(main, "GOOGLE_CALENDAR_ID", "cal")
+    monkeypatch.setattr(main, "get_finnhub_client", lambda: object())
+    monkeypatch.setattr(main, "get_calendar_service", lambda: object())
+    monkeypatch.setattr(main, "fetch_post_earnings_move",
+                        lambda *a, **k: SimpleNamespace(move_pct=5.0,
+                                                        window_label="1d"))
+    monkeypatch.setattr(main, "SLACK_WEBHOOK_EARNINGS", None)
+    monkeypatch.setattr(main, "SLACK_WEBHOOK_STATUS", None)
+    monkeypatch.setattr(main, "_fetch_earnings_source", lambda *a, **k: [
+        {"symbol": "ZZZ", "date": actuals_date, "hour": "amc",
+         "epsEstimate": 1.77, "epsActual": 2.22,
+         "revenueEstimate": 1.2e9, "revenueActual": 1.285e9}])
+    monkeypatch.setattr(main, "create_calendar_event",
+                        lambda svc, cal, tk, d, h, **k: "NEW")
+    monkeypatch.setattr(main, "delete_calendar_event", lambda svc, cal, gid: None)
+    monkeypatch.setattr(main, "notify_results", lambda conn, rows, when: True)
+    main.run_check_results(target_date=actuals_date, skip_heartbeat=True)
+    return db_path
+
+
+def test_production_CARRIES_a_label_across_an_unlocked_actuals_migration(
+        monkeypatch, tmp_path):
+    """Shape 3, and the one that killed the blanket refusal.
+
+    `run_check_results` takes `quarter_for_event = existing["quarter"]`
+    (`main.py:2797`), writes it at the NEW date (`:2839`) and never locks. So
+    `2026-07-01 / 2026Q1 / locked=0` is a real row -- a boundary slip, which is
+    exactly the shape the residual measurement exists to notice.
+
+    Asserted IMMEDIATELY, before any `run()`: the label is transient and the
+    next sync re-derives it (pinned by the lifetime test below).
+    """
+    from storage import date_to_quarter
+    db = _results_harness(monkeypatch, tmp_path,
+                          stored_date="2026-06-30", actuals_date="2026-07-01")
+    label, locked = _label_of(db, "ZZZ", "2026-07-01")
+    assert date_to_quarter("2026-06-30") != date_to_quarter("2026-07-01")
+    assert label == "2026Q1", "production must CARRY the old label"
+    assert locked in (0, None), "this path must NOT lock"
+
+    # ...and `_qevent` reproduces exactly that row.
+    conn = _db()
+    _qevent(conn, "ZZZ", "2026-07-01", moved_from="2026-06-30", locked=0)
+    assert conn.execute("SELECT quarter FROM events WHERE ticker='ZZZ'"
+                        ).fetchone()[0] == label
+
+
+def test_production_DERIVES_the_label_on_the_sync_path(monkeypatch, tmp_path):
+    """Shape 1, and the coupling Codex named directly: *"changing main.py:972 so
+    production no longer derives the quarter leaves the refusal test green."*
+
+    It is not hypothetical -- the board's own stated direction for this hole is
+    "keep the vendor fiscal period", which changes exactly that line. The day it
+    lands, every derived `_qevent` fixture in this file describes a dead world.
+    This test fails that day instead.
+    """
+    import storage as st
+    from storage import date_to_quarter
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    db = str(tmp_path / "derive.db")
+    st.init_db(db).close()
+    _sync_once(monkeypatch, db, hour="amc")          # a brand-new event
+
+    label, _ = _label_of(db, "ZZZ", "2026-07-01")
+    assert label == date_to_quarter("2026-07-01") == "2026Q2", (
+        "production no longer DERIVES on the sync path; every derived fixture "
+        "in this file is now describing a world production does not produce")
+
+    conn = _db()
+    _qevent(conn, "ZZZ", "2026-07-01")               # helper default = derive
+    assert conn.execute("SELECT quarter FROM events WHERE ticker='ZZZ'"
+                        ).fetchone()[0] == label
+
+
+def test_production_CARRIES_a_label_across_a_LOCKED_move(monkeypatch):
+    """Shape 2: `_apply_edgar_auto_correction` keeps the old label at the new
+    date (`main.py:4269`) and locks it (`:4283`). This is the row the blanket
+    refusal made unrepresentable, and the one the live DB actually holds."""
+    import main
+    from storage import date_to_quarter, upsert_event, find_existing_event
+    conn = _db()
+    upsert_event(conn, "EDG", "2026-06-30", "amc", "OLD",
+                 quarter=date_to_quarter("2026-06-30"), eps_estimate=1.0,
+                 reported=False, tier=1, company_name="Edge")
+    monkeypatch.setattr(main, "fetch_yfinance_hour_for_date", lambda *a, **k: None)
+    monkeypatch.setattr(main, "fetch_yfinance_call_for_date", lambda *a, **k: None)
+    monkeypatch.setattr(main, "create_calendar_event", lambda *a, **k: "NEW")
+    monkeypatch.setattr(main, "delete_calendar_event", lambda *a, **k: None)
+
+    assert main._apply_edgar_auto_correction(
+        conn, object(), "EDG", "2026-06-30", "2026-07-01") is True
+
+    moved = find_existing_event(conn, "EDG", "2026-07-01")
+    assert moved["quarter"] == "2026Q1", "the OLD label must be carried"
+    assert date_to_quarter("2026-07-01") == "2026Q2", "the pair must cross"
+    assert moved["date_locked"] is True, "this path always locks"
+
+    # `_qevent` reproduces it, lock stated explicitly rather than implied.
+    c2 = _db()
+    _qevent(c2, "EDG", "2026-07-01", moved_from="2026-06-30", locked=1)
+    assert c2.execute("SELECT quarter, date_locked FROM events WHERE ticker='EDG'"
+                      ).fetchone() == ("2026Q1", 1)
+
+
+def _sync_once(monkeypatch, db_path, *, hour):
+    """One `run()` over a single re-emitted ZZZ@2026-07-01 at `hour`."""
+    import main
+    import storage as st
+    monkeypatch.setattr(main, "init_db", lambda *a, **k: st.init_db(db_path))
+    monkeypatch.setattr(main, "load_coverage", lambda: [
+        SimpleNamespace(ticker="ZZZ", tier=1, company_name="Z", sector=None,
+                        subsector=None, position=None)])
+    monkeypatch.setattr(main, "FINNHUB_API_KEY", "x")
+    monkeypatch.setattr(main, "GOOGLE_CALENDAR_ID", "cal")
+    monkeypatch.setattr(main, "get_finnhub_client", lambda: object())
+    monkeypatch.setattr(main, "get_calendar_service", lambda: object())
+    monkeypatch.setattr(main, "SLACK_WEBHOOK_EARNINGS", None)
+    monkeypatch.setattr(main, "SLACK_WEBHOOK_STATUS", None)
+    monkeypatch.setattr(main, "fetch_yfinance_hour_for_date", lambda *a, **k: None)
+    monkeypatch.setattr(main, "sync_ticktick_tasks", lambda *a, **k: {})
+    monkeypatch.setattr(main, "reconcile_ticktick_tasks", lambda *a, **k: {})
+    monkeypatch.setattr(main, "create_calendar_event", lambda *a, **k: "NEW")
+    monkeypatch.setattr(main, "delete_calendar_event", lambda *a, **k: None)
+    monkeypatch.setattr(main, "_fetch_earnings_source", lambda *a, **k: [
+        {"symbol": "ZZZ", "date": "2026-07-01", "hour": hour,
+         "epsEstimate": 1.5}])
+    main.run(dry_run=True, skip_heartbeat=True)
+
+
+def test_the_LIFETIME_of_an_unlocked_carry_is_the_next_row_UPDATE(
+        monkeypatch, tmp_path):
+    """⛑ The reviewer said "an unlocked carry lasts one sync". Exercising it
+    showed that is imprecise, and the precision matters.
+
+    `run()` only reaches the upsert when something about the row CHANGED. On an
+    exact date+hour match it takes the unchanged branch ("1 unchanged") and
+    never writes, so an unlocked carry survives indefinitely across any number
+    of syncs. It is re-derived on the first sync that actually UPDATES the row
+    (`main.py:1243`, whose `COALESCE(?, quarter)` takes the non-null derived
+    label) -- here, a changed hour.
+
+    So the live DB's two non-derived rows being locked is NOT evidence that
+    locking is what preserves a carry: an untouched unlocked row keeps one too.
+
+    Measured directly: same row, same date; hour unchanged -> 2026Q1 survives;
+    hour changed -> 2026Q2.
+    """
+    import storage as st
+    for tag, hour, expected in (("nothing changed", "amc", "2026Q1"),
+                                ("hour changed", "bmo", "2026Q2")):
+        d = tmp_path / tag.replace(" ", "_")
+        d.mkdir(parents=True, exist_ok=True)
+        db = str(d / "lt.db")
+        c = st.init_db(db)
+        # An unlocked, unreported carry: 07-01 wearing the 06-30 label.
+        st.upsert_event(c, ticker="ZZZ", event_date="2026-07-01",
+                        event_hour="amc", gcal_id="G", quarter="2026Q1",
+                        eps_estimate=1.0, reported=False, tier=1,
+                        company_name="Z")
+        c.close()
+        assert _label_of(db, "ZZZ", "2026-07-01")[0] == "2026Q1"
+
+        _sync_once(monkeypatch, db, hour=hour)
+
+        after, _ = _label_of(db, "ZZZ", "2026-07-01")
+        assert after == expected, f"{tag}: expected {expected}, got {after}"
