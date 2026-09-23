@@ -157,28 +157,31 @@ PROJECTION='.artifacts[] | "\(.id) \(.created_at) \(.expired) \(.workflow_run.he
 # considered and rejected: it would contradict this script's own header,
 # which sorts "rather than trusting the API's (undocumented) ordering".
 MAX_PAGES="${EA_DB_ARTIFACT_MAX_PAGES:-50}"
-# A SEPARATE call, not an extra line spliced into the row projection:
-# that stream is consumed positionally (NF==5) and its non-empty lines
-# are counted to detect a short page, so a count line would corrupt both.
-TOTAL_COUNT="$(gh api \
-  "repos/${REPO}/actions/artifacts?name=${NAME}&per_page=1" \
-  --jq '.total_count' 2>/dev/null || true)"
-case "$TOTAL_COUNT" in
-  ''|*[!0-9]*) TOTAL_COUNT='' ;;
-esac
-if [ -n "$TOTAL_COUNT" ]; then
-  NEED_PAGES=$(( (TOTAL_COUNT + PAGE - 1) / PAGE ))
-  [ "$NEED_PAGES" -lt 1 ] && NEED_PAGES=1
-  log "artifact listing: ${TOTAL_COUNT} total, walking ${NEED_PAGES} page(s) of ${PAGE}"
-else
-  NEED_PAGES="$MAX_PAGES"
-  log "artifact listing: total_count unavailable; walking up to ${MAX_PAGES} page(s)"
-fi
-WALK_PAGES="$NEED_PAGES"
-[ "$WALK_PAGES" -gt "$MAX_PAGES" ] && WALK_PAGES="$MAX_PAGES"
 RAW=""
 LIST_OK=0
 for attempt in $(seq 1 "$TRIES"); do
+  # Refetched EVERY attempt (Codex round 12). Read once, a retry would
+  # size and validate its walk against a snapshot of the world taken
+  # before the failure it is retrying.
+  # A SEPARATE call, not an extra line spliced into the row projection:
+  # that stream is consumed positionally (NF==5) and its non-empty lines
+  # are counted to detect a short page, so a count line would corrupt both.
+  TOTAL_COUNT="$(gh api \
+    "repos/${REPO}/actions/artifacts?name=${NAME}&per_page=1" \
+    --jq '.total_count' 2>/dev/null || true)"
+  case "$TOTAL_COUNT" in
+    ''|*[!0-9]*) TOTAL_COUNT='' ;;
+  esac
+  if [ -n "$TOTAL_COUNT" ]; then
+    NEED_PAGES=$(( (TOTAL_COUNT + PAGE - 1) / PAGE ))
+    [ "$NEED_PAGES" -lt 1 ] && NEED_PAGES=1
+    log "artifact listing: ${TOTAL_COUNT} total, walking ${NEED_PAGES} page(s) of ${PAGE}"
+  else
+    NEED_PAGES="$MAX_PAGES"
+    log "artifact listing: total_count unavailable; walking up to ${MAX_PAGES} page(s)"
+  fi
+  WALK_PAGES="$NEED_PAGES"
+  [ "$WALK_PAGES" -gt "$MAX_PAGES" ] && WALK_PAGES="$MAX_PAGES"
   RAW=""
   ATTEMPT_OK=1
   page=1
@@ -196,6 +199,32 @@ for attempt in $(seq 1 "$TRIES"); do
     [ "$rows" -lt "$PAGE" ] && break
     page=$((page + 1))
   done
+  if [ "$ATTEMPT_OK" -eq 1 ]; then
+    # OFFSET PAGINATION IS MUTABLE, and the listing is written by four
+    # workflows. An artifact inserted at the front between page N and
+    # page N+1 shifts every later row down: a row already seen comes back
+    # (harmless on its own) and a row at the tail is NEVER FETCHED -- and
+    # the tail is where the NEWEST artifact sits when ordering is not
+    # newest-first. Reproduced round 12: pages [100,200] then [200,300]
+    # against total_count=4 selected 300 while 900 (2026-09-10, the
+    # newest) was never seen. The duplicate even keeps the candidate
+    # count looking right, which is what hid it.
+    #
+    # Dedupe by id, then compare against total_count: fewer UNIQUE rows
+    # than the API says exist means the listing moved under the walk. That
+    # is a failed attempt, not a result -- retry with a fresh count.
+    RAW="$(printf '%s\n' "$RAW" | awk 'NF && !seen[$1]++')"
+    uniq_rows="$(printf '%s\n' "$RAW" | awk 'NF' | wc -l | tr -d ' ')"
+    # Only when the walk was NOT deliberately truncated. A capped walk
+    # legitimately holds fewer rows than total_count, and calling that a
+    # shift would retry three times and then report the wrong cause --
+    # the truncation check below owns that case.
+    if [ -n "$TOTAL_COUNT" ] && [ "$NEED_PAGES" -le "$MAX_PAGES" ] \
+       && [ "$uniq_rows" -lt "$TOTAL_COUNT" ]; then
+      log "listing shifted mid-walk (${uniq_rows} unique of ${TOTAL_COUNT}); re-walking"
+      ATTEMPT_OK=0
+    fi
+  fi
   if [ "$ATTEMPT_OK" -eq 1 ]; then
     # TRUNCATED is not the same as "ended on a full page" (Codex r11).
     # The first version of this check asked whether the LAST PAGE WAS

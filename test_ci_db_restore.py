@@ -835,3 +835,77 @@ def test_a_COMPLETE_listing_that_ends_exactly_at_the_cap_is_not_refused(tmp_path
     assert res.returncode == 0, res.stdout + res.stderr
     assert "selected artifact 900" in res.stdout, res.stdout
     assert _list_calls(tmp_path) == ["1", "2"], _list_calls(tmp_path)
+
+
+def _install_shifting_gh(tmp_path, pages: dict, total: int):
+    """A `gh` stub whose pages are fixed CONTENT, not slices of one listing.
+
+    `_install_fake_gh` slices a single static list, so it can only model a
+    listing that holds still. Offset pagination against a listing four
+    workflows write to does not hold still, and that is the defect under test.
+    """
+    bindir = tmp_path / "bin"
+    bindir.mkdir(exist_ok=True)
+    for page, rows in pages.items():
+        (tmp_path / f"page{page}.txt").write_text(
+            "".join(f"{r}\n" for r in rows), encoding="utf-8", newline="\n")
+    stub = bindir / "gh"
+    stub.write_text(
+        "#!/usr/bin/env bash\n"
+        'path="$2"\n'
+        f'if [ "${{4:-}}" = ".total_count" ]; then echo {total}; exit 0; fi\n'
+        # r-string: a bare "\1" here is chr(1), not a sed backreference, and the
+        # stub then reads page"\x01".txt, fails every -f test, and presents as
+        # an API outage instead of a broken fixture.
+        r'pg=$(printf "%s" "$path" | sed -nE "s/.*[?&]page=([0-9]+).*/\1/p")' "\n"
+        '[ -n "$pg" ] || pg=1\n'
+        # Forward slashes: BASH consumes this path, not Windows python, so a
+        # backslashed one silently fails every `-f` test and the stub then
+        # looks like an API outage rather than a stub bug.
+        f'f="{str(tmp_path).replace(chr(92), "/")}/page${{pg}}.txt"\n'
+        'if [ -f "$f" ]; then cat "$f"; else exit 1; fi\n',
+        encoding="utf-8", newline="\n")
+    stub.chmod(0o755)
+    env = dict(os.environ)
+    env["PATH"] = str(bindir) + os.pathsep + env["PATH"]
+    env["GITHUB_REPOSITORY"] = "owner/repo"
+    env["EA_DB_RESTORE_TRIES"] = "2"
+    env.pop("GITHUB_OUTPUT", None)
+    return env
+
+
+def test_a_listing_that_SHIFTS_mid_walk_is_detected_not_silently_truncated(
+        tmp_path):
+    """Codex round 12. OFFSET PAGINATION IS MUTABLE, and four workflows write
+    this listing. An artifact inserted at the front between page N and page N+1
+    shifts every later row down by one: a row already seen comes back, and a
+    row at the TAIL is never fetched.
+
+    That is not cosmetic. The tail is exactly where the newest artifact sits
+    whenever the API's order is not newest-first -- and this script's own
+    header says it refuses to assume that order. Reproduced: pages [100,200]
+    then [200,300] against total_count=4 selected artifact 300 while 900
+    (2026-09-10, the newest in the listing) was never seen.
+
+    ⛑ The duplicate is what hid it: the candidate count still read "4", so
+    every surface looked healthy. Dedupe by id, then compare the UNIQUE count
+    against total_count -- fewer means the listing moved under the walk.
+    """
+    env = _install_shifting_gh(
+        tmp_path,
+        {1: ["100 2026-09-01T00:00:00Z false main 1000",
+             "200 2026-09-02T00:00:00Z false main 2000"],
+         2: ["200 2026-09-02T00:00:00Z false main 2000",   # <- duplicate
+             "300 2026-09-03T00:00:00Z false main 3000"]},  # <- 900 fell off
+        total=4)
+    env["EA_DB_ARTIFACT_PAGE"] = "2"
+    work = tmp_path / "work"
+    work.mkdir()
+
+    res = _run(RESTORE, work, env)
+    assert "shifted mid-walk (3 unique of 4)" in res.stdout, res.stdout
+    # It must NOT pick anything: selecting 300 here is the stale-artifact
+    # restore this entire script exists to prevent.
+    assert "selected artifact" not in res.stdout, res.stdout
+    assert res.returncode == 1, res.stdout + res.stderr
+    assert not (work / "earnings_events.db").exists()
