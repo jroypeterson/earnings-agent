@@ -113,11 +113,41 @@ fi
 # Field order is fixed here and consumed positionally below: id created expired branch run.
 PROJECTION='.artifacts[] | "\(.id) \(.created_at) \(.expired) \(.workflow_run.head_branch) \(.workflow_run.id)"'
 
+# PAGINATION. The repository artifacts endpoint is paged, and the filter below
+# (unexpired AND on BRANCH) runs AFTER the fetch -- so a page consisting entirely
+# of expired or other-branch rows yields zero candidates while the artifact we
+# want sits on the next page. One request could therefore miss the newest
+# artifact entirely, which is precisely what the comment above claims cannot
+# happen ("deterministic ... nothing to select wrongly"). That claim was true of
+# the selection LOGIC and false of its INPUT.
+#
+# ⛑ The stop condition is the whole subtlety: it must be "the RAW page came back
+# shorter than per_page" (i.e. the API has no more rows), NOT "this page yielded
+# no candidates". The second one stops at page 1 in exactly the scenario this
+# fixes -- an all-expired first page -- so it would reproduce the defect while
+# looking like the fix. Filtering is done once, after paging, for the same reason.
+MAX_PAGES="${EA_DB_ARTIFACT_MAX_PAGES:-4}"
 RAW=""
 LIST_OK=0
 for attempt in $(seq 1 "$TRIES"); do
-  if RAW="$(gh api "repos/${REPO}/actions/artifacts?name=${NAME}&per_page=${PAGE}" \
-      --jq "$PROJECTION" 2>/dev/null)"; then
+  RAW=""
+  ATTEMPT_OK=1
+  page=1
+  while [ "$page" -le "$MAX_PAGES" ]; do
+    if ! PAGE_RAW="$(gh api \
+        "repos/${REPO}/actions/artifacts?name=${NAME}&per_page=${PAGE}&page=${page}" \
+        --jq "$PROJECTION" 2>/dev/null)"; then
+      ATTEMPT_OK=0
+      break
+    fi
+    [ -n "$PAGE_RAW" ] && RAW="${RAW}${RAW:+$'\n'}${PAGE_RAW}"
+    # A short (or empty) RAW page means the API has nothing further. Count the
+    # raw rows, never the surviving candidates.
+    rows="$(printf '%s\n' "$PAGE_RAW" | awk 'NF' | wc -l | tr -d ' ')"
+    [ "$rows" -lt "$PAGE" ] && break
+    page=$((page + 1))
+  done
+  if [ "$ATTEMPT_OK" -eq 1 ]; then
     LIST_OK=1
     break
   fi
@@ -145,6 +175,27 @@ if [ "$LIST_OK" -ne 1 ]; then
 fi
 
 if [ -z "$LISTING" ]; then
+  # "The listing was empty" and "the restore succeeded" must not be the same exit
+  # code for a caller whose artifact is CUMULATIVE. For the main earnings-db the
+  # abort-if-missing step owns this case (EA_DB_BOOTSTRAPPED), so exit 0 is right.
+  # The consensus-snapshots side artifact had no such owner: an empty successful
+  # listing produced no file, no merge, an export of only the current DB's table,
+  # and an upload that became the newest side artifact -- silently resetting
+  # cumulative history. Every alert predicate in the workflow reads
+  # `steps.*.outcome`, which was `success`, so none of them could fire.
+  #
+  # One mechanism, not two: a non-zero exit here is sufficient, because the
+  # persist step already gates on `steps.restore_snapshots.outcome == 'success'`
+  # and both alert steps key off the same outcome. Do NOT add a second refusal in
+  # the yml to match.
+  if [ "${EA_DB_REQUIRE_ARTIFACT:-}" = "true" ]; then
+    echo "[db-restore] no unexpired '${NAME}' artifact on ${BRANCH}, and" >&2
+    echo "  EA_DB_REQUIRE_ARTIFACT=true declares this artifact MANDATORY." >&2
+    echo "  Refusing to continue: for a cumulative artifact, 'nothing to restore'" >&2
+    echo "  is indistinguishable from 'the history was lost' and must not pass as" >&2
+    echo "  a successful restore." >&2
+    exit 1
+  fi
   log "no unexpired '${NAME}' artifact on ${BRANCH} - treating as bootstrap."
   log "the abort-if-missing step owns this case; not writing ${DB}."
   exit 0

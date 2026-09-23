@@ -41,6 +41,21 @@ jobs:
     steps:
       - name: Checkout earnings-agent
         uses: actions/checkout@v5
+        with:
+          # Pin the checkout to the BRANCH REF, not the default (github.sha).
+          # A GitHub re-run of an old workflow run reuses that run's sha, so the
+          # default checks out OLD CODE, which then writes the shared earnings-db
+          # artifact and uploads it with a NEWEST created_at -- the rollback guard
+          # passes it because accumulated actuals are unchanged, and the next run
+          # restores a database written by code that predates the current schema.
+          # An explicit ref takes that branch's tip at checkout time instead.
+          #
+          # `github.ref`, deliberately NOT a literal `main`: these workflows are
+          # schedule + workflow_dispatch, so on every normal trigger this is
+          # already main's tip and the change is a no-op -- but pinning the
+          # literal would silently stop a branch dispatch from testing its own
+          # branch. Same cost, one fewer path removed.
+          ref: ${{ github.ref }}
 
       - name: Checkout Coverage Manager exports
         uses: actions/checkout@v5

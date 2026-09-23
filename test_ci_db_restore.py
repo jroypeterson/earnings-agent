@@ -72,10 +72,17 @@ def _install_fake_gh(tmp_path: Path, listing: list[dict], zips: dict[str, Path])
     # do either. No jq dependency, so nothing here can silently skip.
     helper = tmp_path / "gh_stub.py"
     helper.write_text(
+        # The list mode SLICES by page. A stub that ignores `page=` cannot prove
+        # page-2 selection -- every page replays page 1, so a paginating script
+        # and a single-request script are indistinguishable against it. The real
+        # API pages; the stub must too, or the pagination test is vacuous.
         "import json, shutil, sys\n"
         "mode = sys.argv[1]\n"
         "if mode == 'list':\n"
-        "    for a in json.load(open(sys.argv[2]))['artifacts']:\n"
+        "    arts = json.load(open(sys.argv[2]))['artifacts']\n"
+        "    per_page = int(sys.argv[3]) if len(sys.argv) > 3 else 50\n"
+        "    page = int(sys.argv[4]) if len(sys.argv) > 4 else 1\n"
+        "    for a in arts[(page - 1) * per_page: page * per_page]:\n"
         "        print(a['id'], a['created_at'], str(a['expired']).lower(),\n"
         "              a['workflow_run']['head_branch'], a['workflow_run']['id'])\n"
         "else:\n"
@@ -97,7 +104,11 @@ def _install_fake_gh(tmp_path: Path, listing: list[dict], zips: dict[str, Path])
         f'    python "{helper}" zip "{tmp_path / "zips.json"}" "$aid"\n'
         "    ;;\n"
         "  *)\n"
-        f'    python "{helper}" list "{tmp_path / "artifacts.json"}"\n'
+        '    pp=$(printf "%s" "$path" | sed -nE "s/.*per_page=([0-9]+).*/\\1/p")\n'
+        '    pg=$(printf "%s" "$path" | sed -nE "s/.*[?&]page=([0-9]+).*/\\1/p")\n'
+        '    [ -n "$pp" ] || pp=50\n'
+        '    [ -n "$pg" ] || pg=1\n'
+        f'    python "{helper}" list "{tmp_path / "artifacts.json"}" "$pp" "$pg"\n'
         "    ;;\n"
         "esac\n",
         encoding="utf-8",
@@ -426,3 +437,155 @@ def test_a_side_artifact_restores_with_its_own_verify_table(tmp_path):
     got = sqlite3.connect(work / "consensus_snapshots.db").execute(
         "SELECT COUNT(*) FROM consensus_snapshot").fetchone()[0]
     assert got == 1
+
+
+def test_the_newest_artifact_is_found_when_page_one_holds_only_expired_rows(tmp_path):
+    """H3 (Codex round 9, Fable-corrected). The listing is PAGED, and the
+    unexpired/branch filter runs AFTER the fetch -- so a page consisting entirely
+    of expired rows yields zero candidates while the artifact we want sits on the
+    next page. One request would miss it and report "treating as bootstrap".
+
+    The fixture is deliberately page-1-all-expired. A fixture with candidates on
+    page 1 passes against the single-request script too and proves nothing, which
+    is the shape this whole finding is about.
+    """
+    live = tmp_path / "live.db"
+    _make_db(live, events=42, actuals=30, watermark=_recent(hours=1))
+    _zip_of(live, tmp_path / "live.zip")
+
+    # per_page is forced to 2 so the fixture stays small and the page boundary is
+    # explicit rather than incidental.
+    listing = [
+        _artifact(101, "2026-09-01T00:00:00Z", expired=True),
+        _artifact(102, "2026-09-02T00:00:00Z", expired=True),
+        _artifact(303, "2026-09-03T00:00:00Z"),          # page 2, the only candidate
+    ]
+    env = _install_fake_gh(tmp_path, listing, {"303": tmp_path / "live.zip"})
+    env["EA_DB_ARTIFACT_PAGE"] = "2"
+    work = tmp_path / "work"
+    work.mkdir()
+
+    res = _run(RESTORE, work, env)
+    assert res.returncode == 0, res.stdout + res.stderr
+    assert "selected artifact 303" in res.stdout, res.stdout
+    con = sqlite3.connect(work / "earnings_events.db")
+    assert con.execute("SELECT COUNT(*) FROM events").fetchone()[0] == 42
+
+
+def test_paging_stops_on_a_short_page_not_on_an_empty_candidate_set(tmp_path):
+    """The stop condition is the subtlety. "Stop when a page yields no
+    candidates" stops at page 1 in the test above -- reproducing the defect while
+    looking like the fix. This pins the correct condition from the other side: a
+    page SHORTER than per_page ends the walk, so a complete listing costs exactly
+    one extra request and never loops to the cap.
+    """
+    live = tmp_path / "live.db"
+    _make_db(live, events=7, actuals=3, watermark=_recent(hours=1))
+    _zip_of(live, tmp_path / "live.zip")
+
+    listing = [_artifact(900, "2026-09-10T00:00:00Z")]      # 1 row, per_page 2 -> short
+    env = _install_fake_gh(tmp_path, listing, {"900": tmp_path / "live.zip"})
+    env["EA_DB_ARTIFACT_PAGE"] = "2"
+    work = tmp_path / "work"
+    work.mkdir()
+
+    res = _run(RESTORE, work, env)
+    assert res.returncode == 0, res.stdout + res.stderr
+    assert "selected artifact 900" in res.stdout, res.stdout
+
+
+def test_a_mandatory_artifact_refuses_an_empty_listing(tmp_path):
+    """H2. For a CUMULATIVE artifact, "nothing to restore" and "the history was
+    lost" are the same observation, and exit 0 lets the caller export a
+    non-cumulative file and upload it as the newest -- silently resetting the
+    history. Every alert predicate in the workflow reads steps.*.outcome, which
+    was `success`, so none could fire.
+    """
+    env = _install_fake_gh(tmp_path, [], {})
+    env["EA_DB_REQUIRE_ARTIFACT"] = "true"
+    work = tmp_path / "work"
+    work.mkdir()
+
+    res = _run(RESTORE, work, env)
+    assert res.returncode == 1, res.stdout + res.stderr
+    assert "MANDATORY" in res.stderr, res.stderr
+    assert not (work / "earnings_events.db").exists()
+
+
+def test_an_empty_listing_is_still_bootstrap_when_the_artifact_is_not_mandatory(tmp_path):
+    """The other half, so the flag cannot become the outage: the main earnings-db
+    keeps its bootstrap path, which the abort-if-missing step owns via
+    EA_DB_BOOTSTRAPPED. Without this, enabling the flag anywhere would look like
+    it had to be enabled everywhere.
+    """
+    env = _install_fake_gh(tmp_path, [], {})
+    env.pop("EA_DB_REQUIRE_ARTIFACT", None)
+    work = tmp_path / "work"
+    work.mkdir()
+
+    res = _run(RESTORE, work, env)
+    assert res.returncode == 0, res.stdout + res.stderr
+    assert "treating as bootstrap" in res.stdout, res.stdout
+    assert not (work / "earnings_events.db").exists()
+
+
+# --- H4: the uploading workflows must check out a BRANCH REF, not a sha -------
+
+UPLOADING_WORKFLOWS = [
+    "daily_earnings_check.yml",
+    "reconcile_calendar.yml",
+    "post_earnings_check.yml",
+    "season_progress.yml",
+]
+
+
+def test_every_uploading_workflow_checks_out_the_branch_ref_not_the_run_sha():
+    """H4 (Codex round 9, shaped by Fable). Artifacts are filtered by head_branch
+    only; nothing records which CODE wrote one. `actions/checkout` defaults to
+    `github.sha`, and a GitHub re-run of an old run reuses that run's sha -- so a
+    re-run executes OLD code, writes the shared earnings-db, and uploads it with
+    a newest created_at. The rollback guard passes it (accumulated actuals are
+    unchanged), and the next run restores a database written by code that
+    predates the current schema.
+
+    Asserting the EXACT value, not merely that a ref is present:
+
+    - `${{ github.ref }}` makes a re-run take the branch's tip at checkout time,
+      which closes the hole.
+    - A literal `main` would close it too, and is WRONG: these workflows are
+      schedule + workflow_dispatch, so on every normal trigger the two are the
+      same -- but the literal silently stops a branch dispatch from testing its
+      own branch. Same cost, one path removed for free. This test exists to stop
+      a future "simplification" to the literal.
+
+    Only the SELF checkout is constrained; the Coverage-Manager checkout in each
+    file pins someone else's repository and must not be touched.
+    """
+    import re
+
+    wf_dir = REPO / ".github" / "workflows"
+    for name in UPLOADING_WORKFLOWS:
+        text = (wf_dir / name).read_text(encoding="utf-8")
+
+        # Split into checkout steps; the self checkout is the one with no
+        # `repository:` of its own.
+        blocks = re.split(r"(?m)^\s+uses: actions/checkout@", text)[1:]
+        assert blocks, "%s: no checkout step found at all" % name
+        self_blocks = [b for b in blocks if not re.match(r"(?s).{0,400}?repository:", b)]
+        assert len(self_blocks) == 1, \
+            "%s: expected exactly one self-checkout, found %d" % (name, len(self_blocks))
+
+        # Take the step's OWN body -- up to the next step boundary -- rather than
+        # a character window. The first draft of this test used `[:900]` and
+        # failed against a correct file, because the explanatory comment above
+        # the `ref:` line pushed it past the window: a fixed-size reader drifting
+        # away from the thing it reads. A structural boundary cannot drift.
+        body = re.split(r"(?m)^\s+- (?:name|uses):", self_blocks[0])[0]
+
+        assert "ref:" in body, \
+            ("%s: the self-checkout has no `ref:`, so it defaults to github.sha and a "
+             "re-run of an old run would execute old code against the shared artifact"
+             % name)
+        assert "ref: ${{ github.ref }}" in body, \
+            ("%s: the self-checkout must pin `ref: ${{ github.ref }}` exactly. A literal "
+             "branch name closes the same hole but removes branch dispatch." % name)
