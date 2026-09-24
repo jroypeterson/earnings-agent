@@ -86,6 +86,11 @@ if [ "$PAGE" -gt 100 ]; then
   PAGE=100
 fi
 TRIES="${EA_DB_RESTORE_TRIES:-3}"
+# Retry backoff base, in seconds. Production keeps 5; the offline tests set 0.
+# Three real sleeps of 5s and 10s made one test take 22s of pure wall clock and
+# the suite ~85s, which made a 9-mutation pass ~13 minutes -- slow enough that
+# it discourages the mutation testing this lane most needs.
+RETRY_SLEEP="${EA_DB_RETRY_SLEEP:-5}"
 # The table whose presence proves the file is what it claims to be. Default
 # `events` (the earnings DB, which must also be non-empty). The board #298
 # `consensus-snapshots` side artifact passes `consensus_snapshot`: existence
@@ -185,7 +190,7 @@ for attempt in $(seq 1 "$TRIES"); do
   if [ -z "$TOTAL_COUNT" ]; then
     if [ "$attempt" -lt "$TRIES" ]; then
       log "artifact count unavailable (attempt ${attempt}/${TRIES}); retrying"
-      sleep "$((attempt * 5))"
+      sleep "$((attempt * RETRY_SLEEP))"
       continue
     fi
     log "WARNING: artifact count unavailable after ${TRIES} attempt(s); walking to a short page with the snapshot cross-check DISABLED"
@@ -242,21 +247,36 @@ for attempt in $(seq 1 "$TRIES"); do
     # stale restore, which has already cost 28 days once and 3.6 days once.
     all_rows="$(printf '%s\n' "$RAW" | awk 'NF' | wc -l | tr -d ' ')"
     uniq_rows="$(printf '%s\n' "$RAW" | awk 'NF' | sort -u | wc -l | tr -d ' ')"
-    # ⛑ The counts alone cannot see a count-PRESERVING change: delete one
+    # The counts alone cannot see a count-PRESERVING change: delete one
     # artifact and add another and every total matches, with no duplicate
-    # (Codex round 14). So also compare the HEAD of the listing.
+    # (Codex round 14). The listing HEAD is the only signal that can, so
+    # it is read -- but it is ADVISORY, and that is deliberate.
     #
-    # This is exact, not a heuristic. GitHub allocates artifact ids
-    # monotonically, so a NEW artifact always carries a larger id than every
-    # existing one, and this listing is strictly id-descending (measured:
-    # 0 id increases across 826 rows). Therefore ANY insertion lands at
-    # index 0 and moves the head. A deletion alone lowers the count. So
-    # head + count together cover every mutation that could hide a newer
-    # artifact from the walk, which is the only harm that matters here.
+    # ⛑ Round 14's comment here called the head check EXACT, because ids
+    # are allocated monotonically and the listing is id-descending. The
+    # second half is an OBSERVATION, not a guarantee: the repository
+    # artifacts endpoint documents no sort or order parameter at all (only
+    # the per-RUN endpoint has `direction`), and the documentation's own
+    # example response is not id-ordered. Round 15 made the consequence
+    # concrete in BOTH directions -- a deletion plus an insertion at
+    # position 1 leaves the head unchanged and still hides the new
+    # artifact, and, far worse, two equally valid responses with different
+    # first rows would stop all four workflows on a healthy repository.
+    #
+    # So the FATAL terms below are only the ORDERING-INDEPENDENT ones: a
+    # duplicate id across pages, fewer unique rows than the API says exist,
+    # or a total_count that moved. Each is unambiguous evidence that the
+    # listing changed, however the endpoint chooses to order rows. A moved
+    # head is real evidence too, but it is not PROOF -- and this lane has
+    # already shipped three guards that became the outage they prevented.
+    #
+    # Completeness does not rest here. It rests on the concurrency group,
+    # which makes a mid-walk mutation unreachable, and which
+    # test_the_earnings_db_writers_are_SERIALIZED pins statically.
     HEAD_BEFORE="$(printf '%s\n' "$RAW" | awk 'NF{print $1; exit}')"
     HEAD_AFTER="$(gh api \
       "repos/${REPO}/actions/artifacts?name=${NAME}&per_page=1&page=1" \
-      --jq '.artifacts[0].id' 2>/dev/null)" || HEAD_AFTER=''
+      --jq '.artifacts[0].id' 2>/dev/null)" || HEAD_AFTER='READ_FAILED'
     COUNT_AFTER="$(gh api \
       "repos/${REPO}/actions/artifacts?name=${NAME}&per_page=1" \
       --jq '.total_count' 2>/dev/null)" || COUNT_AFTER=''
@@ -266,8 +286,7 @@ for attempt in $(seq 1 "$TRIES"); do
     if [ -n "$TOTAL_COUNT" ] && [ "$NEED_PAGES" -le "$MAX_PAGES" ]; then
       if [ "$all_rows" -ne "$uniq_rows" ] \
          || [ "$all_rows" -ne "$TOTAL_COUNT" ] \
-         || { [ -n "$COUNT_AFTER" ] && [ "$COUNT_AFTER" -ne "$TOTAL_COUNT" ]; } \
-         || { [ -n "$HEAD_AFTER" ] && [ -n "$HEAD_BEFORE" ] && [ "$HEAD_AFTER" != "$HEAD_BEFORE" ]; }; then
+         || { [ -n "$COUNT_AFTER" ] && [ "$COUNT_AFTER" -ne "$TOTAL_COUNT" ]; }; then
         echo "ERROR: the artifact listing changed during the walk." >&2
         echo "  total_count before=${TOTAL_COUNT} after=${COUNT_AFTER:-unknown};" >&2
         echo "  rows collected=${all_rows}, unique=${uniq_rows}." >&2
@@ -277,6 +296,15 @@ for attempt in $(seq 1 "$TRIES"); do
         echo "  impossible. Check that group, or an operator deleting" >&2
         echo "  artifacts. Refusing to select from a listing that moved." >&2
         exit 1
+      fi
+      # ADVISORY, never fatal -- see the rationale above. A failed read is
+      # reported rather than silently dropping the only check that can see a
+      # count-preserving replacement (round 15, finding 3).
+      if [ "$HEAD_AFTER" = "READ_FAILED" ]; then
+        log "WARNING: could not re-read the listing head; the count-preserving-replacement check is DEGRADED for this run"
+      elif [ -n "$HEAD_AFTER" ] && [ -n "$HEAD_BEFORE" ] \
+           && [ "$HEAD_AFTER" != "$HEAD_BEFORE" ]; then
+        log "WARNING: the listing head moved during the walk (${HEAD_BEFORE} -> ${HEAD_AFTER}). Either an artifact was created -- which the earnings-db-writer concurrency group should prevent -- or the endpoint reordered. The ordering-independent checks passed, so selection continues."
       fi
     fi
   fi
@@ -306,7 +334,7 @@ for attempt in $(seq 1 "$TRIES"); do
     break
   fi
   log "artifact listing failed (attempt ${attempt}/${TRIES}); retrying in $((attempt * 5))s"
-  sleep "$((attempt * 5))"
+  sleep "$((attempt * RETRY_SLEEP))"
 done
 
 # Filter, then sort by created_at descending. `sort -r` on an ISO-8601 Z timestamp
@@ -392,7 +420,7 @@ OK=0
 for attempt in $(seq 1 "$TRIES"); do
   if fetch; then OK=1; break; fi
   log "download/verify of artifact ${AID} failed (attempt ${attempt}/${TRIES}); retrying in $((attempt * 5))s"
-  sleep "$((attempt * 5))"
+  sleep "$((attempt * RETRY_SLEEP))"
 done
 
 if [ "$OK" -ne 1 ]; then

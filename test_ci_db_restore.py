@@ -150,6 +150,7 @@ def _install_fake_gh(tmp_path: Path, listing: list[dict], zips: dict[str, Path])
     env["PATH"] = str(bindir) + os.pathsep + env["PATH"]
     env["GITHUB_REPOSITORY"] = "owner/repo"
     env["EA_DB_RESTORE_TRIES"] = "1"
+    env["EA_DB_RETRY_SLEEP"] = "0"   # offline: no real backoff
     env.pop("GITHUB_OUTPUT", None)
     return env
 
@@ -852,7 +853,8 @@ def _p(path):
     return str(path).replace(chr(92), "/")
 
 
-def _install_shifting_gh(tmp_path, pages: dict, total, head_after=None):
+def _install_shifting_gh(tmp_path, pages: dict, total, head_after=None,
+                         zips=None, head_fail=False):
     """A `gh` stub whose pages are fixed CONTENT, not slices of one listing.
 
     `_install_fake_gh` slices a single static list, so it can only model a
@@ -867,6 +869,8 @@ def _install_shifting_gh(tmp_path, pages: dict, total, head_after=None):
     # A listing HEAD that differs after the walk models a count-PRESERVING
     # replacement: the counts all agree, no row duplicates, and only the
     # head betrays that the listing is no longer the one that was walked.
+    if head_fail:
+        (tmp_path / "head_fail").write_text("1", encoding="utf-8")
     if head_after is not None:
         (tmp_path / "head_after.txt").write_text(
             str(head_after) + "\n", encoding="utf-8", newline="\n")
@@ -874,6 +878,10 @@ def _install_shifting_gh(tmp_path, pages: dict, total, head_after=None):
     (tmp_path / "totals.txt").write_text(
         "".join("FAIL\n" if v is None else f"{v}\n" for v in totals),
         encoding="utf-8", newline="\n")
+    # Serving zips lets a test assert that a run COMPLETES, which is how "this
+    # warning is not an outage" gets PROVEN rather than asserted.
+    for aid, src in (zips or {}).items():
+        shutil.copyfile(src, tmp_path / f"zip_{aid}.zip")
     stub = bindir / "gh"
     stub.write_text(
         "#!/usr/bin/env bash\n"
@@ -885,6 +893,11 @@ def _install_shifting_gh(tmp_path, pages: dict, total, head_after=None):
         # which is exactly what the first mutation run showed.
         # The head re-read: first id of page 1 as this stub would serve it.
         f'if [ "${{4:-}}" = ".artifacts[0].id" ]; then\n'
+        # ⛑ head_fail makes the CALL fail. Returning a sentinel string instead
+        # tests the stub, not the script: the mutation "revert to
+        # `|| HEAD_AFTER=''`" SURVIVED against a string-returning stub, because
+        # the script never took its error path at all.
+        f'  if [ -f "{_p(tmp_path)}/head_fail" ]; then exit 1; fi\n'
         f'  if [ -f "{_p(tmp_path)}/head_after.txt" ]; then\n'
         f'    cat "{_p(tmp_path)}/head_after.txt"\n'
         '  else\n'
@@ -903,6 +916,13 @@ def _install_shifting_gh(tmp_path, pages: dict, total, head_after=None):
         # r-string: a bare "\1" here is chr(1), not a sed backreference, and the
         # stub then reads page"\x01".txt, fails every -f test, and presents as
         # an API outage instead of a broken fixture.
+        'case "$path" in\n'
+        "  *artifacts/*/zip)\n"
+        r'    aid=$(printf "%s" "$path" | sed -E "s#.*/artifacts/([0-9]+)/zip#\1#")' "\n"
+        f'    z="{_p(tmp_path)}/zip_${{aid}}.zip"\n'
+        '    if [ -f "$z" ]; then cat "$z"; exit 0; else exit 1; fi\n'
+        "    ;;\n"
+        "esac\n"
         r'pg=$(printf "%s" "$path" | sed -nE "s/.*[?&]page=([0-9]+).*/\1/p")' "\n"
         '[ -n "$pg" ] || pg=1\n'
         # Forward slashes: BASH consumes this path, not Windows python, so a
@@ -916,6 +936,7 @@ def _install_shifting_gh(tmp_path, pages: dict, total, head_after=None):
     env["PATH"] = str(bindir) + os.pathsep + env["PATH"]
     env["GITHUB_REPOSITORY"] = "owner/repo"
     env["EA_DB_RESTORE_TRIES"] = "2"
+    env["EA_DB_RETRY_SLEEP"] = "0"   # offline: no real backoff
     env.pop("GITHUB_OUTPUT", None)
     return env
 
@@ -1011,6 +1032,21 @@ def test_the_earnings_db_writers_are_SERIALIZED(tmp_path):
             assert group.get("cancel-in-progress") in (False, None), (
                 f"{where}: cancel-in-progress must not be true -- cancelling a "
                 f"writer mid-upload is the mutation the walk assumes away")
+            # ⛑ A MATRIX expands one job key into N INDEPENDENT, PARALLEL
+            # jobs (round 15). Workflow-level concurrency excludes other
+            # workflow RUNS, not sibling expansions of the same job, so two
+            # copies would walk and upload at once with the group satisfied --
+            # and `uploading_jobs` below still counts this as one. GitHub
+            # maximises their parallelism unless `max-parallel` says otherwise.
+            strategy = job.get("strategy") or {}
+            if strategy.get("matrix"):
+                assert (job.get("concurrency") or {}).get("group")                     == "earnings-db-writer" and strategy.get("max-parallel") == 1, (
+                    f"{where} uploads earnings-db from a MATRIX job. Each "
+                    f"expansion runs as an independent parallel job, which "
+                    f"workflow-level concurrency does not serialize. Give the "
+                    f"job its own concurrency group AND max-parallel: 1, or "
+                    f"drop the matrix.")
+
             assert any("ci_restore_db_artifact.sh" in str(s.get("run", ""))
                        for s in steps), (
                 f"{where} uploads earnings-db without restoring IN THE SAME "
@@ -1124,6 +1160,7 @@ def test_a_transient_count_failure_COSTS_A_RETRY_and_then_succeeds(tmp_path):
         total=[None, 2, 2])                # fail, then 2 before and 2 after
     env["EA_DB_ARTIFACT_PAGE"] = "2"
     env["EA_DB_RESTORE_TRIES"] = "2"
+    env["EA_DB_RETRY_SLEEP"] = "0"   # offline: no real backoff
     work = tmp_path / "work"
     work.mkdir()
 
@@ -1133,37 +1170,132 @@ def test_a_transient_count_failure_COSTS_A_RETRY_and_then_succeeds(tmp_path):
     assert "selected artifact 900" in res.stdout, res.stdout
 
 
-def test_a_COUNT_PRESERVING_replacement_is_caught_by_the_listing_HEAD(tmp_path):
-    """Codex round 14. Delete one artifact and add another during the walk and
-    every count matches, with no duplicate row: `all_rows`, `uniq_rows`,
-    `TOTAL_COUNT` and the re-read count all agree, and the walk silently
-    returns a listing that no longer exists.
+def test_a_COUNT_PRESERVING_replacement_is_WARNED_about_via_the_head(tmp_path):
+    """Round 14 found the hole; round 15 corrected the remedy's severity.
 
-    The head closes it, and the argument is exact rather than heuristic.
-    GitHub allocates artifact ids monotonically, so a NEW artifact always
-    carries a larger id than every existing one, and this listing is strictly
-    id-descending (measured 2026-09-23: 0 id increases across 826 rows).
-    Therefore ANY insertion lands at index 0 and moves the head, while a
-    deletion alone lowers the count. Head and count together cover every
-    mutation that can hide a newer artifact -- the only harm that matters.
+    Delete one artifact and add another during the walk and every count agrees
+    with no duplicate row, so the fatal terms cannot see it. The listing HEAD
+    is the only signal that can -- but it is ADVISORY, because the repository
+    artifacts endpoint documents no ordering, so a moved head is evidence and
+    not proof. Round 14's version of this test asserted it was FATAL; that
+    would stop all four workflows the first time two equally valid responses
+    disagreed on the first row.
 
-    Verified silent before this check existed: the same fixture selected
-    normally with no warning.
+    What is asserted now: the warning names both heads, the run still
+    completes, and the ordering-independent checks stayed silent.
     """
+    live = tmp_path / "live.db"
+    _make_db(live, events=7, actuals=3, watermark=_recent(hours=1))
+    _zip_of(live, tmp_path / "live.zip")
     env = _install_shifting_gh(
         tmp_path,
         {1: ["900 2026-09-04T00:00:00Z false main 9000",
              "200 2026-09-02T00:00:00Z false main 2000"],
-         2: ["150 2026-09-015T00:00:00Z false main 1500".replace("015", "01"),
+         2: ["150 2026-09-01T12:00:00Z false main 1500",
              "100 2026-09-01T00:00:00Z false main 1000"]},
         total=4,              # one deleted, one added: count unchanged
-        head_after=999)       # ...and the new one sits at the head
+        head_after=999,       # ...and the new one sits at the head
+        zips={900: tmp_path / "live.zip"})
     env["EA_DB_ARTIFACT_PAGE"] = "2"
     work = tmp_path / "work"
     work.mkdir()
 
     res = _run(RESTORE, work, env)
-    assert "listing changed during the walk" in res.stderr, res.stderr + res.stdout
-    assert "head before=900 after=999" in res.stderr, res.stderr
-    assert "selected artifact" not in res.stdout, res.stdout
-    assert res.returncode == 1
+    assert "listing head moved during the walk (900 -> 999)" in res.stdout, res.stdout
+    assert "listing changed during the walk" not in res.stderr, res.stderr
+    assert "selected artifact 900" in res.stdout, res.stdout
+    assert res.returncode == 0, res.stdout + res.stderr
+
+
+def test_a_MATRIX_uploader_is_rejected_by_the_serialization_gate(tmp_path,
+                                                                 monkeypatch):
+    """Codex round 15, finding 2. A matrix expands ONE job key into N
+    independent, parallel jobs. Workflow-level `concurrency` excludes other
+    workflow RUNS, not sibling expansions, so two copies of an uploader would
+    walk and upload simultaneously with the group perfectly satisfied -- and
+    the gate's `uploading_jobs` count still saw a single job.
+
+    Fourth escape found in this gate, and the same class every time: the check
+    matched nothing because it was looking at the wrong unit.
+    """
+    import shutil
+    import sys
+    import yaml
+
+    dst = tmp_path / ".github" / "workflows"
+    shutil.copytree(REPO / ".github" / "workflows", dst)
+    path = dst / "season_progress.yml"
+    doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+    job = next(iter(doc["jobs"]))
+    doc["jobs"][job]["strategy"] = {"matrix": {"copy": ["a", "b"]}}
+    path.write_text(yaml.safe_dump(doc), encoding="utf-8")
+
+    monkeypatch.setattr(sys.modules[__name__], "REPO", tmp_path)
+    with pytest.raises(AssertionError, match="MATRIX"):
+        test_the_earnings_db_writers_are_SERIALIZED(tmp_path)
+
+
+def test_a_failed_HEAD_read_is_REPORTED_not_silently_dropped(tmp_path):
+    """Codex round 15, finding 3. `|| HEAD_AFTER=''` meant a transient 502 on
+    the head request silently removed the only check that can see a
+    count-preserving replacement -- no retry, no warning. That is the same
+    `|| true` shape fixed for the pre-walk count and reintroduced here.
+
+    It is not promoted to fatal: the head is advisory by design (finding 1),
+    and making a transient API error stop four workflows is the
+    guard-becomes-the-outage class this lane has shipped three times. It must
+    simply SAY so.
+    """
+    live = tmp_path / "live.db"
+    _make_db(live, events=7, actuals=3, watermark=_recent(hours=1))
+    _zip_of(live, tmp_path / "live.zip")
+    env = _install_shifting_gh(
+        tmp_path,
+        {1: ["900 2026-09-04T00:00:00Z false main 9000",
+             "200 2026-09-02T00:00:00Z false main 2000"]},
+        total=2, head_fail=True,               # the gh call genuinely exits 1
+        zips={900: tmp_path / "live.zip"})
+    env["EA_DB_ARTIFACT_PAGE"] = "2"
+    work = tmp_path / "work"
+    work.mkdir()
+
+    res = _run(RESTORE, work, env)
+    assert "could not re-read the listing head" in res.stdout, res.stdout
+    assert "DEGRADED" in res.stdout, res.stdout
+    # ...and it must NOT become an outage.
+    assert res.returncode == 0, res.stdout + res.stderr
+
+
+def test_a_MOVED_head_warns_loudly_but_does_NOT_stop_the_restore(tmp_path):
+    """Codex round 15, finding 1, and a deliberate adjudication against the
+    reviewer's implied remedy.
+
+    Round 14 called the head check EXACT on the grounds that ids are monotonic
+    and the listing is id-descending. The second half is an OBSERVATION: the
+    repository artifacts endpoint documents no ordering at all, and the docs'
+    own example is not id-ordered. Round 15 showed that cuts both ways -- a
+    deletion plus an insertion at position 1 hides a new artifact with the head
+    unchanged, AND two equally valid responses with different first rows would
+    stop all four workflows on a healthy repository.
+
+    So a moved head warns; only the ordering-independent terms are fatal. The
+    completeness argument moves to the concurrency gate, which makes the
+    mutation unreachable and is pinned statically.
+    """
+    live = tmp_path / "live.db"
+    _make_db(live, events=7, actuals=3, watermark=_recent(hours=1))
+    _zip_of(live, tmp_path / "live.zip")
+    env = _install_shifting_gh(
+        tmp_path,
+        {1: ["900 2026-09-04T00:00:00Z false main 9000",
+             "200 2026-09-02T00:00:00Z false main 2000"]},
+        total=2, head_after=999, zips={900: tmp_path / "live.zip"})
+    env["EA_DB_ARTIFACT_PAGE"] = "2"
+    work = tmp_path / "work"
+    work.mkdir()
+
+    res = _run(RESTORE, work, env)
+    assert "listing head moved during the walk (900 -> 999)" in res.stdout, res.stdout
+    assert "listing changed during the walk" not in res.stderr, res.stderr
+    assert "selected artifact 900" in res.stdout, res.stdout
+    assert res.returncode == 0, res.stdout + res.stderr
