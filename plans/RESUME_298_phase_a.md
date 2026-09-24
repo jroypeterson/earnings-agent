@@ -1,0 +1,126 @@
+# RESUME — earnings_agent #298 Phase A
+
+**Written 2026-09-24 so this branch can be picked up cold.** Board row `#405`
+(pinned) is the parent: five `overnight/*` branches behind the Codex gate, of
+which this is one.
+
+## State in one line
+
+Branch `overnight/298-phase-a`, **9 commits ahead of `main`, pushed, NOT
+merged**, 676 tests green. Merging is blocked on a clean review round.
+
+```
+cd earnings_agent && git log --oneline origin/main..overnight/298-phase-a
+```
+
+## The standing instruction
+
+JP, 2026-09-23: *"if it comes back clean then merge"* — conditional on a Codex
+round returning **no Critical/High**. Rounds 13, 14 and 15 each came back with
+findings, so nothing has been merged. That instruction is still live: a clean
+round authorises the merge without asking again. `main` merges cleanly
+(verified, 0 conflicts; `main` carries one CI exports-refresh commit).
+
+## Where it actually stands: rounds 9 → 15, seven for seven
+
+**Every round has found the defect inside the previous round's fix.** That is
+the single most important fact about this branch and it should drive whatever
+comes next.
+
+| round | what it found | status |
+|---|---|---|
+| 10 | 4 Critical + 2 High on the branch | all fixed |
+| 11 | my cap guard refused a COMPLETE listing | fixed |
+| 12 | offset pagination is mutable; walk trusted it | fixed |
+| 13 | the round-12 check could not fire in production's shape (826 % 100 = 26) | superseded by the redesign |
+| 14 | count-preserving replacement missed; concurrency gate had 3 escapes | fixed |
+| **15** | **3 High — open, see below** | **NOT STARTED** |
+
+A Fable gate between 13 and 14 produced the reframing that matters: **the
+mid-walk listing mutation rounds 12–13 kept chasing is unreachable in
+production**, because all four `earnings-db` uploaders share
+`concurrency: group: earnings-db-writer` and each restores inside that same
+serialized job. Measured: 4/4 uploaders, 0 job-level overlaps across 159 group
+runs. The configuration IS the guarantee — which is why
+`test_the_earnings_db_writers_are_SERIALIZED` exists and why round 14's gate
+escapes mattered so much.
+
+## OPEN: round 15's three findings (not yet started)
+
+Full text: `codex_feedback/codex_feedback_2026-09-23_round15.md`
+(raw log: `codex_feedback/round15_full_log.txt`).
+
+⚠ **`codex_feedback/` is gitignored**, so those files exist only in this
+working tree — they are NOT in git history. The tree is Dropbox-synced, so they
+survive a session ending, but not a fresh clone. The findings are summarised
+below in full for that reason.
+
+1. **The "HEAD" is not an API-defined head.** `scripts/ci_restore_db_artifact.sh`
+   around the `HEAD_BEFORE` / `HEAD_AFTER` comparison. A healthy listing can either
+   evade the invariant or — worse — falsely stop every restore. ⚠ Price this
+   one first: no restore step has `continue-on-error`, and this lane has
+   already shipped **three** guards that became the outage they were written
+   to prevent.
+2. **The serialization gate treats a matrix as one job**
+   (`test_ci_db_restore.py::test_the_earnings_db_writers_are_SERIALIZED`). GitHub executes each
+   matrix expansion as an independent, parallel job, so a matrix uploader
+   would race with the group satisfied. Fourth escape from that gate.
+3. **A failed HEAD request silently disables the round-14 fix**
+   (`ci_restore_db_artifact.sh:257` area; the `|| HEAD_AFTER=''` fallback) — no retry, no
+   warning. This is the `|| true` pattern that was just fixed for the
+   pre-walk count and reintroduced for the head. `a-check-that-silently-
+   matches-nothing`, again.
+
+Codex supplied a runnable reproduction for #3 (`test_round15_failed_head_read_
+cannot_disable_invariant`); it currently fails, as it should.
+
+## Before shipping ANY predicate on this lane — two rules that were learned expensively
+
+1. **Run the shape matrix.** `scripts/`-external harness, recreate it from the
+   commit message of `7215d81` if lost: evaluate the predicate against listing
+   sizes 826/900/100/99/101/1 at per_page 100 and 3/4/5 at per_page 2. It must
+   be SILENT on all of them and still fire on a real mutation. Rounds 10, 11
+   and 12 each shipped a predicate nobody had run against the production
+   shape — round 10's was true on 100% of runs, round 12's could not fire at
+   any non-multiple.
+2. **Mutation-test with one case per OR-branch.** The first run of the current
+   invariant had four survivors because a single fixture tripped several terms
+   at once. An OR-condition needs a case per branch or the other branches are
+   decoration. Current state: seven mutants, each killed by a distinct test.
+
+## Also live, deliberately not fixed here
+
+Board **`#458`** — a 45-day Q4→Q1 gap silently loses the only pre-print
+consensus snapshot (`_same_cycle`'s first arm). Pre-existing, reproduced twice,
+out of scope for this branch: the obvious fix (exempt a printed prior) is
+wrong, because a printed prior is exactly the evidence that a nearby upcoming
+row is post-print. Needs its own design pass. Bites ~May 2027.
+
+## Useful commands
+
+```bash
+cd earnings_agent
+python -m pytest -q                      # 676 green
+python -m pytest test_ci_db_restore.py -q  # 30, the restore/selection suite
+
+# live end-to-end, writes only into a temp dir:
+T=$(mktemp -d) && cd "$T" && GITHUB_REPOSITORY=jroypeterson/earnings-agent \
+  GH_TOKEN="$(gh auth token)" EA_DB_RESTORE_TRIES=1 \
+  bash ".../scripts/ci_restore_db_artifact.sh"
+```
+
+Reviews run from the FLEET ROOT, not this repo:
+`cd "Claude Folder" && MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' wsl bash
+scripts/codex_review.sh --prompt-file '<abs /mnt/c path>' --cwd '<abs /mnt/c path>'`
+⚠ The wrapper has not been writing its banner file on these runs — capture the
+output yourself and save it into `codex_feedback/`.
+
+## The judgement call waiting for JP
+
+Seven consecutive rounds have each found a real defect in the previous fix. The
+findings are getting narrower (round 10: 4 Critical; rounds 13–15: 0 Critical),
+but "merge when a round comes back clean" has not converged in three attempts.
+Worth asking whether this branch should merge on a different basis — e.g. merge
+the parts with no open findings and carry the restore-script hardening
+separately — rather than continuing to gate the whole thing on one clean round.
+That is a risk-appetite decision, not a technical one.
