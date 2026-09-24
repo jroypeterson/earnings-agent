@@ -34,7 +34,8 @@ comes next.
 | 12 | offset pagination is mutable; walk trusted it | fixed |
 | 13 | the round-12 check could not fire in production's shape (826 % 100 = 26) | superseded by the redesign |
 | 14 | count-preserving replacement missed; concurrency gate had 3 escapes | fixed |
-| **15** | **3 High — open, see below** | **NOT STARTED** |
+| 15 | 3 High: head not API-ordered, matrix escape, silent head-read failure | all fixed (`df6a447`) |
+| **16** | **not yet run** | **next step** |
 
 A Fable gate between 13 and 14 produced the reframing that matters: **the
 mid-walk listing mutation rounds 12–13 kept chasing is unreachable in
@@ -45,7 +46,7 @@ runs. The configuration IS the guarantee — which is why
 `test_the_earnings_db_writers_are_SERIALIZED` exists and why round 14's gate
 escapes mattered so much.
 
-## OPEN: round 15's three findings (not yet started)
+## Round 15 — FIXED in `df6a447`, kept here for the reasoning
 
 Full text: `codex_feedback/codex_feedback_2026-09-23_round15.md`
 (raw log: `codex_feedback/round15_full_log.txt`).
