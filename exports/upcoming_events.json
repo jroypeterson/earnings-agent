@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-09-24T15:51:25Z",
+  "generated_at": "2026-09-24T22:34:08Z",
   "window": {
     "start": "2026-09-22",
     "end": "2026-10-08"
@@ -10,15 +10,6 @@
     "events": 15
   },
   "events": [
-    {
-      "ticker": "SHPH",
-      "event_date": "2026-09-22",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Shuttle Pharmaceuticals Holdings, Inc."
-    },
     {
       "ticker": "YDES",
       "event_date": "2026-09-23",
@@ -45,6 +36,15 @@
       "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "Lite Strategy, Inc."
+    },
+    {
+      "ticker": "RZLT",
+      "event_date": "2026-09-24",
+      "event_hour": "amc",
+      "tier": 3,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Rezolute Inc"
     },
     {
       "ticker": "IVA",
