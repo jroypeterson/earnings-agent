@@ -83,7 +83,13 @@ def _install_fake_gh(tmp_path: Path, listing: list[dict], zips: dict[str, Path])
         # signal. The stub must answer that call too, or production parses a
         # shape the tests never produce -- the seam class this repo has already
         # paid for once.
-        "if mode == 'count':\n"
+        # The listing HEAD, re-read after the walk (round 14). Same seam
+        # lesson as `count`: production asks a question the stub must be able
+        # to answer, or the suite exercises a shape production never sees.
+        "if mode == 'head':\n"
+        "    a = json.load(open(sys.argv[2]))['artifacts']\n"
+        "    print(a[0]['id'] if a else '')\n"
+        "elif mode == 'count':\n"
         "    print(len(json.load(open(sys.argv[2]))['artifacts']))\n"
         "elif mode == 'list':\n"
         "    arts = json.load(open(sys.argv[2]))['artifacts']\n"
@@ -114,6 +120,10 @@ def _install_fake_gh(tmp_path: Path, listing: list[dict], zips: dict[str, Path])
         # `--jq .total_count` is a SIZING call, not a page of the walk: answer
         # it and return BEFORE the call log, or every test that counts pages
         # sees a phantom request.
+        '    if [ "$4" = ".artifacts[0].id" ]; then\n'
+        f'      python "{helper}" head "{tmp_path / "artifacts.json"}"\n'
+        "      exit 0\n"
+        "    fi\n"
         '    if [ "$4" = ".total_count" ]; then\n'
         f'      python "{helper}" count "{tmp_path / "artifacts.json"}"\n'
         "      exit 0\n"
@@ -842,7 +852,7 @@ def _p(path):
     return str(path).replace(chr(92), "/")
 
 
-def _install_shifting_gh(tmp_path, pages: dict, total):
+def _install_shifting_gh(tmp_path, pages: dict, total, head_after=None):
     """A `gh` stub whose pages are fixed CONTENT, not slices of one listing.
 
     `_install_fake_gh` slices a single static list, so it can only model a
@@ -854,6 +864,12 @@ def _install_shifting_gh(tmp_path, pages: dict, total):
     for page, rows in pages.items():
         (tmp_path / f"page{page}.txt").write_text(
             "".join(f"{r}\n" for r in rows), encoding="utf-8", newline="\n")
+    # A listing HEAD that differs after the walk models a count-PRESERVING
+    # replacement: the counts all agree, no row duplicates, and only the
+    # head betrays that the listing is no longer the one that was walked.
+    if head_after is not None:
+        (tmp_path / "head_after.txt").write_text(
+            str(head_after) + "\n", encoding="utf-8", newline="\n")
     totals = list(total) if isinstance(total, (list, tuple)) else [total]
     (tmp_path / "totals.txt").write_text(
         "".join("FAIL\n" if v is None else f"{v}\n" for v in totals),
@@ -867,6 +883,15 @@ def _install_shifting_gh(tmp_path, pages: dict, total):
         # (None). Without that one fixture trips several terms of the snapshot
         # invariant at once, and a mutation to any single term survives --
         # which is exactly what the first mutation run showed.
+        # The head re-read: first id of page 1 as this stub would serve it.
+        f'if [ "${{4:-}}" = ".artifacts[0].id" ]; then\n'
+        f'  if [ -f "{_p(tmp_path)}/head_after.txt" ]; then\n'
+        f'    cat "{_p(tmp_path)}/head_after.txt"\n'
+        '  else\n'
+        f'    head -1 "{_p(tmp_path)}/page1.txt" | cut -d" " -f1\n'
+        '  fi\n'
+        '  exit 0\n'
+        'fi\n'
         f'if [ "${{4:-}}" = ".total_count" ]; then\n'
         f'  n=$(cat "{_p(tmp_path)}/n.txt" 2>/dev/null || echo 0); n=$((n+1))\n'
         f'  printf "%s" "$n" > "{_p(tmp_path)}/n.txt"\n'
@@ -932,48 +957,82 @@ def test_the_snapshot_invariant_fires_in_PRODUCTION_SHAPE(tmp_path):
 
 
 def test_the_earnings_db_writers_are_SERIALIZED(tmp_path):
-    """⛑ THE REAL GUARANTEE, and until now nothing pinned it.
+    """⛑ THE REAL GUARANTEE. Rounds 12 and 13 built and rebuilt a detector
+    for a mid-walk listing mutation; a Fable gate then showed that event cannot
+    happen, because every `earnings-db` uploader is serialized by the
+    `earnings-db-writer` concurrency group and restores inside that same job.
 
-    Rounds 12 and 13 built and rebuilt a detector for a mid-walk listing
-    mutation. That event cannot happen: every workflow that uploads
-    `earnings-db` declares `concurrency: group: earnings-db-writer` and
-    RESTORES inside that same serialized job, artifacts cannot be created
-    outside a run, and expiry never removes rows from the listing. Measured
-    2026-09-23: 4 of 4 uploaders in the group, 0 job-level overlaps across 159
-    group runs since 2026-08-24.
+    The configuration IS the guarantee, so the configuration is what must be
+    defended. If a writer escapes the group, the script's snapshot invariant
+    starts failing runs and nobody will know why. This fails first, and says why.
 
-    So the listing is a frozen snapshot for the duration of the walk BY
-    CONFIGURATION -- which means the configuration is the thing to defend. If
-    a future workflow uploads `earnings-db` outside this group, the snapshot
-    invariant in the script starts firing and nobody will know why. This test
-    fails first, and says why.
+    Round 14 found three ways the first version of this gate could pass while
+    the guarantee was broken -- all `a-check-that-silently-matches-nothing`:
+
+      1. it globbed only `*.yml`, and GitHub honours `*.yaml` too, so an
+         uploader in `writer.yaml` was invisible while the four real ones kept
+         the list non-empty;
+      2. it flattened every job's steps and asked whether a restore existed
+         ANYWHERE in the file, so a parallel upload job with no restore of its
+         own passed on a sibling's;
+      3. workflow-level `concurrency` serializes RUNS, not sibling jobs within
+         one run -- two uploading jobs in one workflow would race each other
+         with the group satisfied.
     """
     import yaml
 
     wf_dir = REPO / ".github" / "workflows"
-    uploaders = []
-    for path in sorted(wf_dir.glob("*.yml")):
-        doc = yaml.safe_load(path.read_text(encoding="utf-8"))
-        steps = [s for job in doc["jobs"].values() for s in job.get("steps", [])]
-        if any((s.get("with") or {}).get("name") == "earnings-db"
-               for s in steps if "upload-artifact" in str(s.get("uses", ""))):
-            uploaders.append((path.name, doc, steps))
+    files = sorted(list(wf_dir.glob("*.yml")) + list(wf_dir.glob("*.yaml")))
+    assert files, "no workflow files found at all -- has the path moved?"
 
-    assert uploaders, "no workflow uploads earnings-db -- has it been renamed?"
-    for name, doc, steps in uploaders:
-        grp = (doc.get("concurrency") or {})
-        assert grp.get("group") == "earnings-db-writer", (
-            f"{name} uploads earnings-db but is not in the earnings-db-writer "
-            f"concurrency group (got {grp.get('group')!r}). Without it the "
-            f"artifact listing can change mid-walk and the restore script's "
-            f"snapshot invariant will start failing runs.")
-        assert grp.get("cancel-in-progress") in (False, None), (
-            f"{name}: cancel-in-progress must not be true -- cancelling a "
-            f"writer mid-upload is exactly the mutation the walk assumes away")
-        assert any("ci_restore_db_artifact.sh" in str(s.get("run", ""))
-                   for s in steps), (
-            f"{name} uploads earnings-db without restoring first, so it can "
-            f"publish a non-cumulative artifact as the newest")
+    def uploads_earnings_db(step):
+        return ("upload-artifact" in str(step.get("uses", ""))
+                and (step.get("with") or {}).get("name") == "earnings-db")
+
+    seen_uploaders = 0
+    for path in files:
+        doc = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        wf_group = (doc.get("concurrency") or {})
+        for job_name, job in (doc.get("jobs") or {}).items():
+            steps = job.get("steps") or []
+            if not any(uploads_earnings_db(s) for s in steps):
+                continue
+            seen_uploaders += 1
+            where = f"{path.name}:{job_name}"
+
+            # Per JOB, not flattened across the file.
+            group = (job.get("concurrency") or {}) or wf_group
+            assert group.get("group") == "earnings-db-writer", (
+                f"{where} uploads earnings-db but is not in the "
+                f"earnings-db-writer concurrency group (got "
+                f"{group.get('group')!r}). Without it the artifact listing can "
+                f"change mid-walk, and the restore script's snapshot invariant "
+                f"will start failing runs with no obvious cause.")
+            assert group.get("cancel-in-progress") in (False, None), (
+                f"{where}: cancel-in-progress must not be true -- cancelling a "
+                f"writer mid-upload is the mutation the walk assumes away")
+            assert any("ci_restore_db_artifact.sh" in str(s.get("run", ""))
+                       for s in steps), (
+                f"{where} uploads earnings-db without restoring IN THE SAME "
+                f"JOB, so it can publish a non-cumulative artifact as the "
+                f"newest. A sibling job's restore does not count.")
+
+        # Workflow-level concurrency serializes RUNS, not sibling jobs.
+        uploading_jobs = [n for n, j in (doc.get("jobs") or {}).items()
+                          if any(uploads_earnings_db(s) for s in (j.get("steps") or []))]
+        if len(uploading_jobs) > 1:
+            for n in uploading_jobs:
+                assert ((doc["jobs"][n].get("concurrency") or {}).get("group")
+                        == "earnings-db-writer"), (
+                    f"{path.name} has {len(uploading_jobs)} jobs uploading "
+                    f"earnings-db ({uploading_jobs}); workflow-level "
+                    f"concurrency does not serialize siblings, so each such "
+                    f"job needs its own group")
+
+    assert seen_uploaders >= 4, (
+        f"expected at least the 4 known earnings-db uploaders, found "
+        f"{seen_uploaders} -- if one was renamed this gate just stopped "
+        f"checking it")
 
 
 # --- one test per TERM of the snapshot invariant -----------------------------
@@ -1072,3 +1131,39 @@ def test_a_transient_count_failure_COSTS_A_RETRY_and_then_succeeds(tmp_path):
     assert "count unavailable (attempt 1/2); retrying" in res.stdout, res.stdout
     assert "listing changed during the walk" not in res.stderr, res.stderr
     assert "selected artifact 900" in res.stdout, res.stdout
+
+
+def test_a_COUNT_PRESERVING_replacement_is_caught_by_the_listing_HEAD(tmp_path):
+    """Codex round 14. Delete one artifact and add another during the walk and
+    every count matches, with no duplicate row: `all_rows`, `uniq_rows`,
+    `TOTAL_COUNT` and the re-read count all agree, and the walk silently
+    returns a listing that no longer exists.
+
+    The head closes it, and the argument is exact rather than heuristic.
+    GitHub allocates artifact ids monotonically, so a NEW artifact always
+    carries a larger id than every existing one, and this listing is strictly
+    id-descending (measured 2026-09-23: 0 id increases across 826 rows).
+    Therefore ANY insertion lands at index 0 and moves the head, while a
+    deletion alone lowers the count. Head and count together cover every
+    mutation that can hide a newer artifact -- the only harm that matters.
+
+    Verified silent before this check existed: the same fixture selected
+    normally with no warning.
+    """
+    env = _install_shifting_gh(
+        tmp_path,
+        {1: ["900 2026-09-04T00:00:00Z false main 9000",
+             "200 2026-09-02T00:00:00Z false main 2000"],
+         2: ["150 2026-09-015T00:00:00Z false main 1500".replace("015", "01"),
+             "100 2026-09-01T00:00:00Z false main 1000"]},
+        total=4,              # one deleted, one added: count unchanged
+        head_after=999)       # ...and the new one sits at the head
+    env["EA_DB_ARTIFACT_PAGE"] = "2"
+    work = tmp_path / "work"
+    work.mkdir()
+
+    res = _run(RESTORE, work, env)
+    assert "listing changed during the walk" in res.stderr, res.stderr + res.stdout
+    assert "head before=900 after=999" in res.stderr, res.stderr
+    assert "selected artifact" not in res.stdout, res.stdout
+    assert res.returncode == 1

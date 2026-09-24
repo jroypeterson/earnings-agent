@@ -242,6 +242,21 @@ for attempt in $(seq 1 "$TRIES"); do
     # stale restore, which has already cost 28 days once and 3.6 days once.
     all_rows="$(printf '%s\n' "$RAW" | awk 'NF' | wc -l | tr -d ' ')"
     uniq_rows="$(printf '%s\n' "$RAW" | awk 'NF' | sort -u | wc -l | tr -d ' ')"
+    # ⛑ The counts alone cannot see a count-PRESERVING change: delete one
+    # artifact and add another and every total matches, with no duplicate
+    # (Codex round 14). So also compare the HEAD of the listing.
+    #
+    # This is exact, not a heuristic. GitHub allocates artifact ids
+    # monotonically, so a NEW artifact always carries a larger id than every
+    # existing one, and this listing is strictly id-descending (measured:
+    # 0 id increases across 826 rows). Therefore ANY insertion lands at
+    # index 0 and moves the head. A deletion alone lowers the count. So
+    # head + count together cover every mutation that could hide a newer
+    # artifact from the walk, which is the only harm that matters here.
+    HEAD_BEFORE="$(printf '%s\n' "$RAW" | awk 'NF{print $1; exit}')"
+    HEAD_AFTER="$(gh api \
+      "repos/${REPO}/actions/artifacts?name=${NAME}&per_page=1&page=1" \
+      --jq '.artifacts[0].id' 2>/dev/null)" || HEAD_AFTER=''
     COUNT_AFTER="$(gh api \
       "repos/${REPO}/actions/artifacts?name=${NAME}&per_page=1" \
       --jq '.total_count' 2>/dev/null)" || COUNT_AFTER=''
@@ -251,10 +266,12 @@ for attempt in $(seq 1 "$TRIES"); do
     if [ -n "$TOTAL_COUNT" ] && [ "$NEED_PAGES" -le "$MAX_PAGES" ]; then
       if [ "$all_rows" -ne "$uniq_rows" ] \
          || [ "$all_rows" -ne "$TOTAL_COUNT" ] \
-         || { [ -n "$COUNT_AFTER" ] && [ "$COUNT_AFTER" -ne "$TOTAL_COUNT" ]; }; then
+         || { [ -n "$COUNT_AFTER" ] && [ "$COUNT_AFTER" -ne "$TOTAL_COUNT" ]; } \
+         || { [ -n "$HEAD_AFTER" ] && [ -n "$HEAD_BEFORE" ] && [ "$HEAD_AFTER" != "$HEAD_BEFORE" ]; }; then
         echo "ERROR: the artifact listing changed during the walk." >&2
         echo "  total_count before=${TOTAL_COUNT} after=${COUNT_AFTER:-unknown};" >&2
         echo "  rows collected=${all_rows}, unique=${uniq_rows}." >&2
+        echo "  listing head before=${HEAD_BEFORE:-none} after=${HEAD_AFTER:-unknown}." >&2
         echo "  The earnings-db writers are serialized by the" >&2
         echo "  'earnings-db-writer' concurrency group, so this should be" >&2
         echo "  impossible. Check that group, or an operator deleting" >&2
