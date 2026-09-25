@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-09-24T22:34:08Z",
+  "generated_at": "2026-09-25T15:50:03Z",
   "window": {
-    "start": "2026-09-22",
-    "end": "2026-10-08"
+    "start": "2026-09-23",
+    "end": "2026-10-09"
   },
   "counts": {
-    "events": 15
+    "events": 14
   },
   "events": [
     {
@@ -36,15 +36,6 @@
       "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "Lite Strategy, Inc."
-    },
-    {
-      "ticker": "RZLT",
-      "event_date": "2026-09-24",
-      "event_hour": "amc",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Rezolute Inc"
     },
     {
       "ticker": "IVA",
