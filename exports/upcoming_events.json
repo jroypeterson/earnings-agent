@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-09-25T15:50:03Z",
+  "generated_at": "2026-09-25T22:33:07Z",
   "window": {
     "start": "2026-09-23",
     "end": "2026-10-09"
   },
   "counts": {
-    "events": 14
+    "events": 13
   },
   "events": [
     {
@@ -54,15 +54,6 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "CytoMed Therapeutics Ltd"
-    },
-    {
-      "ticker": "IXHL",
-      "event_date": "2026-09-28",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Incannex Healthcare Inc"
     },
     {
       "ticker": "LNAI",

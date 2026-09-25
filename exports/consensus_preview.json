@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-09-25T15:50:03Z",
+  "generated_at": "2026-09-25T22:33:07Z",
   "window": {
     "start": "2026-09-25",
     "end": "2026-09-28"
