@@ -6,6 +6,8 @@ which this is one.
 
 ## State in one line
 
+**2026-09-25: round 20 came back CLEAN on `f6df191`. See the round-20 section.**
+
 Branch `overnight/298-phase-a`, pushed, NOT merged, 681 tests green
 (as of round 16, 2026-09-25). Merging is blocked on a clean review round.
 
@@ -39,7 +41,7 @@ comes next.
 | 17 | 1 High: the duplicate term deduped whole ROWS, so an id whose `expired` flag flipped mid-walk counted twice | fixed (`837bb20`) |
 | 18 | 1 High: a single-source AMC label earned the 16:00 ET cutoff, so a mislabelled BMO print could be stored as pre-print | fixed (`5112685`) — **reverses a Fable-gated spec choice** |
 | 19 | 6 High on the operator's view: 4 real (fixed `f6df191`), 2 declined as design | fixed / declined |
-| **20** | **running / see below** | |
+| **20** | **CLEAN -- "No Critical/High issues"** on code HEAD `f6df191` (peak-load lens) | **merge-eligible** |
 
 A Fable gate between 13 and 14 produced the reframing that matters: **the
 mid-walk listing mutation rounds 12–13 kept chasing is unreachable in
@@ -49,6 +51,21 @@ serialized job. Measured: 4/4 uploaders, 0 job-level overlaps across 159 group
 runs. The configuration IS the guarantee — which is why
 `test_the_earnings_db_writers_are_SERIALIZED` exists and why round 14's gate
 escapes mattered so much.
+
+## Round 20 — CLEAN (2026-09-25 overnight, #460)
+
+Lens: **peak load — the busiest day of the season at full scale.** Prompt/log:
+`codex_feedback/round20_*`. Verdict, verbatim: **"No Critical/High issues"**; no
+pre-existing Critical/High. Reviewed code HEAD `f6df191` (later commits touch only this
+note). Its peak-load audit: a cold-cache 704-ticker run is ~1,408 FMP requests (~352 s at
+4/s, under the 300/min cap); the 900 s budget trips before the 1,200 s step timeout, both
+loud; ~38 GitHub REST calls for the busiest adjacent pair vs 1,000/hour; SQLite read/merge/
+export linear and sub-second at 100k rows.
+
+**JP's standing instruction ("if it comes back clean then merge") is now satisfied.**
+Merge is the orchestrator's step, not done here. Two things JP should know: round 18
+**reversed a Fable-gated spec choice** (the AMC cutoff now needs a corroborated session
+label), and round 19 declined F1-rest / F4 / F5 as design (table below).
 
 ## Round 19 — `f6df191` (2026-09-25 overnight, #460)
 
