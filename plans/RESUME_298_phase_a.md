@@ -6,8 +6,8 @@ which this is one.
 
 ## State in one line
 
-Branch `overnight/298-phase-a`, **9 commits ahead of `main`, pushed, NOT
-merged**, 676 tests green. Merging is blocked on a clean review round.
+Branch `overnight/298-phase-a`, pushed, NOT merged, 681 tests green
+(as of round 16, 2026-09-25). Merging is blocked on a clean review round.
 
 ```
 cd earnings_agent && git log --oneline origin/main..overnight/298-phase-a
@@ -35,7 +35,8 @@ comes next.
 | 13 | the round-12 check could not fire in production's shape (826 % 100 = 26) | superseded by the redesign |
 | 14 | count-preserving replacement missed; concurrency gate had 3 escapes | fixed |
 | 15 | 3 High: head not API-ordered, matrix escape, silent head-read failure | all fixed (`df6a447`) |
-| **16** | **not yet run** | **next step** |
+| 16 | 1 High: the invariant's first trip was fatal, and GitHub's expired-artifact purge (outside the group) trips it | fixed (`762bfc9`) |
+| **17** | **running / see below** | |
 
 A Fable gate between 13 and 14 produced the reframing that matters: **the
 mid-walk listing mutation rounds 12–13 kept chasing is unreachable in
@@ -45,6 +46,22 @@ serialized job. Measured: 4/4 uploaders, 0 job-level overlaps across 159 group
 runs. The configuration IS the guarantee — which is why
 `test_the_earnings_db_writers_are_SERIALIZED` exists and why round 14's gate
 escapes mattered so much.
+
+## Round 16 — FIXED in `762bfc9` (2026-09-25 overnight, #460)
+
+Lens: **the production runner environment vs the offline harness.** Prompt and raw
+log: `codex_feedback/round16_prompt.md`, `round16_full_log.txt` (gitignored).
+Verdict: **0 Critical, 1 High**, no pre-existing Critical/High.
+
+- **High — the snapshot invariant could abort a healthy restore.** It exited 1 on
+  its first trip. Two triggers sit outside the concurrency group: GitHub purging
+  expired artifacts (the script said "EXPIRED ROWS NEVER LEAVE IT" — **measured
+  false**: the live listing fell **830 → 444** between 2026-09-23 and 2026-09-25, all
+  444 survivors unexpired), and the endpoint ordering an unchanged collection
+  differently across page requests (inference from the API contract, not observed).
+  **Verdict: real, introduced by the branch.** Fix: a trip fails the ATTEMPT and
+  re-walks with fresh counts; only a trip on every attempt is fatal, with its own
+  message. Mutation-checked (3 mutants, all killed). 681 green. Live restore rc 0.
 
 ## Round 15 — FIXED in `df6a447`, kept here for the reasoning
 
