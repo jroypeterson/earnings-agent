@@ -37,7 +37,8 @@ comes next.
 | 15 | 3 High: head not API-ordered, matrix escape, silent head-read failure | all fixed (`df6a447`) |
 | 16 | 1 High: the invariant's first trip was fatal, and GitHub's expired-artifact purge (outside the group) trips it | fixed (`762bfc9`) |
 | 17 | 1 High: the duplicate term deduped whole ROWS, so an id whose `expired` flag flipped mid-walk counted twice | fixed (`837bb20`) |
-| **18** | **running / see below** | |
+| 18 | 1 High: a single-source AMC label earned the 16:00 ET cutoff, so a mislabelled BMO print could be stored as pre-print | fixed (`5112685`) — **reverses a Fable-gated spec choice** |
+| **19** | **running / see below** | |
 
 A Fable gate between 13 and 14 produced the reframing that matters: **the
 mid-walk listing mutation rounds 12–13 kept chasing is unreachable in
@@ -47,6 +48,22 @@ serialized job. Measured: 4/4 uploaders, 0 job-level overlaps across 159 group
 runs. The configuration IS the guarantee — which is why
 `test_the_earnings_db_writers_are_SERIALIZED` exists and why round 14's gate
 escapes mattered so much.
+
+## Round 18 — FIXED in `5112685` (2026-09-25 overnight, #460)
+
+Lens: **the data contract of stored rows.** Prompt/log: `codex_feedback/round18_*`.
+Verdict: **0 Critical, 1 High**, no pre-existing Critical/High.
+
+- **High — a same-day early release could be stored as pre-print.** `date_confirmed`
+  confirms the date, not the session; a lone AMC label (420 of 480 Jul–Sep 2026 AMC
+  events have no second opinion; where both exist they disagree ~1 in 60) earned the
+  16:00 ET cutoff, so a mislabelled BMO print's day-of capture was served as pre-print.
+  **Verdict: real, introduced by the branch.** Fix: 16:00 ET only for a CORROBORATED
+  AMC (both hours = amc); otherwise 00:00 ET, so the prior day's capture is returned.
+  ⚠ **This reverses plan v3 H1-NEW** ("NULL yf is no second opinion"), and the test that
+  pinned it is inverted. Justification: JP's "a wrong number is worse than an absent
+  one", and the cost is up to a day of freshness, not absence. One-line revert in
+  `pre_release_cutoff` if JP disagrees. Mutation-checked (reverting fails 5 tests). 682 green.
 
 ## Round 17 — FIXED in `837bb20` (2026-09-25 overnight, #460)
 
