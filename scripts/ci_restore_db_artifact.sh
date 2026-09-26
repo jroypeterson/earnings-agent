@@ -323,6 +323,11 @@ for attempt in $(seq 1 "$TRIES"); do
     # ADVISORY, never fatal -- see the rationale above. A failed read is
     # reported rather than silently dropping the only check that can see a
     # count-preserving replacement (round 15, finding 3).
+    if [ -z "$COUNT_AFTER" ]; then
+      # Codex round 19: this term was dropped with no word at all, unlike the
+      # head read beside it.
+      log "WARNING: could not re-read total_count after the walk; the count-moved check is DEGRADED for this run"
+    fi
     if [ "$HEAD_AFTER" = "READ_FAILED" ]; then
       log "WARNING: could not re-read the listing head; the count-preserving-replacement check is DEGRADED for this run"
     elif [ -n "$HEAD_AFTER" ] && [ -n "$HEAD_BEFORE" ] \
@@ -400,7 +405,12 @@ if [ -z "$LISTING" ]; then
   # persist step already gates on `steps.restore_snapshots.outcome == 'success'`
   # and both alert steps key off the same outcome. Do NOT add a second refusal in
   # the yml to match.
-  if [ "${EA_DB_REQUIRE_ARTIFACT:-}" = "true" ]; then
+  # Normalized (Codex round 19): the value is typed by a human into a repo
+  # variable. `TRUE` or `true ` failed an exact match and left the guard
+  # silently unarmed, while the workflow's reminder -- which fires only while
+  # the variable is not `true` -- saw a value and stopped nagging.
+  REQUIRE="$(printf '%s' "${EA_DB_REQUIRE_ARTIFACT:-}" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')"
+  if [ "$REQUIRE" = "true" ]; then
     echo "[db-restore] no unexpired '${NAME}' artifact on ${BRANCH}, and" >&2
     echo "  EA_DB_REQUIRE_ARTIFACT=true declares this artifact MANDATORY." >&2
     echo "  Refusing to continue: for a cumulative artifact, 'nothing to restore'" >&2

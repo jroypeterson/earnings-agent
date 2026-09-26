@@ -516,6 +516,47 @@ def test_runner_partial_failure_posts_status_but_succeeds(monkeypatch):
     assert len(posts) == 1 and "error:429" in posts[0][2]
 
 
+def test_runner_fails_when_a_real_window_returns_NO_consensus_at_all(monkeypatch):
+    """Codex round 19. An HTTP-200 `[]` for every ticker (plan change, endpoint
+    regression) counted as `empty`, never as an error, so a run that captured
+    nothing passed as healthy -- no Slack, no email, green step."""
+    from datetime import date
+    names = ("AAA", "BBB", "CCC", "DDD", "EEE")
+    fetcher = RecordingFetcher({t: ([], "empty") for t in names})
+    main, conn, _posts = _runner_env(monkeypatch, fetcher=fetcher)
+    far = date.fromordinal(date.today().toordinal() + 2).isoformat()
+    for t in names[2:]:
+        _event(conn, t, far)
+    with pytest.raises(RuntimeError, match="systemic"):
+        main.run_snapshot_consensus()
+
+
+def test_runner_a_SMALL_all_empty_window_is_not_an_alarm(monkeypatch):
+    """The floor's other half: two genuinely uncovered names are a fact about
+    those companies, and must not page anyone."""
+    fetcher = RecordingFetcher({"AAA": ([], "empty"), "BBB": ([], "empty")})
+    main, _conn, _posts = _runner_env(monkeypatch, fetcher=fetcher)
+    out = main.run_snapshot_consensus()
+    assert out["ok"] == 0 and out["empty"] == 2
+
+
+def test_runner_an_UNDELIVERABLE_partial_failure_notice_fails_the_step(monkeypatch):
+    """Codex round 19. The partial-failure notice was best-effort: a failed post
+    was a log line and the step stayed green, so the workflow's own Slack and
+    email steps (keyed on the step outcome) never ran either."""
+    fetcher = RecordingFetcher({"BBB": ([], "error:429")})
+    main, conn, _posts = _runner_env(monkeypatch, fetcher=fetcher)
+
+    def dead_webhook(*a, **k):
+        raise RuntimeError("410 gone")
+    monkeypatch.setattr(main, "post_slack", dead_webhook)
+    with pytest.raises(RuntimeError, match="could not be delivered"):
+        main.run_snapshot_consensus()
+    # ...and the captured row is still kept (the export runs in `finally`).
+    assert conn.execute(
+        "SELECT COUNT(*) FROM consensus_snapshot WHERE fetch_status = 'ok'").fetchone()[0] > 0
+
+
 def test_runner_raises_when_every_fetch_failed(monkeypatch):
     fetcher = RecordingFetcher({"AAA": ([], "error:401"), "BBB": ([], "error:401")})
     main, _conn, _posts = _runner_env(monkeypatch, fetcher=fetcher)

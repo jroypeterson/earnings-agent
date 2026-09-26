@@ -341,7 +341,11 @@ jobs:
       # Recovery from an EARLY flip (set before an artifact exists) is one
       # command: gh variable delete EA_CONSENSUS_BOOTSTRAPPED.
       - name: Announce consensus bootstrap until the repo variable is set
-        if: always() && steps.persist_snapshots.outcome == 'success' && vars.EA_CONSENSUS_BOOTSTRAPPED == ''
+        # `!= 'true'`, not `== ''` (Codex round 19): any other value -- `false`,
+        # a typo -- leaves the guard unarmed, so it must keep the nag alive.
+        # Actions compares strings case-insensitively and the restore script
+        # normalizes case and whitespace, so `TRUE` arms both consistently.
+        if: always() && steps.persist_snapshots.outcome == 'success' && vars.EA_CONSENSUS_BOOTSTRAPPED != 'true'
         continue-on-error: true
         timeout-minutes: 2
         env:

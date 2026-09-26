@@ -563,6 +563,22 @@ def test_a_mandatory_artifact_refuses_an_empty_listing(tmp_path):
     assert not (work / "earnings_events.db").exists()
 
 
+@pytest.mark.parametrize("value", ["TRUE", " true ", "True"])
+def test_the_mandatory_flag_is_read_case_and_space_insensitively(tmp_path, value):
+    """Codex round 19. The flag is a repo variable a human types. `TRUE` failed
+    the exact `= "true"` match, so the guard sat unarmed -- while the
+    workflow's reminder saw a non-empty value and stopped nagging. Both halves
+    silent at once."""
+    env = _install_fake_gh(tmp_path, [], {})
+    env["EA_DB_REQUIRE_ARTIFACT"] = value
+    work = tmp_path / "work"
+    work.mkdir()
+
+    res = _run(RESTORE, work, env)
+    assert res.returncode == 1, res.stdout + res.stderr
+    assert "MANDATORY" in res.stderr, res.stderr
+
+
 def test_an_empty_listing_is_still_bootstrap_when_the_artifact_is_not_mandatory(tmp_path):
     """The other half, so the flag cannot become the outage: the main earnings-db
     keeps its bootstrap path, which the abort-if-missing step owns via
@@ -701,7 +717,7 @@ def test_the_consensus_restore_step_ACTUALLY_SETS_the_mandatory_flag():
     # ...and the inert window must announce itself, or this is just the same
     # "never set in production" defect with an extra human step in front.
     announce = [s for s in steps
-                if "EA_CONSENSUS_BOOTSTRAPPED == ''" in str(s.get("if", ""))]
+                if "EA_CONSENSUS_BOOTSTRAPPED != 'true'" in str(s.get("if", ""))]
     assert announce, (
         "no step announces that the bootstrap variable is still unset, so the "
         "guard can sit inert indefinitely with nothing saying so")
@@ -1343,6 +1359,29 @@ def test_a_failed_HEAD_read_is_REPORTED_not_silently_dropped(tmp_path):
     assert "could not re-read the listing head" in res.stdout, res.stdout
     assert "DEGRADED" in res.stdout, res.stdout
     # ...and it must NOT become an outage.
+    assert res.returncode == 0, res.stdout + res.stderr
+
+
+def test_a_failed_post_walk_COUNT_read_is_REPORTED_not_silently_dropped(tmp_path):
+    """Codex round 19. The head read beside it already said DEGRADED when it
+    failed (round 15); the post-walk count read dropped its invariant term
+    without a word."""
+    live = tmp_path / "live.db"
+    _make_db(live, events=7, actuals=3, watermark=_recent(hours=1))
+    _zip_of(live, tmp_path / "live.zip")
+    env = _install_shifting_gh(
+        tmp_path,
+        {1: ["900 2026-09-04T00:00:00Z false main 9000",
+             "200 2026-09-02T00:00:00Z false main 2000"]},
+        total=[2, None],                  # pre-walk read ok, post-walk read fails
+        zips={900: tmp_path / "live.zip"})
+    env["EA_DB_ARTIFACT_PAGE"] = "2"
+    work = tmp_path / "work"
+    work.mkdir()
+
+    res = _run(RESTORE, work, env)
+    assert "could not re-read total_count after the walk" in res.stdout, res.stdout
+    assert "selected artifact 900" in res.stdout, res.stdout
     assert res.returncode == 0, res.stdout + res.stderr
 
 

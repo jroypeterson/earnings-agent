@@ -2097,6 +2097,11 @@ def _preview_kv_key(dest: str, ticker: str, event_date: str) -> str:
     return f"consensus_preview_posted:{dest}:{ticker}:{event_date}"
 
 
+# Codex round 19: at least this many attempted tickers with ZERO consensus is
+# a vendor failure, not a run of uncovered names.
+SYSTEMIC_EMPTY_MIN = 5
+
+
 def run_snapshot_consensus(dry_run: bool = False) -> dict:
     """Snapshot the forward ANNUAL Street consensus for every open event whose
     release is still ahead (board #298 Phase A). Writes `consensus_snapshot`
@@ -2168,6 +2173,7 @@ def run_snapshot_consensus(dry_run: bool = False) -> dict:
         summary = snapshot_annual_consensus(
             conn, today, make_fmp_fetcher(conn, FMP_API_KEY, today),
             now=datetime.now(timezone.utc))
+        undelivered = None
 
         if summary["errors"]:
             webhook = SLACK_WEBHOOK_STATUS or SLACK_WEBHOOK_EARNINGS
@@ -2176,9 +2182,17 @@ def run_snapshot_consensus(dry_run: bool = False) -> dict:
             text = (
                 f":warning: *Consensus snapshot* — {summary['errors']} of "
                 f"{summary['tickers']} ticker(s) failed; their pre-print consensus "
-                f"was not captured this run (retried next run while the event is "
-                f"ahead). {failed}" + (f" +{more} more" if more > 0 else "")
+                f"was not captured this run. A ticker is retried on a later run ONLY "
+                f"while its pre-release cutoff is still ahead -- for today's AMC or "
+                f"tomorrow's names this may have been the LAST chance. {failed}"
+                + (f" +{more} more" if more > 0 else "")
             )
+            # ⛑ Codex round 19: the partial-failure notice was best-effort, and a
+            # failed or impossible delivery was only a log line -- while the step
+            # stayed green, so the workflow's own Slack + email steps (keyed on
+            # the step's outcome) never ran either. Undeliverable now FAILS the
+            # step, which hands the alert to those out-of-band channels.
+            delivered = False
             if webhook:
                 try:
                     post_slack(
@@ -2186,10 +2200,16 @@ def run_snapshot_consensus(dry_run: bool = False) -> dict:
                         [{"type": "section", "text": {"type": "mrkdwn", "text": text}}],
                         text,
                     )
-                except Exception as exc:  # noqa: BLE001 -- the summary is secondary
+                    delivered = True
+                except Exception as exc:  # noqa: BLE001 -- escalated below
                     logger.error("Consensus snapshot: status post failed: %s", exc)
             else:
                 logger.warning("Consensus snapshot: no status webhook; %s", text)
+            if not delivered:
+                undelivered = RuntimeError(
+                    f"Consensus snapshot: {summary['errors']} ticker(s) failed and "
+                    f"the status notice could not be delivered -- failing the step "
+                    f"so the workflow's Slack/email alert fires instead")
 
         if summary.get("aborted"):
             # Circuit breaker / budget tripped (Codex round 1): systemic, so the
@@ -2206,6 +2226,20 @@ def run_snapshot_consensus(dry_run: bool = False) -> dict:
                 f"fetch(es) failed ({summary['failed'][:5]}) -- systemic, not a "
                 f"flaky ticker"
             )
+        # ⛑ Codex round 19: an HTTP-200 `[]` for EVERY ticker (plan change,
+        # endpoint regression) counted as `empty`, never as an error, so a run
+        # that captured nothing at all passed as healthy. One uncovered name is
+        # a fact about that company; no coverage across a real window is a fact
+        # about the vendor. The floor keeps a tiny window of genuinely
+        # uncovered names from alarming.
+        if attempted >= SYSTEMIC_EMPTY_MIN and summary["ok"] == 0:
+            raise RuntimeError(
+                f"Consensus snapshot: 0 of {attempted} attempted ticker(s) returned "
+                f"consensus ({summary['empty']} empty, {summary['errors']} failed) "
+                f"-- systemic, not a run of uncovered names"
+            )
+        if undelivered is not None:
+            raise undelivered
         return summary
     finally:
         # Export even when the step is failing (all-failed, breaker, no key):
