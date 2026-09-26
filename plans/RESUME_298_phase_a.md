@@ -38,7 +38,8 @@ comes next.
 | 16 | 1 High: the invariant's first trip was fatal, and GitHub's expired-artifact purge (outside the group) trips it | fixed (`762bfc9`) |
 | 17 | 1 High: the duplicate term deduped whole ROWS, so an id whose `expired` flag flipped mid-walk counted twice | fixed (`837bb20`) |
 | 18 | 1 High: a single-source AMC label earned the 16:00 ET cutoff, so a mislabelled BMO print could be stored as pre-print | fixed (`5112685`) — **reverses a Fable-gated spec choice** |
-| **19** | **running / see below** | |
+| 19 | 6 High on the operator's view: 4 real (fixed `f6df191`), 2 declined as design | fixed / declined |
+| **20** | **running / see below** | |
 
 A Fable gate between 13 and 14 produced the reframing that matters: **the
 mid-walk listing mutation rounds 12–13 kept chasing is unreachable in
@@ -48,6 +49,22 @@ serialized job. Measured: 4/4 uploaders, 0 job-level overlaps across 159 group
 runs. The configuration IS the guarantee — which is why
 `test_the_earnings_db_writers_are_SERIALIZED` exists and why round 14's gate
 escapes mattered so much.
+
+## Round 19 — `f6df191` (2026-09-25 overnight, #460)
+
+Lens: **the operator's view — does every failure reach a human, is every alert true.**
+Prompt/log: `codex_feedback/round19_*`. Verdict: **0 Critical, 6 High**, no pre-existing.
+
+| # | finding | verdict |
+|---|---|---|
+| F1 | restore WARNING/DEGRADED are log-only; a failed post-walk count read was silent | **part real**: the silent count read now logs DEGRADED. Log-only warnings otherwise **declined — design** (round 15: advisory; completeness rests on the concurrency group) |
+| F2 | `EA_CONSENSUS_BOOTSTRAPPED=TRUE` (or any non-`true`) left the guard unarmed AND silenced the reminder | **real, fixed**: script normalizes case/space; reminder fires on `!= 'true'` |
+| F3 | HTTP-200 `[]` for every ticker counted as `empty`, run passed as healthy | **real, fixed**: ≥5 attempted with 0 ok fails the step |
+| F4 | an all-blocked window returns before skip rows are written | **declined — Low**: a record gap, not an operator signal (skip rows alert nobody either way) |
+| F5 | post-cutoff skips excluded from every failure signal | **declined — design** (Fable review H); the 07:13 ET capture precedes the 15:23 run |
+| F6 | undeliverable partial-failure notice was a log line on a green step; its "retried next run" text was false on the last run | **real, fixed**: undeliverable now fails the step; text corrected |
+
+Mutation-checked per file (main.py 2 kills, script 4, workflow 1). 689 green.
 
 ## Round 18 — FIXED in `5112685` (2026-09-25 overnight, #460)
 
