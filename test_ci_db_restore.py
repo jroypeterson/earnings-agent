@@ -1103,6 +1103,26 @@ def test_invariant_term_DUPLICATE_row_with_a_matching_count(tmp_path):
     assert res.returncode == 1
 
 
+def test_invariant_term_DUPLICATE_ID_whose_metadata_changed_between_pages(tmp_path):
+    """Codex round 17. The duplicate term deduplicated WHOLE ROWS, so an
+    artifact read on two pages with a different `expired` flag -- it expired
+    mid-walk, on GitHub's clock, outside the concurrency group -- counted as
+    two distinct artifacts. 4 rows, 3 real ids, total_count 4: every term
+    passed and the walk selected from a listing that had skipped a row.
+    The id is the identity; the row text is not.
+    """
+    res, work = _snapshot_case(
+        tmp_path,
+        {1: ["900 2026-09-04T00:00:00Z false main 9000",
+             "200 2026-09-02T00:00:00Z false main 2000"],
+         2: ["200 2026-09-02T00:00:00Z true main 2000",
+             "100 2026-09-01T00:00:00Z false main 1000"]},
+        total=4)
+    assert "listing changed during the walk" in res.stderr, res.stderr + res.stdout
+    assert "selected artifact" not in res.stdout, res.stdout
+    assert res.returncode == 1
+
+
 def test_invariant_term_FEWER_rows_than_the_count(tmp_path):
     """Term 2 alone: every row distinct, but fewer than the API says exist.
 

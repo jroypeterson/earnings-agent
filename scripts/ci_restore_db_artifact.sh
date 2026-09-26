@@ -251,7 +251,12 @@ for attempt in $(seq 1 "$TRIES"); do
     # artifacts mid-walk. Stopping is right in both: the alternative is a
     # stale restore, which has already cost 28 days once and 3.6 days once.
     all_rows="$(printf '%s\n' "$RAW" | awk 'NF' | wc -l | tr -d ' ')"
-    uniq_rows="$(printf '%s\n' "$RAW" | awk 'NF' | sort -u | wc -l | tr -d ' ')"
+    # UNIQUE BY ID, never by the whole row (Codex round 17). The row carries
+    # MUTABLE metadata -- `expired` flips on GitHub's clock, outside the
+    # concurrency group -- so the same artifact read on two pages can differ
+    # in text, and `sort -u` on whole rows counted it as two artifacts: the
+    # duplicate term matched nothing in exactly the case it exists for.
+    uniq_rows="$(printf '%s\n' "$RAW" | awk 'NF{print $1}' | sort -u | wc -l | tr -d ' ')"
     # The counts alone cannot see a count-PRESERVING change: delete one
     # artifact and add another and every total matches, with no duplicate
     # (Codex round 14). The listing HEAD is the only signal that can, so
