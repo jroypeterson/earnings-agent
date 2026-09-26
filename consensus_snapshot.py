@@ -111,19 +111,26 @@ def pre_release_cutoff(
 ) -> datetime:
     """The instant after which a snapshot may already contain the print.
 
-    - **16:00 ET** on the event date for an AMC release.
-    - **00:00 ET** on the event date for BMO / DMH / unknown hour, for an
-      UNCONFIRMED date (``date_confirmed = 0``), and when ``event_hour_yf`` and
-      ``event_hour`` are **both non-empty AND differ** -- a real second opinion
-      that disagrees, so the safe side is taken.
+    - **16:00 ET** on the event date for a CORROBORATED AMC release: a
+      confirmed date, ``event_hour`` = amc AND ``event_hour_yf`` = amc.
+    - **00:00 ET** on the event date otherwise -- BMO / DMH / unknown hour, an
+      UNCONFIRMED date (``date_confirmed = 0``), a second opinion that
+      disagrees, AND a single-source AMC label with no second opinion.
 
-    A NULL / empty ``event_hour_yf`` (about 80% of rows) is "no second opinion",
-    NOT a disagreement. Reading it as one would drag nearly every AMC cutoff to
-    midnight and throw away the day-of snapshot, the freshest pre-print figure.
+    ⛑ Codex round 18 reversed the single-source case. The earlier rule read a
+    NULL ``event_hour_yf`` as "no second opinion" and still granted 16:00, to
+    keep the day-of snapshot. But ``date_confirmed`` confirms the DATE, not the
+    SESSION: when the lone AMC label is wrong and the company actually prints
+    before the open, the 07:13 / 15:23 ET day-of captures can already contain
+    the print (FMP's consensus moves onto the guide -- FIVE moved 10%), and the
+    row is stored and served as pre-print with nothing to betray it. Where both
+    sources exist they disagree on ~1 in 60 events; 420 of 480 AMC events in
+    Jul-Sep 2026 had only the one label. JP's rule is that a wrong number is
+    worse than an absent one -- and here the cost is not even absence: the
+    prior day's capture is still there, just up to a day older.
 
-    AMC is read from ``event_hour`` (Finnhub-canonical) only. yfinance alone
-    saying "amc" over an empty Finnhub hour is not enough to move the cutoff
-    later -- later is the direction that can admit a post-print figure.
+    AMC is never granted on yfinance alone either: later is the direction
+    that can admit a post-print figure.
 
     Computed with ``ZoneInfo`` so DST is right (16:00 ET is 20:00 UTC in
     September and 21:00 UTC in November). Returned as an aware UTC datetime.
@@ -131,8 +138,7 @@ def pre_release_cutoff(
     d = date.fromisoformat(event_date)
     hour = _norm_hour(event_hour)
     yf_hour = _norm_hour(event_hour_yf)
-    disagree = bool(hour) and bool(yf_hour) and hour != yf_hour
-    if hour == "amc" and bool(date_confirmed) and not disagree:
+    if hour == "amc" and yf_hour == "amc" and bool(date_confirmed):
         local = datetime.combine(d, dtime(16, 0), tzinfo=ET)
     else:
         local = datetime.combine(d, dtime(0, 0), tzinfo=ET)

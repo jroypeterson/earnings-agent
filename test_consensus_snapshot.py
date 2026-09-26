@@ -124,7 +124,8 @@ def test_window_selects_only_pre_release_open_rows_and_fetches_each_ticker_once(
     _event(conn, "AAA", "2026-09-20")                        # dup ticker, fetch once
     _event(conn, "BBB", "2026-09-21")                        # +4  in (inclusive)
     _event(conn, "CCC", "2026-09-22")                        # +5  out
-    _event(conn, "DDD", "2026-09-17", hour="amc")            # today AMC in
+    _event(conn, "DDD", "2026-09-17", hour="amc", hour_yf="amc")  # today AMC, corroborated, in
+    _event(conn, "DDX", "2026-09-17", hour="amc")            # today AMC, single-source: out (r18)
     _event(conn, "EEE", "2026-09-17", hour="bmo")            # today BMO out (released)
     _event(conn, "FFF", "2026-09-29", hour="", confirmed=0)  # +12 unconfirmed in (+10d)
     _event(conn, "GGG", "2026-10-02", hour="", confirmed=0)  # +15 unconfirmed out
@@ -162,11 +163,13 @@ def test_empty_window_makes_zero_fetcher_calls():
 
 def test_today_amc_is_dropped_once_its_cutoff_has_passed():
     """A today-AMC name is fetched only while 16:00 ET is still ahead, and not
-    at all when yfinance disputes the hour (cutoff 00:00 ET). A snapshot the
-    read side would reject is a wasted metered call."""
+    at all when yfinance disputes the hour -- or, since Codex round 18, does
+    not corroborate it (cutoff 00:00 ET). A snapshot the read side would
+    reject is a wasted metered call."""
     conn = _db()
-    _event(conn, "DDD", "2026-09-17", hour="amc")
+    _event(conn, "DDD", "2026-09-17", hour="amc", hour_yf="amc")
     _event(conn, "YYY", "2026-09-17", hour="amc", hour_yf="bmo")
+    _event(conn, "ZZZ", "2026-09-17", hour="amc")
 
     fetcher = RecordingFetcher()
     _mod().snapshot_annual_consensus(conn, TODAY, fetcher, now=NOW)  # 07:20 EDT
@@ -319,7 +322,7 @@ def test_latest_pre_release_ignores_post_cutoff_same_day_row_and_event_date():
     # period set, so the fixture now matches what the writer produces.)
     _snap(conn, "XYZ", "2027-12-31", "2026-09-17T14:00:00Z", "2026-09-17", 7.77)
 
-    cutoff = mod.pre_release_cutoff("2026-09-17", "amc", None, 1)
+    cutoff = mod.pre_release_cutoff("2026-09-17", "amc", "amc", 1)
     got = mod.latest_pre_release_snapshot(conn, "XYZ", "2026-12-31", cutoff)
     assert got["eps_avg"] == 1.10
     assert got["taken_at"] == "2026-09-17T14:00:00Z"
@@ -335,7 +338,7 @@ def test_latest_pre_release_none_when_every_row_is_post_cutoff():
     mod = _mod()
     conn = _db()
     _snap(conn, "XYZ", "2026-12-31", "2026-09-17T21:00:00Z", "2026-09-17", 9.99)
-    cutoff = mod.pre_release_cutoff("2026-09-17", "amc", None, 1)
+    cutoff = mod.pre_release_cutoff("2026-09-17", "amc", "amc", 1)
     assert mod.latest_pre_release_snapshot(conn, "XYZ", "2026-12-31", cutoff) is None
 
 
@@ -348,8 +351,8 @@ EDT_1600 = datetime(2026, 9, 17, 20, 0, tzinfo=timezone.utc)
 
 
 @pytest.mark.parametrize("hour, hour_yf, confirmed, expected", [
-    ("amc", None, 1, EDT_1600),    # NULL yfinance hour = no second opinion
-    ("amc", "", 1, EDT_1600),      # empty yfinance hour = no second opinion
+    ("amc", None, 1, EDT_MIDNIGHT),  # single-source AMC label: not enough (r18)
+    ("amc", "", 1, EDT_MIDNIGHT),    # empty second opinion: same
     ("amc", "amc", 1, EDT_1600),   # agreement
     ("AMC", "amc", 1, EDT_1600),   # case is not a disagreement
     ("amc", "bmo", 1, EDT_MIDNIGHT),  # both non-empty AND differ
@@ -365,21 +368,33 @@ def test_cutoff_rule(hour, hour_yf, confirmed, expected):
     assert got.tzinfo is not None
 
 
-def test_null_event_hour_yf_keeps_the_amc_cutoff():
-    """80% of rows have a NULL event_hour_yf. Reading NULL as a disagreement
-    would drag every AMC cutoff to midnight and throw away the day-of
-    snapshot -- the freshest pre-print figure there is."""
+def test_a_single_source_AMC_label_does_not_admit_a_day_of_snapshot():
+    """Codex round 18, and a deliberate REVERSAL of the rule this test used to
+    pin ("a NULL event_hour_yf keeps the AMC cutoff").
+
+    `date_confirmed` confirms the DATE, not the session. With one AMC label and
+    no second opinion, a company that actually printed before the open has a
+    07:13 ET capture that may already carry the post-print consensus (FIVE's
+    moved 10% onto the guide) -- stored and served as pre-print, with nothing
+    to betray it. The prior day's capture is what must be returned instead.
+    """
     mod = _mod()
     conn = _db()
-    _snap(conn, "XYZ", "2026-12-31", "2026-09-17T14:00:00Z", "2026-09-17", 1.10)
+    _snap(conn, "XYZ", "2026-12-31", "2026-09-16T19:23:00Z", "2026-09-17", 1.00)  # prior day
+    _snap(conn, "XYZ", "2026-12-31", "2026-09-17T11:20:00Z", "2026-09-17", 10.25)  # day-of
     cutoff = mod.pre_release_cutoff("2026-09-17", "amc", None, 1)
+    assert cutoff == EDT_MIDNIGHT
+    got = mod.latest_pre_release_snapshot(conn, "XYZ", "2026-12-31", cutoff)
+    assert got["eps_avg"] == 1.00, got
+    # ...and a CORROBORATED AMC keeps the day-of capture, the freshest there is.
+    cutoff = mod.pre_release_cutoff("2026-09-17", "amc", "amc", 1)
     assert cutoff == EDT_1600
-    assert mod.latest_pre_release_snapshot(conn, "XYZ", "2026-12-31", cutoff)["eps_avg"] == 1.10
+    assert mod.latest_pre_release_snapshot(conn, "XYZ", "2026-12-31", cutoff)["eps_avg"] == 10.25
 
 
 def test_cutoff_uses_zoneinfo_across_dst():
     # 2026-11-10 is EST (UTC-5): 16:00 ET = 21:00 UTC, not 20:00.
-    got = _mod().pre_release_cutoff("2026-11-10", "amc", None, 1)
+    got = _mod().pre_release_cutoff("2026-11-10", "amc", "amc", 1)
     assert got == datetime(2026, 11, 10, 21, 0, tzinfo=timezone.utc)
     got = _mod().pre_release_cutoff("2026-11-10", "bmo", None, 1)
     assert got == datetime(2026, 11, 10, 5, 0, tzinfo=timezone.utc)
@@ -529,7 +544,7 @@ def test_taken_at_is_the_fetch_time_and_a_post_cutoff_fetch_is_refused():
     must not store post-print consensus stamped with the batch start."""
     from datetime import datetime, timezone
     conn = _db()
-    _event(conn, "DDD", "2026-09-17", hour="amc")   # cutoff 20:00 UTC (16:00 EDT)
+    _event(conn, "DDD", "2026-09-17", hour="amc", hour_yf="amc")   # cutoff 20:00 UTC (16:00 EDT)
     # clock() calls: budget check 19:59:20, pre-fetch check 19:59:40 (before
     # the cutoff, so the call is made), fetch returns 20:00:00 (at the cutoff).
     start = datetime(2026, 9, 17, 19, 59, 20, tzinfo=timezone.utc)
@@ -553,7 +568,7 @@ def test_a_cutoff_passed_before_the_call_spends_no_request_and_is_no_error():
     from datetime import datetime, timezone
     conn = _db()
     for t in ("A1", "A2", "A3", "A4"):
-        _event(conn, t, "2026-09-17", hour="amc")   # cutoff 20:00 UTC
+        _event(conn, t, "2026-09-17", hour="amc", hour_yf="amc")   # cutoff 20:00 UTC
     _event(conn, "ZZZ", "2026-09-18")                # future: must still be fetched
     start = datetime(2026, 9, 17, 19, 59, 30, tzinfo=timezone.utc)
     fetcher = RecordingFetcher()
@@ -724,7 +739,7 @@ def test_a_previous_quarters_unreported_row_does_not_block():
 def test_a_same_day_amc_sibling_before_its_cutoff_does_not_block():
     """Today's AMC row is still ahead at 07:20 ET, so it is not a past print."""
     conn = _db()
-    _event(conn, "XYZ", "2026-09-17", hour="amc")
+    _event(conn, "XYZ", "2026-09-17", hour="amc", hour_yf="amc")
     _event(conn, "XYZ", "2026-09-19")
     fetcher = RecordingFetcher()
     _mod().snapshot_annual_consensus(conn, TODAY, fetcher, now=NOW)
@@ -1433,7 +1448,7 @@ def test_a_reported_same_quarter_row_blocks_before_its_scheduled_cutoff():
     scheduled 16:00 cutoff has not passed, but the print has happened."""
     conn = _db()
     _qevent(conn, "XYZ", "2026-09-17", hour="amc")
-    conn.execute("UPDATE events SET reported = 1 WHERE event_date = '2026-09-17'")
+    conn.execute("UPDATE events SET reported = 1, event_hour_yf = 'amc' WHERE event_date = '2026-09-17'")
     conn.commit()
     _qevent(conn, "XYZ", "2026-09-20")
     fetcher = RecordingFetcher()
