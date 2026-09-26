@@ -2097,6 +2097,200 @@ def _preview_kv_key(dest: str, ticker: str, event_date: str) -> str:
     return f"consensus_preview_posted:{dest}:{ticker}:{event_date}"
 
 
+# Codex round 19: at least this many attempted tickers with ZERO consensus is
+# a vendor failure, not a run of uncovered names.
+SYSTEMIC_EMPTY_MIN = 5
+
+
+def run_snapshot_consensus(dry_run: bool = False) -> dict:
+    """Snapshot the forward ANNUAL Street consensus for every open event whose
+    release is still ahead (board #298 Phase A). Writes `consensus_snapshot`
+    rows only -- no rendering, no Slack card changes.
+
+    FMP keeps no estimate history, so a pre-print consensus that is not
+    captured now is lost for good; that is why this runs on every daily sync
+    and covers all tiers. See consensus_snapshot.py.
+
+    - Empty window -> returns without a single FMP call (and without needing
+      the key).
+    - `--dry-run` lists the window and makes ZERO FMP calls.
+    - FMP_API_KEY unset with a non-empty window -> exit 1, so the workflow's
+      alert fires rather than the snapshots silently not being taken.
+    - Some tickers failed (e.g. 429 after the 5/15/30 s backoff) -> a
+      best-effort #status-reports summary; the run still succeeds, because the
+      next run retries while the event is ahead.
+    - EVERY ticker failed -> raise, so the step fails and its alert fires: that
+      is a systemic outage (bad key, plan change), not a flaky name.
+    """
+    from datetime import datetime, timezone
+    from zoneinfo import ZoneInfo
+    from consensus_snapshot import (
+        export_snapshot_file,
+        make_fmp_fetcher,
+        merge_snapshot_file,
+        select_snapshot_window,
+        snapshot_annual_consensus,
+    )
+
+    now = datetime.now(timezone.utc)
+    # Event dates are ET calendar dates; the runner clock is UTC.
+    today = now.astimezone(ZoneInfo("America/New_York")).date()
+
+    conn = init_db()
+    # CI side-persistence (Codex round 3; see consensus_snapshot.py): the
+    # workflow restores the newest `consensus-snapshots` artifact to this path;
+    # merge it BEFORE snapshotting and export the whole table after, so the
+    # artifact stays cumulative. Unset (local runs) -> neither happens.
+    side_file = os.environ.get("CONSENSUS_SNAPSHOT_FILE", "").strip()
+    merge_failed = None
+    if side_file and not dry_run and os.path.exists(side_file):
+        try:
+            added = merge_snapshot_file(conn, side_file)
+            logger.info("Consensus snapshot: merged %d row(s) from %s", added, side_file)
+        except Exception as exc:  # noqa: BLE001 -- snapshot anyway, fail after
+            merge_failed = exc
+            logger.error("Consensus snapshot: merge of %s FAILED: %s", side_file, exc)
+    try:
+        window = select_snapshot_window(conn, today, now)
+        if dry_run:
+            logger.info(
+                "[dry-run] Consensus snapshot would fetch %d ticker(s): %s",
+                len(window), ", ".join(f"{t}@{d}" for t, d in window) or "(none)",
+            )
+            return {"tickers": len(window), "dry_run": True}
+        if not window:
+            logger.info("Consensus snapshot: nothing in the pre-release window")
+            return {"tickers": 0}
+        if not FMP_API_KEY:
+            logger.error(
+                "Consensus snapshot: FMP_API_KEY unset with %d ticker(s) in the "
+                "window -- pre-print consensus NOT captured", len(window))
+            sys.exit(1)
+
+        # Codex r8: a FRESH clock read -- `now` above predates the side-DB
+        # merge and the window query; passing it would backdate every cutoff
+        # check and taken_at (15:59:55 captured, fetch made after 16:00 ET).
+        summary = snapshot_annual_consensus(
+            conn, today, make_fmp_fetcher(conn, FMP_API_KEY, today),
+            now=datetime.now(timezone.utc))
+        undelivered = None
+
+        if summary["errors"]:
+            webhook = SLACK_WEBHOOK_STATUS or SLACK_WEBHOOK_EARNINGS
+            failed = ", ".join(f"`{t}` {st}" for t, st in summary["failed"][:15])
+            more = len(summary["failed"]) - 15
+            text = (
+                f":warning: *Consensus snapshot* — {summary['errors']} of "
+                f"{summary['tickers']} ticker(s) failed; their pre-print consensus "
+                f"was not captured this run. A ticker is retried on a later run ONLY "
+                f"while its pre-release cutoff is still ahead -- for today's AMC or "
+                f"tomorrow's names this may have been the LAST chance. {failed}"
+                + (f" +{more} more" if more > 0 else "")
+            )
+            # ⛑ Codex round 19: the partial-failure notice was best-effort, and a
+            # failed or impossible delivery was only a log line -- while the step
+            # stayed green, so the workflow's own Slack + email steps (keyed on
+            # the step's outcome) never ran either. Undeliverable now FAILS the
+            # step, which hands the alert to those out-of-band channels.
+            delivered = False
+            if webhook:
+                try:
+                    post_slack(
+                        webhook,
+                        [{"type": "section", "text": {"type": "mrkdwn", "text": text}}],
+                        text,
+                    )
+                    delivered = True
+                except Exception as exc:  # noqa: BLE001 -- escalated below
+                    logger.error("Consensus snapshot: status post failed: %s", exc)
+            else:
+                logger.warning("Consensus snapshot: no status webhook; %s", text)
+            if not delivered:
+                undelivered = RuntimeError(
+                    f"Consensus snapshot: {summary['errors']} ticker(s) failed and "
+                    f"the status notice could not be delivered -- failing the step "
+                    f"so the workflow's Slack/email alert fires instead")
+
+        if summary.get("aborted"):
+            # Circuit breaker / budget tripped (Codex round 1): systemic, so the
+            # step must fail and its alert fire -- a partial snapshot must not
+            # read as a healthy run.
+            raise RuntimeError(
+                f"Consensus snapshot ABORTED ({summary['aborted']}): "
+                f"{summary['skipped']} of {summary['tickers']} ticker(s) not attempted"
+            )
+        attempted = summary["tickers"] - summary.get("skipped_post_cutoff", 0)
+        if attempted and summary["ok"] + summary["empty"] == 0:
+            raise RuntimeError(
+                f"Consensus snapshot: every one of {summary['tickers']} FMP "
+                f"fetch(es) failed ({summary['failed'][:5]}) -- systemic, not a "
+                f"flaky ticker"
+            )
+        # ⛑ Codex round 19: an HTTP-200 `[]` for EVERY ticker (plan change,
+        # endpoint regression) counted as `empty`, never as an error, so a run
+        # that captured nothing at all passed as healthy. One uncovered name is
+        # a fact about that company; no coverage across a real window is a fact
+        # about the vendor. The floor keeps a tiny window of genuinely
+        # uncovered names from alarming.
+        if attempted >= SYSTEMIC_EMPTY_MIN and summary["ok"] == 0:
+            raise RuntimeError(
+                f"Consensus snapshot: 0 of {attempted} attempted ticker(s) returned "
+                f"consensus ({summary['empty']} empty, {summary['errors']} failed) "
+                f"-- systemic, not a run of uncovered names"
+            )
+        if undelivered is not None:
+            raise undelivered
+        return summary
+    finally:
+        # Export even when the step is failing (all-failed, breaker, no key):
+        # the rows already written must reach the side artifact. Never after a
+        # failed merge -- that export would drop the rows only the old file has.
+        export_failed = None
+        if side_file and not dry_run and merge_failed is None:
+            try:
+                n = export_snapshot_file(conn, side_file)
+                logger.info("Consensus snapshot: exported %d row(s) to %s", n, side_file)
+                # Codex r8: the side upload is gated on THIS marker, not on
+                # the step outcome -- a timed-out step reports `failure` and
+                # would republish the untouched restored file.
+                gh_out = os.environ.get("GITHUB_OUTPUT", "").strip()
+                if gh_out:
+                    with open(gh_out, "a", encoding="utf-8") as fh:
+                        fh.write("exported=true\n")
+            except Exception as exc:  # noqa: BLE001 -- re-raised below, loudly
+                export_failed = exc
+                logger.error("Consensus snapshot: export to %s FAILED: %s", side_file, exc)
+                # Codex round 4: the file on disk is now the RESTORED old copy;
+                # left in place the upload would publish it as the newest
+                # artifact. Remove it so the upload (if-no-files-found: error)
+                # fails too, and nothing stale is published.
+                try:
+                    os.remove(side_file)
+                except FileNotFoundError:
+                    pass
+        conn.close()
+        # Codex round 5: checked HERE, not on the normal path only -- every
+        # exit of this command (dry-run return, empty-window return, missing
+        # key sys.exit, breaker / all-failed raise, normal return) passes
+        # through `finally`. An unmergeable side file is removed so the upload
+        # (if-no-files-found: error) cannot republish it as the newest.
+        if merge_failed is not None:
+            try:
+                os.remove(side_file)
+            except FileNotFoundError:
+                pass
+            raise RuntimeError(
+                f"Consensus snapshot: merge of {side_file} failed "
+                f"({merge_failed}); side artifact NOT refreshed")
+        if export_failed is not None:
+            # Non-zero for the step, so its Slack/email alerts fire. (Raised
+            # from `finally`, so an in-flight error is chained as __context__
+            # and the traceback still shows both.)
+            raise RuntimeError(
+                f"Consensus snapshot: export to {side_file} failed "
+                f"({export_failed}); side artifact NOT refreshed")
+
+
 def run_consensus_preview(
     dry_run: bool = False,
     days_ahead: int = 3,
@@ -5176,6 +5370,14 @@ def main():
              "for upcoming Tier-1 reporters and post to #street-account",
     )
     parser.add_argument(
+        "--snapshot-consensus",
+        action="store_true",
+        help="Snapshot FMP's forward ANNUAL consensus for every open event whose "
+             "release is still ahead (all tiers) into consensus_snapshot -- the "
+             "pre-print figure board #298's guidance square compares against. "
+             "With --dry-run: list the window, make zero FMP calls.",
+    )
+    parser.add_argument(
         "--preview-ticker",
         type=str,
         default=None,
@@ -5257,6 +5459,8 @@ def main():
             "Slack reply processing",
             lambda: run_check_replies(dry_run=args.dry_run),
         )
+    elif args.snapshot_consensus:
+        run_snapshot_consensus(dry_run=args.dry_run)
     elif args.consensus_preview:
         run_consensus_preview(
             dry_run=args.dry_run,

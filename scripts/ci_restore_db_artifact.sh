@@ -71,8 +71,31 @@ REPO="${GITHUB_REPOSITORY:-jroypeterson/earnings-agent}"
 NAME="${EA_DB_ARTIFACT_NAME:-earnings-db}"
 DB="${EA_DB_PATH:-earnings_events.db}"
 BRANCH="${EA_DB_ARTIFACT_BRANCH:-main}"
-PAGE="${EA_DB_ARTIFACT_PAGE:-50}"
+PAGE="${EA_DB_ARTIFACT_PAGE:-100}"
+# The GitHub artifacts API CLAMPS per_page at 100 and says nothing about
+# it. That matters here because the walk stops on `rows < PAGE`: with
+# PAGE=200 the API returns 100 rows, 100 < 200 reads as a SHORT page, and
+# a truncated listing is declared COMPLETE after one request. Live-probed
+# 2026-09-23 (per_page=200 -> 100 rows). Clamped rather than refused:
+# clamping restores the comparison's meaning, while exiting here would
+# add a new way for one mistyped variable to stop four workflows.
+if [ "$PAGE" -gt 100 ]; then
+  # `log` is defined further down, so this one echoes directly rather than
+  # silently vanishing as a "command not found" on stderr.
+  echo "[db-restore] per_page ${PAGE} exceeds the API maximum; clamping to 100"
+  PAGE=100
+fi
 TRIES="${EA_DB_RESTORE_TRIES:-3}"
+# Retry backoff base, in seconds. Production keeps 5; the offline tests set 0.
+# Three real sleeps of 5s and 10s made one test take 22s of pure wall clock and
+# the suite ~85s, which made a 9-mutation pass ~13 minutes -- slow enough that
+# it discourages the mutation testing this lane most needs.
+RETRY_SLEEP="${EA_DB_RETRY_SLEEP:-5}"
+# The table whose presence proves the file is what it claims to be. Default
+# `events` (the earnings DB, which must also be non-empty). The board #298
+# `consensus-snapshots` side artifact passes `consensus_snapshot`: existence
+# only, since a first-season export can legitimately hold zero rows.
+VERIFY_TABLE="${EA_DB_VERIFY_TABLE:-events}"
 WORK=".db_restore"
 
 log() { echo "[db-restore] $*"; }
@@ -108,16 +131,237 @@ fi
 # Field order is fixed here and consumed positionally below: id created expired branch run.
 PROJECTION='.artifacts[] | "\(.id) \(.created_at) \(.expired) \(.workflow_run.head_branch) \(.workflow_run.id)"'
 
+# PAGINATION. The repository artifacts endpoint is paged, and the filter below
+# (unexpired AND on BRANCH) runs AFTER the fetch -- so a page consisting entirely
+# of expired or other-branch rows yields zero candidates while the artifact we
+# want sits on the next page. One request could therefore miss the newest
+# artifact entirely, which is precisely what the comment above claims cannot
+# happen ("deterministic ... nothing to select wrongly"). That claim was true of
+# the selection LOGIC and false of its INPUT.
+#
+# ⛑ The stop condition is the whole subtlety: it must be "the RAW page came back
+# shorter than per_page" (i.e. the API has no more rows), NOT "this page yielded
+# no candidates". The second one stops at page 1 in exactly the scenario this
+# fixes -- an all-expired first page -- so it would reproduce the defect while
+# looking like the fix. Filtering is done once, after paging, for the same reason.
+# SIZE THE WALK BY total_count; do not guess a prefix (round 10, H5).
+#
+# The old cap was 4 pages x 50 = 200 rows. Measured 2026-09-23 the
+# earnings-db listing holds 825 artifacts, expired rows included, growing
+# ~7/day. (⛑ That was read as "expired rows never leave it" -- FALSE:
+# measured 2026-09-25 it had dropped to 444, because GitHub purges
+# expired artifacts on its own schedule, OUTSIDE the concurrency group.
+# See the snapshot invariant below.) The walk was therefore truncated on every
+# run, and the review's remedy ("fail when the final page is full at the
+# cap") would have failed 100% of runs across all four restoring
+# workflows, none of which has continue-on-error on its restore step. A
+# guard that becomes the outage.
+#
+# Sizing by total_count drops the guesswork AND the ordering assumption
+# for a cost already being spent: 825/100 = 9 requests, +1 per ~14 days,
+# against a 1,000/hour GITHUB_TOKEN budget at 28 runs/day. MAX_PAGES is
+# now only a sanity bound (~2 years of growth), so reaching it is a real
+# anomaly and can fail loudly. Selecting from a truncated prefix was
+# considered and rejected: it would contradict this script's own header,
+# which sorts "rather than trusting the API's (undocumented) ordering".
+MAX_PAGES="${EA_DB_ARTIFACT_MAX_PAGES:-50}"
 RAW=""
 LIST_OK=0
+INVARIANT_TRIPPED=0
 for attempt in $(seq 1 "$TRIES"); do
-  if RAW="$(gh api "repos/${REPO}/actions/artifacts?name=${NAME}&per_page=${PAGE}" \
-      --jq "$PROJECTION" 2>/dev/null)"; then
+  # Refetched EVERY attempt (Codex round 12). Read once, a retry would
+  # size and validate its walk against a snapshot of the world taken
+  # before the failure it is retrying.
+  # A SEPARATE call, not an extra line spliced into the row projection:
+  # that stream is consumed positionally (NF==5) and its non-empty lines
+  # are counted to detect a short page, so a count line would corrupt both.
+  TOTAL_COUNT="$(gh api \
+    "repos/${REPO}/actions/artifacts?name=${NAME}&per_page=1" \
+    --jq '.total_count' 2>/dev/null)" || TOTAL_COUNT=''
+  case "$TOTAL_COUNT" in
+    ''|*[!0-9]*) TOTAL_COUNT='' ;;
+  esac
+  # ⛑ A count failure must COST A RETRY, not silently disable the
+  # snapshot invariant below (Codex round 13). With `|| true` a transient
+  # outage on this one call downgraded the whole walk to its unchecked
+  # behaviour and said nothing -- the invariant is gated on having a
+  # count, so losing the count loses the check.
+  #
+  # On the LAST attempt, proceed degraded rather than failing the run:
+  # the listing is frozen for the walk (see the invariant below), so a
+  # walk that reaches a short page IS complete. What is lost is only the
+  # cross-check, and that is worth saying out loud, not worth an outage.
+  if [ -z "$TOTAL_COUNT" ]; then
+    if [ "$attempt" -lt "$TRIES" ]; then
+      log "artifact count unavailable (attempt ${attempt}/${TRIES}); retrying"
+      sleep "$((attempt * RETRY_SLEEP))"
+      continue
+    fi
+    log "WARNING: artifact count unavailable after ${TRIES} attempt(s); walking to a short page with the snapshot cross-check DISABLED"
+  fi
+  if [ -n "$TOTAL_COUNT" ]; then
+    NEED_PAGES=$(( (TOTAL_COUNT + PAGE - 1) / PAGE ))
+    [ "$NEED_PAGES" -lt 1 ] && NEED_PAGES=1
+    log "artifact listing: ${TOTAL_COUNT} total, walking ${NEED_PAGES} page(s) of ${PAGE}"
+  else
+    NEED_PAGES="$MAX_PAGES"
+    log "artifact listing: total_count unavailable; walking up to ${MAX_PAGES} page(s)"
+  fi
+  WALK_PAGES="$NEED_PAGES"
+  [ "$WALK_PAGES" -gt "$MAX_PAGES" ] && WALK_PAGES="$MAX_PAGES"
+  RAW=""
+  ATTEMPT_OK=1
+  INVARIANT_TRIPPED=0
+  page=1
+  while [ "$page" -le "$WALK_PAGES" ]; do
+    if ! PAGE_RAW="$(gh api \
+        "repos/${REPO}/actions/artifacts?name=${NAME}&per_page=${PAGE}&page=${page}" \
+        --jq "$PROJECTION" 2>/dev/null)"; then
+      ATTEMPT_OK=0
+      break
+    fi
+    [ -n "$PAGE_RAW" ] && RAW="${RAW}${RAW:+$'\n'}${PAGE_RAW}"
+    # A short (or empty) RAW page means the API has nothing further. Count the
+    # raw rows, never the surviving candidates.
+    rows="$(printf '%s\n' "$PAGE_RAW" | awk 'NF' | wc -l | tr -d ' ')"
+    [ "$rows" -lt "$PAGE" ] && break
+    page=$((page + 1))
+  done
+  if [ "$ATTEMPT_OK" -eq 1 ]; then
+    # ---- SNAPSHOT INVARIANT -------------------------------------------
+    # ⛑ Rounds 12 and 13 built, and then rebuilt, a detector for a
+    # MID-WALK LISTING MUTATION. That event cannot happen here. All four
+    # workflows that upload `earnings-db` declare
+    # `concurrency: group: earnings-db-writer`, and each one RESTORES
+    # inside that same serialized job; artifacts cannot be created outside
+    # a run, and expiry never removes rows from the listing. Measured: 4 of
+    # 4 uploaders in the group, 0 job-level overlaps across 159 group runs
+    # since 2026-08-24. The listing is a frozen snapshot for the duration
+    # of the walk, BY CONSTRUCTION. `test_the_earnings_db_writers_are_
+    # SERIALIZED` pins that, because it is the real guarantee.
+    #
+    # So this does not try to be clever about which mutation happened. It
+    # asserts the snapshot held, exactly, and stops if it did not:
+    #   count before == count after == rows collected == unique rows
+    # Modulus-independent, unlike round 12's `unique < total_count`, which
+    # could not fire at all for any listing whose size is not an exact
+    # multiple of per_page -- and production is 826 % 100 = 26.
+    #
+    # It fires only on a broken concurrency group or an operator deleting
+    # artifacts mid-walk. Stopping is right in both: the alternative is a
+    # stale restore, which has already cost 28 days once and 3.6 days once.
+    all_rows="$(printf '%s\n' "$RAW" | awk 'NF' | wc -l | tr -d ' ')"
+    # UNIQUE BY ID, never by the whole row (Codex round 17). The row carries
+    # MUTABLE metadata -- `expired` flips on GitHub's clock, outside the
+    # concurrency group -- so the same artifact read on two pages can differ
+    # in text, and `sort -u` on whole rows counted it as two artifacts: the
+    # duplicate term matched nothing in exactly the case it exists for.
+    uniq_rows="$(printf '%s\n' "$RAW" | awk 'NF{print $1}' | sort -u | wc -l | tr -d ' ')"
+    # The counts alone cannot see a count-PRESERVING change: delete one
+    # artifact and add another and every total matches, with no duplicate
+    # (Codex round 14). The listing HEAD is the only signal that can, so
+    # it is read -- but it is ADVISORY, and that is deliberate.
+    #
+    # ⛑ Round 14's comment here called the head check EXACT, because ids
+    # are allocated monotonically and the listing is id-descending. The
+    # second half is an OBSERVATION, not a guarantee: the repository
+    # artifacts endpoint documents no sort or order parameter at all (only
+    # the per-RUN endpoint has `direction`), and the documentation's own
+    # example response is not id-ordered. Round 15 made the consequence
+    # concrete in BOTH directions -- a deletion plus an insertion at
+    # position 1 leaves the head unchanged and still hides the new
+    # artifact, and, far worse, two equally valid responses with different
+    # first rows would stop all four workflows on a healthy repository.
+    #
+    # So the FATAL terms below are only the ORDERING-INDEPENDENT ones: a
+    # duplicate id across pages, fewer unique rows than the API says exist,
+    # or a total_count that moved. Each is unambiguous evidence that the
+    # listing changed, however the endpoint chooses to order rows. A moved
+    # head is real evidence too, but it is not PROOF -- and this lane has
+    # already shipped three guards that became the outage they prevented.
+    #
+    # Completeness does not rest here. It rests on the concurrency group,
+    # which makes a mid-walk mutation unreachable, and which
+    # test_the_earnings_db_writers_are_SERIALIZED pins statically.
+    HEAD_BEFORE="$(printf '%s\n' "$RAW" | awk 'NF{print $1; exit}')"
+    HEAD_AFTER="$(gh api \
+      "repos/${REPO}/actions/artifacts?name=${NAME}&per_page=1&page=1" \
+      --jq '.artifacts[0].id' 2>/dev/null)" || HEAD_AFTER='READ_FAILED'
+    COUNT_AFTER="$(gh api \
+      "repos/${REPO}/actions/artifacts?name=${NAME}&per_page=1" \
+      --jq '.total_count' 2>/dev/null)" || COUNT_AFTER=''
+    case "$COUNT_AFTER" in
+      ''|*[!0-9]*) COUNT_AFTER='' ;;
+    esac
+    if [ -n "$TOTAL_COUNT" ] && [ "$NEED_PAGES" -le "$MAX_PAGES" ]; then
+      if [ "$all_rows" -ne "$uniq_rows" ] \
+         || [ "$all_rows" -ne "$TOTAL_COUNT" ] \
+         || { [ -n "$COUNT_AFTER" ] && [ "$COUNT_AFTER" -ne "$TOTAL_COUNT" ]; }; then
+        # ⛑ A TRIP COSTS A RETRY, NOT THE RUN (Codex round 16). Two things
+        # outside the concurrency group can trip this on a HEALTHY repository:
+        # GitHub purging expired artifacts on its own schedule (measured: the
+        # listing fell 830 -> 444 between 2026-09-23 and 09-25, so rows DO
+        # leave it), and the endpoint serving an unchanged collection in a
+        # different order to two page requests (it documents no ordering and
+        # no snapshot token). Both are transient -- a fresh walk with fresh
+        # counts sees a consistent listing. Exiting on the first trip made
+        # either one stop all four workflows, none of which has
+        # continue-on-error on its restore. Only a trip that PERSISTS across
+        # every attempt is fatal, and it is still refused, never selected from.
+        INVARIANT_TRIPPED=1
+        echo "ERROR: the artifact listing changed during the walk (attempt ${attempt}/${TRIES})." >&2
+        echo "  total_count before=${TOTAL_COUNT} after=${COUNT_AFTER:-unknown};" >&2
+        echo "  rows collected=${all_rows}, unique=${uniq_rows}." >&2
+        echo "  listing head before=${HEAD_BEFORE:-none} after=${HEAD_AFTER:-unknown}." >&2
+        ATTEMPT_OK=0
+      else
+        INVARIANT_TRIPPED=0
+      fi
+    fi
+  fi
+  if [ "$ATTEMPT_OK" -eq 1 ] && [ -n "$TOTAL_COUNT" ] && [ "$NEED_PAGES" -le "$MAX_PAGES" ]; then
+    # ADVISORY, never fatal -- see the rationale above. A failed read is
+    # reported rather than silently dropping the only check that can see a
+    # count-preserving replacement (round 15, finding 3).
+    if [ -z "$COUNT_AFTER" ]; then
+      # Codex round 19: this term was dropped with no word at all, unlike the
+      # head read beside it.
+      log "WARNING: could not re-read total_count after the walk; the count-moved check is DEGRADED for this run"
+    fi
+    if [ "$HEAD_AFTER" = "READ_FAILED" ]; then
+      log "WARNING: could not re-read the listing head; the count-preserving-replacement check is DEGRADED for this run"
+    elif [ -n "$HEAD_AFTER" ] && [ -n "$HEAD_BEFORE" ] \
+         && [ "$HEAD_AFTER" != "$HEAD_BEFORE" ]; then
+      log "WARNING: the listing head moved during the walk (${HEAD_BEFORE} -> ${HEAD_AFTER}). Either an artifact was created -- which the earnings-db-writer concurrency group should prevent -- or the endpoint reordered. The ordering-independent checks passed, so selection continues."
+    fi
+  fi
+  if [ "$ATTEMPT_OK" -eq 1 ]; then
+    # TRUNCATED is not the same as "ended on a full page" (Codex r11).
+    # The first version of this check asked whether the LAST PAGE WAS
+    # FULL, which is true of ANY listing whose size is an exact multiple
+    # of PAGE -- so a COMPLETE walk was refused whenever it finished
+    # exactly at the cap. Reproduced: total_count=4, per_page=2,
+    # MAX_PAGES=2 reads both pages, consumes the entire listing, and then
+    # errored. Projected to reach production around 2028-05-12 at 5,000
+    # artifacts: the guard written to prevent an outage carrying its own.
+    #
+    # When total_count is KNOWN, completeness is known -- the walk was cut
+    # short only if more pages were NEEDED than the cap allows. The
+    # full-final-page heuristic is only meaningful in the fallback where
+    # no count was available.
+    if { [ -n "$TOTAL_COUNT" ] && [ "$NEED_PAGES" -gt "$MAX_PAGES" ]; } \
+       || { [ -z "$TOTAL_COUNT" ] && [ "$page" -gt "$WALK_PAGES" ] \
+            && [ "${rows:-0}" -ge "$PAGE" ]; }; then
+      echo "ERROR: artifact listing exceeded ${MAX_PAGES} pages of ${PAGE}." >&2
+      echo "  total_count=${TOTAL_COUNT:-unknown}. Cannot establish the newest" >&2
+      echo "  artifact from a truncated listing; refusing to guess." >&2
+      exit 1
+    fi
     LIST_OK=1
     break
   fi
   log "artifact listing failed (attempt ${attempt}/${TRIES}); retrying in $((attempt * 5))s"
-  sleep "$((attempt * 5))"
+  sleep "$((attempt * RETRY_SLEEP))"
 done
 
 # Filter, then sort by created_at descending. `sort -r` on an ISO-8601 Z timestamp
@@ -133,6 +377,14 @@ LISTING="$(printf '%s\n' "$RAW" \
 # Distinguish "the API never answered" from "the API answered, and there are no
 # artifacts". Conflating them is what turns a transient outage into a fresh-DB run
 # that silently erases date locks, kv_store watermarks and Slack thread state.
+if [ "$LIST_OK" -ne 1 ] && [ "$INVARIANT_TRIPPED" -eq 1 ]; then
+  echo "[db-restore] the artifact listing changed during the walk on every one of" >&2
+  echo "  ${TRIES} attempts. A purge or a reorder is transient; this is not. The" >&2
+  echo "  earnings-db writers are serialized by the 'earnings-db-writer'" >&2
+  echo "  concurrency group -- check that group, or an operator deleting artifacts." >&2
+  echo "  Refusing to select from a listing that will not hold still." >&2
+  exit 1
+fi
 if [ "$LIST_OK" -ne 1 ]; then
   echo "[db-restore] the artifacts API could not be reached after ${TRIES} attempts." >&2
   echo "  Refusing to continue: an unreachable API is NOT an absent artifact." >&2
@@ -140,6 +392,32 @@ if [ "$LIST_OK" -ne 1 ]; then
 fi
 
 if [ -z "$LISTING" ]; then
+  # "The listing was empty" and "the restore succeeded" must not be the same exit
+  # code for a caller whose artifact is CUMULATIVE. For the main earnings-db the
+  # abort-if-missing step owns this case (EA_DB_BOOTSTRAPPED), so exit 0 is right.
+  # The consensus-snapshots side artifact had no such owner: an empty successful
+  # listing produced no file, no merge, an export of only the current DB's table,
+  # and an upload that became the newest side artifact -- silently resetting
+  # cumulative history. Every alert predicate in the workflow reads
+  # `steps.*.outcome`, which was `success`, so none of them could fire.
+  #
+  # One mechanism, not two: a non-zero exit here is sufficient, because the
+  # persist step already gates on `steps.restore_snapshots.outcome == 'success'`
+  # and both alert steps key off the same outcome. Do NOT add a second refusal in
+  # the yml to match.
+  # Normalized (Codex round 19): the value is typed by a human into a repo
+  # variable. `TRUE` or `true ` failed an exact match and left the guard
+  # silently unarmed, while the workflow's reminder -- which fires only while
+  # the variable is not `true` -- saw a value and stopped nagging.
+  REQUIRE="$(printf '%s' "${EA_DB_REQUIRE_ARTIFACT:-}" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')"
+  if [ "$REQUIRE" = "true" ]; then
+    echo "[db-restore] no unexpired '${NAME}' artifact on ${BRANCH}, and" >&2
+    echo "  EA_DB_REQUIRE_ARTIFACT=true declares this artifact MANDATORY." >&2
+    echo "  Refusing to continue: for a cumulative artifact, 'nothing to restore'" >&2
+    echo "  is indistinguishable from 'the history was lost' and must not pass as" >&2
+    echo "  a successful restore." >&2
+    exit 1
+  fi
   log "no unexpired '${NAME}' artifact on ${BRANCH} - treating as bootstrap."
   log "the abort-if-missing step owns this case; not writing ${DB}."
   exit 0
@@ -164,15 +442,16 @@ fetch() {
   # Verify BEFORE overwriting the working copy. A truncated download that still
   # unzips would otherwise be promoted to the live database and then re-uploaded
   # as newest -- the failure this whole file exists to stop.
-  "$PY_BIN" - "${WORK}/${DB}" <<'PY' || return 1
+  "$PY_BIN" - "${WORK}/${DB}" "$VERIFY_TABLE" <<'PY' || return 1
 import sqlite3, sys
 con = sqlite3.connect(f"file:{sys.argv[1]}?mode=ro", uri=True)
+table = sys.argv[2]
 if con.execute("PRAGMA quick_check(1)").fetchone()[0] != "ok":
     raise SystemExit("quick_check failed")
 if not con.execute(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name='events'").fetchone():
-    raise SystemExit("no events table")
-if con.execute("SELECT COUNT(*) FROM events").fetchone()[0] == 0:
+        "SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table,)).fetchone():
+    raise SystemExit(f"no {table} table")
+if table == "events" and con.execute("SELECT COUNT(*) FROM events").fetchone()[0] == 0:
     raise SystemExit("events table is empty")
 PY
 }
@@ -181,7 +460,7 @@ OK=0
 for attempt in $(seq 1 "$TRIES"); do
   if fetch; then OK=1; break; fi
   log "download/verify of artifact ${AID} failed (attempt ${attempt}/${TRIES}); retrying in $((attempt * 5))s"
-  sleep "$((attempt * 5))"
+  sleep "$((attempt * RETRY_SLEEP))"
 done
 
 if [ "$OK" -ne 1 ]; then
@@ -195,10 +474,13 @@ fi
 cp "${WORK}/${DB}" "$DB" || exit 1
 rm -rf "$WORK"
 
-STATS="$("$PY_BIN" - "$DB" <<'PY'
+STATS="$("$PY_BIN" - "$DB" "$VERIFY_TABLE" <<'PY'
 import sqlite3, sys
 con = sqlite3.connect(f"file:{sys.argv[1]}?mode=ro", uri=True)
 q = lambda s: con.execute(s).fetchone()[0]
+if sys.argv[2] != "events":
+    print(f"{sys.argv[2]}={q(f'SELECT COUNT(*) FROM {sys.argv[2]}')}")
+    raise SystemExit(0)
 tabs = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
 kv = q("SELECT COUNT(*) FROM kv_store") if "kv_store" in tabs else 0
 print(f"events={q('SELECT COUNT(*) FROM events')} "

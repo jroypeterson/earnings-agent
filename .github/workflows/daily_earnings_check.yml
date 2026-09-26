@@ -51,6 +51,21 @@ jobs:
     steps:
       - name: Checkout earnings-agent
         uses: actions/checkout@v5
+        with:
+          # Pin the checkout to the BRANCH REF, not the default (github.sha).
+          # A GitHub re-run of an old workflow run reuses that run's sha, so the
+          # default checks out OLD CODE, which then writes the shared earnings-db
+          # artifact and uploads it with a NEWEST created_at -- the rollback guard
+          # passes it because accumulated actuals are unchanged, and the next run
+          # restores a database written by code that predates the current schema.
+          # An explicit ref takes that branch's tip at checkout time instead.
+          #
+          # `github.ref`, deliberately NOT a literal `main`: these workflows are
+          # schedule + workflow_dispatch, so on every normal trigger this is
+          # already main's tip and the change is a no-op -- but pinning the
+          # literal would silently stop a branch dispatch from testing its own
+          # branch. Same cost, one fewer path removed.
+          ref: ${{ github.ref }}
 
       # Coverage Manager is public — clone its exports so the agent gets
       # tier and sector data instead of falling back to legacy mode.
@@ -220,6 +235,182 @@ jobs:
           GOOGLE_CALENDAR_ID: ${{ secrets.GOOGLE_CALENDAR_ID }}
           GOOGLE_CREDENTIALS_PATH: credentials.json
         run: python main.py --check-replies
+
+      # Pre-print ANNUAL consensus snapshot (board #298 Phase A). FMP keeps no
+      # estimate history, so the consensus as it stood BEFORE a release exists
+      # only if it is captured while the event is still ahead; the guidance
+      # square compares against these rows, never a live post-print fetch.
+      # Writes consensus_snapshot rows only -- nothing in the Slack output moves.
+      # ~400 tickers x 1 call at the 4/s pacer on the heaviest run.
+      #
+      # ORDER (Codex round 3): after EVERY step that corrects event dates --
+      # the sync, the cross-check (EDGAR auto-correction), the IR-email
+      # confirmations and the Slack replies (operator locks) -- so a snapshot
+      # is never taken against an uncorrected date or window. It reads only
+      # the events table and FMP; nothing it depends on runs later. Before the
+      # DB save, so on a clean run its rows ride the earnings-db artifact.
+      #
+      # A FEATURE, not a date safeguard: continue-on-error so it can never fail
+      # the critical sync. Its failure is NOT silent, though -- see the two
+      # alert steps below. The script also exits non-zero when EVERY fetch
+      # failed (bad key / plan change), and posts a #status-reports summary
+      # when only some did.
+      # The snapshot rows ALSO persist on their own (Codex round 3), because
+      # the earnings-db save at the end of the job is skipped when any later
+      # step fails. The newest `consensus-snapshots` artifact is restored here
+      # (same newest-by-created_at + verify-before-overwrite script as the DB),
+      # merged into the DB by the snapshot step BEFORE it snapshots, and the
+      # whole table is exported and uploaded again after -- so the newest
+      # artifact is always cumulative, and restoring just it recovers every
+      # run whose DB save was lost. It never touches the earnings-db artifact.
+      - name: Restore consensus snapshots side artifact
+        id: restore_snapshots
+        if: github.ref == 'refs/heads/main'
+        continue-on-error: true
+        timeout-minutes: 5
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EA_DB_ARTIFACT_NAME: consensus-snapshots
+          EA_DB_PATH: consensus_snapshots.db
+          EA_DB_VERIFY_TABLE: consensus_snapshot
+          # Codex round 10, C1: the script's mandatory-artifact refusal was
+          # gated on this flag and NOTHING set it, so the guard was inert in
+          # production while its test injected the value by hand.
+          #
+          # ⛑ It must NOT be a literal "true". Measured 2026-09-23: the
+          # consensus-snapshots artifact has total_count = 0 -- it has never
+          # been uploaded, because this branch is unmerged. A literal would
+          # make the first post-merge run exit 1 here, which sets this step's
+          # `outcome` to failure, which skips "Save consensus snapshots side
+          # artifact" below (it is gated on outcome == 'success'), so the
+          # artifact could NEVER be created and the alert would fire twice a
+          # day forever with no manual way out. The guard would become the
+          # outage.
+          #
+          # Same bootstrap shape as vars.EA_DB_BOOTSTRAPPED. An unset repo
+          # variable renders as the empty string, which fails the script's
+          # `= "true"` test and takes the bootstrap exit-0 path. The persist
+          # step below announces the flip until it is set, so the inert window
+          # cannot be forgotten the way the earnings-db one was (~85 days).
+          EA_DB_REQUIRE_ARTIFACT: ${{ vars.EA_CONSENSUS_BOOTSTRAPPED }}
+        run: bash scripts/ci_restore_db_artifact.sh
+
+      - name: Snapshot pre-print annual consensus (FMP)
+        id: snapshot_consensus
+        if: github.ref == 'refs/heads/main'
+        continue-on-error: true
+        # Hard ceiling in addition to the in-code 15-min budget (Codex round 1):
+        # this step runs BEFORE 'Save earnings database', so it must never be
+        # able to hold the job open past the point where that save is lost.
+        timeout-minutes: 20
+        env:
+          FMP_API_KEY: ${{ secrets.FMP_API_KEY }}
+          SLACK_WEBHOOK_EARNINGS: ${{ secrets.SLACK_WEBHOOK_EARNINGS }}
+          SLACK_WEBHOOK_STATUS: ${{ secrets.SLACK_WEBHOOK_STATUS }}
+          CONSENSUS_SNAPSHOT_FILE: consensus_snapshots.db
+        run: python main.py --snapshot-consensus
+
+      # Uploaded whatever fails later (always()), but only when:
+      # - the snapshot step's EXPORT completed this run (it writes
+      #   `exported=true` to GITHUB_OUTPUT). Not the step outcome: a step
+      #   killed at timeout-minutes reports `failure` (Codex r8) and would
+      #   republish the untouched restored file.
+      # - the restore SUCCEEDED (a clean bootstrap counts): an export built
+      #   without the previous artifact merged in would become the newest,
+      #   NON-cumulative copy and hide the rows only the old one holds.
+      # Its own name, no overwrite: nothing here can delete the earnings-db
+      # artifact or an earlier snapshot copy.
+      - name: Save consensus snapshots side artifact
+        id: persist_snapshots
+        if: always() && github.ref == 'refs/heads/main' && steps.restore_snapshots.outcome == 'success' && steps.snapshot_consensus.outputs.exported == 'true'
+        continue-on-error: true
+        uses: actions/upload-artifact@v6
+        with:
+          name: consensus-snapshots
+          path: consensus_snapshots.db
+          retention-days: 90
+          if-no-files-found: error
+
+      # ⛑ The bootstrap flip must ANNOUNCE ITSELF. A repo variable a human has
+      # to remember to set is "never set in production" with extra steps --
+      # which is exactly what C1 filed as Critical. The precedent here is an
+      # ~85-day lag: the oldest expired earnings-db artifact is 2026-02-09 and
+      # EA_DB_BOOTSTRAPPED was not set until 2026-05-04. Until the variable is
+      # set, the mandatory-artifact guard above is inert; this line says so on
+      # every successful upload instead of trusting memory.
+      # Recovery from an EARLY flip (set before an artifact exists) is one
+      # command: gh variable delete EA_CONSENSUS_BOOTSTRAPPED.
+      - name: Announce consensus bootstrap until the repo variable is set
+        # `!= 'true'`, not `== ''` (Codex round 19): any other value -- `false`,
+        # a typo -- leaves the guard unarmed, so it must keep the nag alive.
+        # Actions compares strings case-insensitively and the restore script
+        # normalizes case and whitespace, so `TRUE` arms both consistently.
+        if: always() && steps.persist_snapshots.outcome == 'success' && vars.EA_CONSENSUS_BOOTSTRAPPED != 'true'
+        continue-on-error: true
+        timeout-minutes: 2
+        env:
+          SLACK_WEBHOOK_STATUS: ${{ secrets.SLACK_WEBHOOK_STATUS }}
+          SLACK_WEBHOOK_EARNINGS: ${{ secrets.SLACK_WEBHOOK_EARNINGS }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          WEBHOOK="${SLACK_WEBHOOK_STATUS:-$SLACK_WEBHOOK_EARNINGS}"
+          if [ -n "$WEBHOOK" ]; then
+            TEXT=":package: consensus-snapshots is bootstrapped (artifact uploaded). Set repo variable \`EA_CONSENSUS_BOOTSTRAPPED=true\` to arm the mandatory-artifact guard -- until then a vanished artifact restores as a silent fresh start. $RUN_URL"
+            curl -sS -X POST -H 'Content-type: application/json' \
+              --data "$(printf '{"text":%s}' "$(printf '%s' "$TEXT" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')")" \
+              "$WEBHOOK" || true
+          fi
+
+      # ⚠ Why these read `steps.snapshot_consensus.outcome` and not `failure()`:
+      # continue-on-error turns a failed step's CONCLUSION into success, and
+      # failure() reads conclusions -- so a bare `if: failure()` here can never
+      # fire for this step. `outcome` is the pre-continue-on-error result.
+      # Both alerts are themselves continue-on-error: a failed curl must not
+      # skip the "Save earnings database" step below and lose this run's DB.
+      - name: Notify Slack on consensus snapshot failure
+        if: always() && ((steps.snapshot_consensus.outcome != 'success' && steps.snapshot_consensus.outcome != 'skipped') || steps.restore_snapshots.outcome == 'failure' || steps.persist_snapshots.outcome == 'failure')
+        continue-on-error: true
+        timeout-minutes: 2
+        env:
+          SLACK_WEBHOOK_STATUS: ${{ secrets.SLACK_WEBHOOK_STATUS }}
+          SLACK_WEBHOOK_EARNINGS: ${{ secrets.SLACK_WEBHOOK_EARNINGS }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          WEBHOOK="${SLACK_WEBHOOK_STATUS:-$SLACK_WEBHOOK_EARNINGS}"
+          if [ -n "$WEBHOOK" ]; then
+            curl -sS --connect-timeout 10 --max-time 20 -X POST -H 'Content-Type: application/json' \
+              --data "{\"text\":\":warning: *Consensus snapshot* step failed, or its side artifact was not restored/saved — pre-print FY consensus may NOT be captured/persisted this run (the daily sync itself is fine). <${RUN_URL}|run details>\"}" \
+              "$WEBHOOK"
+          fi
+
+      # Out-of-band backup, inline (runner python3 + stdlib) per the workflow
+      # convention -- never a call into scripts/.
+      - name: Email backup on consensus snapshot failure
+        if: always() && ((steps.snapshot_consensus.outcome != 'success' && steps.snapshot_consensus.outcome != 'skipped') || steps.restore_snapshots.outcome == 'failure' || steps.persist_snapshots.outcome == 'failure')
+        continue-on-error: true
+        timeout-minutes: 2
+        env:
+          GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          ALERT_EMAIL_TO: jroypeterson+alerts@gmail.com
+          ALERT_SUBJECT: "[ClaudeFin] earnings_agent — consensus snapshot step or its side artifact failed"
+          ALERT_BODY: "The pre-print consensus snapshot step failed in Daily Earnings Check (the sync itself succeeded). Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+        run: |
+          python3 - <<'PY'
+          import os, smtplib
+          from email.mime.text import MIMEText
+          addr = os.environ.get("GMAIL_ADDRESS", "").strip()
+          pw = os.environ.get("GMAIL_APP_PASSWORD", "").strip()
+          to = os.environ.get("ALERT_EMAIL_TO", "jroypeterson+alerts@gmail.com").strip()
+          if not addr or not pw:
+              print("email backup: GMAIL creds unset - skipping"); raise SystemExit(0)
+          msg = MIMEText(os.environ.get("ALERT_BODY", "") or os.environ.get("ALERT_SUBJECT", ""), "plain")
+          msg["Subject"] = os.environ.get("ALERT_SUBJECT", "[ClaudeFin] earnings_agent — alert")
+          msg["From"] = addr; msg["To"] = to
+          with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=30) as s:
+              s.login(addr, pw); s.send_message(msg)
+          print(f"email backup: sent to {to}")
+          PY
 
       # Reconcile TickTick tasks against DB truth: fix stale dates + titles on
       # confirmed rows, strip dates from unconfirmed rows (JP 2026-07-24: no

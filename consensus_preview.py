@@ -762,7 +762,9 @@ def fetch_fmp_estimate_range(
     return EstimateRange(None, None, None)
 
 
-def fetch_fmp_reported_currency(ticker: str, api_key: str) -> Optional[str]:
+def fetch_fmp_reported_currency(
+    ticker: str, api_key: str, *, get_json=None,
+) -> Optional[str]:
     """The currency the company REPORTS in, for FY consensus comparisons.
 
     ⚠ Do NOT use `/stable/profile`'s `currency` field. For NVO it returns
@@ -774,19 +776,61 @@ def fetch_fmp_reported_currency(ticker: str, api_key: str) -> Optional[str]:
 
     Returns None on any failure — the caller must abstain rather than assume
     USD, because assuming is exactly how the DKK/USD mix ships silently.
+
+    `get_json` is injectable so the consensus snapshot can route this call
+    through its 4/s pacer; the default is looked up at call time.
+
+    ⚠ Collapses "could not fetch" and "FMP has none" into None. A caller that
+    must tell them apart uses `fetch_fmp_reported_currency_checked`.
     """
+    cur, _status = fetch_fmp_reported_currency_checked(
+        ticker, api_key, get_json=get_json)
+    return cur
+
+
+def fetch_fmp_reported_currency_checked(
+    ticker: str, api_key: str, *, get_json=None,
+) -> tuple[Optional[str], str]:
+    """`fetch_fmp_reported_currency`, plus WHY (Codex round 2, 2026-09-22).
+
+    Returns `(currency, status)`, status one of:
+      - ``ok``            -- FMP answered with a reportedCurrency
+      - ``absent``        -- FMP answered (a list) and has none: a fact
+      - ``error:<code>``  -- HTTP status, ``timeout``, ``network``, ``shape``
+        (a non-list body such as ``{"Error Message": ...}``) or the exception
+        name. The currency COULD NOT BE FETCHED, which is not "absent".
+
+    Never raises.
+    """
+    import socket
+    import urllib.error
+
+    fetch = get_json if get_json is not None else _fmp_get_json
     try:
-        rows = _fmp_get_json(
+        rows = fetch(
             f"https://financialmodelingprep.com/stable/income-statement"
             f"?symbol={ticker}&limit=1&apikey={api_key}"
         )
+    except urllib.error.HTTPError as exc:
+        logger.warning("FMP reportedCurrency failed for %s: HTTP %s", ticker, exc.code)
+        return None, f"error:{exc.code}"
+    except (TimeoutError, socket.timeout) as exc:
+        logger.warning("FMP reportedCurrency timed out for %s: %s", ticker, exc)
+        return None, "error:timeout"
+    except urllib.error.URLError as exc:
+        logger.warning("FMP reportedCurrency failed for %s: %s", ticker, exc)
+        return None, "error:network"
     except Exception as exc:  # noqa: BLE001 — module convention: never raise
         logger.warning("FMP reportedCurrency failed for %s: %s", ticker, exc)
-        return None
-    if not isinstance(rows, list) or not rows:
-        return None
+        return None, f"error:{type(exc).__name__}"
+    if not isinstance(rows, list):
+        return None, "error:shape"
+    if not rows:
+        return None, "absent"
+    if not isinstance(rows[0], dict) or "Error Message" in rows[0]:
+        return None, "error:shape"
     cur = rows[0].get("reportedCurrency")
-    return cur or None
+    return (cur, "ok") if cur else (None, "absent")
 
 
 def fetch_fmp_annual_estimates(
@@ -804,18 +848,63 @@ def fetch_fmp_annual_estimates(
     calendar-year field on the result: MCK's FY ends 2029-03-31, so a calendar
     stamp is not the fiscal label and inviting that comparison is a bug.
 
-    Never raises; returns [] on any failure.
+    Never raises; returns [] on any failure. ⚠ That collapses "FMP has no
+    coverage" and "FMP refused us (429)" into the same []. Any caller that must
+    tell those apart -- the pre-print snapshot does -- uses
+    `fetch_fmp_annual_estimates_checked`.
     """
+    rows, _status = fetch_fmp_annual_estimates_checked(ticker, api_key, currency)
+    return rows
+
+
+def fetch_fmp_annual_estimates_checked(
+    ticker: str, api_key: str, currency: Optional[str] = None, *, get_json=None,
+) -> tuple[list[AnnualConsensus], str]:
+    """`fetch_fmp_annual_estimates`, plus WHY the list is what it is.
+
+    Returns `(rows, status)`, status one of:
+      - ``ok``            -- at least one fiscal period parsed
+      - ``empty``         -- FMP answered with no periods: a fact about coverage
+      - ``error:<code>``  -- the HTTP status (``error:429``, ``error:403``), or
+        ``error:timeout`` / ``error:network`` / ``error:shape`` /
+        ``error:<ExceptionName>`` when there is no HTTP status to report
+
+    A 429 and an empty list must never be the same answer: the first is a
+    pipeline gap to retry and alert on, the second a company FMP does not
+    cover. The HTTP code is read off `urllib.error.HTTPError`, which
+    `_fmp_get_json` already raises, so its other callers are untouched.
+
+    `get_json` is injectable (the snapshot step passes its 4/s pacer); the
+    default looks `_fmp_get_json` up at CALL time so test monkeypatches of the
+    module attribute still intercept it. Never raises.
+    """
+    import socket
+    import urllib.error
+
+    fetch = get_json if get_json is not None else _fmp_get_json
     try:
-        rows = _fmp_get_json(
+        rows = fetch(
             f"https://financialmodelingprep.com/stable/analyst-estimates"
             f"?symbol={ticker}&period=annual&apikey={api_key}"
         )
+    except urllib.error.HTTPError as exc:
+        logger.warning("FMP annual estimates failed for %s: HTTP %s", ticker, exc.code)
+        return [], f"error:{exc.code}"
+    except (TimeoutError, socket.timeout) as exc:
+        logger.warning("FMP annual estimates timed out for %s: %s", ticker, exc)
+        return [], "error:timeout"
+    except urllib.error.URLError as exc:
+        logger.warning("FMP annual estimates failed for %s: %s", ticker, exc)
+        return [], "error:network"
     except Exception as exc:  # noqa: BLE001 — module convention: never raise
         logger.warning("FMP annual estimates failed for %s: %s", ticker, exc)
-        return []
+        return [], f"error:{type(exc).__name__}"
     if not isinstance(rows, list):
-        return []
+        # FMP answers some refusals with HTTP 200 + {"Error Message": ...}.
+        # That is not "no coverage".
+        logger.warning("FMP annual estimates for %s: unexpected shape %s",
+                       ticker, type(rows).__name__)
+        return [], "error:shape"
 
     def _num(v):
         return v if isinstance(v, (int, float)) else None
@@ -824,8 +913,21 @@ def fetch_fmp_annual_estimates(
         # An analyst count of 0 is "no coverage", not a measured zero.
         return int(v) if isinstance(v, (int, float)) and v > 0 else None
 
+    # Codex round 2 (2026-09-22): a 200 LIST can be a refusal too --
+    # `[{"Error Message": "Limit Reach"}]`, or rows with no `date`. Only a
+    # genuinely empty list is "no coverage"; a non-empty list that yields no
+    # period, or that carries an error object, is `error:shape`, so a quota or
+    # API-shape failure across the run feeds the error count and its alarm.
+    if any(isinstance(r, dict) and ("Error Message" in r or "error" in r)
+           for r in rows):
+        logger.warning("FMP annual estimates for %s: error object in a 200 list",
+                       ticker)
+        return [], "error:shape"
+
     out: list[AnnualConsensus] = []
     for r in rows:
+        if not isinstance(r, dict):
+            continue
         period_end = r.get("date")
         if not period_end:
             continue
@@ -843,7 +945,11 @@ def fetch_fmp_annual_estimates(
             eps_analysts=_count(r.get("numAnalystsEps")),
         ))
     out.sort(key=lambda a: a.fiscal_period_end)
-    return out
+    if rows and not out:
+        logger.warning("FMP annual estimates for %s: %d row(s), none parseable",
+                       ticker, len(rows))
+        return [], "error:shape"
+    return out, ("ok" if out else "empty")
 
 
 def fetch_fmp_rev_beat_history(

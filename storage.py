@@ -18,7 +18,7 @@ logger = logging.getLogger("earnings_agent")
 # Schema version tracking
 # ---------------------------------------------------------------------------
 
-CURRENT_SCHEMA_VERSION = 13  # Bump when adding migrations
+CURRENT_SCHEMA_VERSION = 14  # Bump when adding migrations
 
 # The one definition of "this event is still waiting to happen".
 #
@@ -46,6 +46,36 @@ OPEN_EVENT_SQL = "reported = 0 AND closed_reason IS NULL"
 CLOSED_DELISTED = "delisted"
 
 _MIGRATIONS = {
+    # Version 13 → 14: pre-print ANNUAL Street consensus snapshots (board #298
+    # Phase A). FMP keeps no estimate history, so the consensus as it stood
+    # BEFORE a release exists only if it was captured then; the post-print
+    # figure has already moved onto the guide (FIVE: $9.29 pre vs $10.25 post
+    # against a $9.83-10.31 guide). Written by consensus_snapshot.py.
+    #
+    # Keyed on (ticker, fiscal_period_end, taken_at). `event_date` is
+    # PROVENANCE ONLY -- FMP moves dates after a snapshot is taken, and a
+    # snapshot from before the move is still pre-print. A status-only row
+    # (fetch_status 'empty' / 'error:<code>') carries fiscal_period_end = ''
+    # so a failed fetch is recorded without ever posing as a figure.
+    #
+    # A CREATE TABLE here is also run by init_db's fresh-DB path, so this one
+    # statement is both the migration and the fresh CREATE.
+    14: [
+        """CREATE TABLE IF NOT EXISTS consensus_snapshot (
+            ticker               TEXT NOT NULL,
+            fiscal_period_end    TEXT NOT NULL,
+            taken_at             TEXT NOT NULL,
+            event_date           TEXT,
+            revenue_avg          REAL,
+            eps_avg              REAL,
+            num_analysts_revenue INTEGER,
+            num_analysts_eps     INTEGER,
+            currency             TEXT,
+            fetch_status         TEXT NOT NULL,
+            PRIMARY KEY (ticker, fiscal_period_end, taken_at)
+        )""",
+    ],
+
     # Version 12 → 13: a terminal state for events that can never report.
     # NULL = open. See OPEN_EVENT_SQL above for why this exists and why every
     # open-event query must go through the constant.
@@ -833,6 +863,7 @@ def upsert_event(
             # provider date — that would silently move the locked task in
             # TickTick on the next reconcile). Worst case: a harmless duplicate,
             # same as the reported-row guard.
+            _record_moves_later(conn, ticker, quarter, event_date)
             conn.execute(
                 "DELETE FROM events WHERE ticker = ? AND quarter = ? "
                 f"AND event_date != ? AND {OPEN_EVENT_SQL} AND date_locked = 0",
@@ -862,6 +893,56 @@ def upsert_event(
         )
 
     conn.commit()
+
+
+# The DELETE above erases the only trace that an event was ever dated earlier.
+# The consensus snapshot's same-cycle guard (board #298, Codex round 3) needs
+# that trace: a vendor moving an unlocked row LATER after its old date arrived
+# means the company may already have printed, and a snapshot for the new date
+# would store post-print consensus as pre-print. Recorded in kv_store (no
+# schema change) under this prefix as a JSON list of
+# {"from", "to", "at", "confirmed", "quarter"} -- `confirmed` is the OLD
+# row's flag; `quarter` is the reporting cycle both rows belonged to.
+EVENT_MOVED_LATER_KV = "event_moved_later:"
+_MOVES_KEPT = 20
+
+
+def _record_moves_later(conn, ticker: str, quarter: str, event_date: str) -> None:
+    """Append every same-quarter open, unlocked row about to be deleted in
+    favour of a LATER ``event_date``. No commit: rides upsert_event's."""
+    import json
+    from datetime import datetime, timezone
+
+    # Only CONFIRMED moved-from dates are recorded (Codex round 4): they are
+    # the only ones the guard acts on, and an unconfirmed estimate rolled
+    # forward daily would otherwise fill the capped list and evict them.
+    olds = conn.execute(
+        "SELECT event_date, COALESCE(date_confirmed, 0) FROM events "
+        "WHERE ticker = ? AND quarter = ? "
+        f"AND event_date < ? AND {OPEN_EVENT_SQL} AND date_locked = 0 "
+        "AND COALESCE(date_confirmed, 0) = 1",
+        (ticker, quarter, event_date),
+    ).fetchall()
+    if not olds:
+        return
+    key = EVENT_MOVED_LATER_KV + ticker
+    row = conn.execute("SELECT value FROM kv_store WHERE key = ?", (key,)).fetchone()
+    try:
+        moves = json.loads(row[0]) if row else []
+        if not isinstance(moves, list):
+            moves = []
+    except (ValueError, TypeError):
+        moves = []
+    at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    moves.extend({"from": d, "to": event_date, "at": at, "confirmed": bool(c),
+                  "quarter": quarter}
+                 for d, c in olds)
+    conn.execute(
+        "INSERT INTO kv_store (key, value, updated_at) VALUES (?, ?, datetime('now')) "
+        "ON CONFLICT(key) DO UPDATE SET value = excluded.value, "
+        "updated_at = excluded.updated_at",
+        (key, json.dumps(moves[-_MOVES_KEPT:])),
+    )
 
 
 # ---------------------------------------------------------------------------
