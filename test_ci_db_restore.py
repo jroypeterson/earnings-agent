@@ -1207,6 +1207,66 @@ def test_a_COUNT_PRESERVING_replacement_is_WARNED_about_via_the_head(tmp_path):
     assert res.returncode == 0, res.stdout + res.stderr
 
 
+def test_a_TRANSIENT_invariant_trip_costs_a_retry_not_the_run(tmp_path):
+    """Codex round 16. The snapshot invariant exited 1 on its FIRST trip, and
+    two things outside the earnings-db-writer concurrency group can trip it on
+    a healthy repository: GitHub purging expired artifacts on its own schedule
+    (measured: the live listing fell 830 -> 444 between 2026-09-23 and
+    2026-09-25 -- the script's own comment said expired rows NEVER leave it),
+    and the endpoint ordering an unchanged collection differently for two page
+    requests. Either stopped all four workflows; none has continue-on-error on
+    its restore.
+
+    Modelled here as the purge: the count moves between the pre- and post-walk
+    reads on attempt 1 only. A fresh walk sees a consistent listing, so the
+    restore must COMPLETE on attempt 2 and select the newest artifact.
+    """
+    live = tmp_path / "live.db"
+    _make_db(live, events=7, actuals=3, watermark=_recent(hours=1))
+    _zip_of(live, tmp_path / "live.zip")
+    env = _install_shifting_gh(
+        tmp_path,
+        {1: ["900 2026-09-04T00:00:00Z false main 9000",
+             "200 2026-09-02T00:00:00Z false main 2000"],
+         2: ["150 2026-09-01T12:00:00Z false main 1500",
+             "100 2026-09-01T00:00:00Z false main 1000"]},
+        total=[4, 3, 4, 4],   # attempt 1: before 4, after 3; attempt 2: steady
+        zips={900: tmp_path / "live.zip"})
+    env["EA_DB_ARTIFACT_PAGE"] = "2"
+    work = tmp_path / "work"
+    work.mkdir()
+
+    res = _run(RESTORE, work, env)
+    # Guard: the fixture really did trip the invariant on attempt 1, or this
+    # test would pass vacuously against the pre-fix script too.
+    assert "listing changed during the walk (attempt 1/2)" in res.stderr, res.stderr
+    assert "selected artifact 900" in res.stdout, res.stdout
+    assert res.returncode == 0, res.stdout + res.stderr
+
+
+def test_a_PERSISTENT_invariant_trip_is_still_refused(tmp_path):
+    """The other half of round 16's fix: retrying must not turn the invariant
+    into decoration. A listing that will not hold still across EVERY attempt
+    is refused with its own message -- never reported as an unreachable API,
+    and never selected from."""
+    env = _install_shifting_gh(
+        tmp_path,
+        {1: ["900 2026-09-04T00:00:00Z false main 9000",
+             "200 2026-09-02T00:00:00Z false main 2000"],
+         2: ["150 2026-09-01T12:00:00Z false main 1500",
+             "100 2026-09-01T00:00:00Z false main 1000"]},
+        total=[4, 3])         # every later count reads 3 against 4 rows
+    env["EA_DB_ARTIFACT_PAGE"] = "2"
+    work = tmp_path / "work"
+    work.mkdir()
+
+    res = _run(RESTORE, work, env)
+    assert res.returncode == 1, res.stdout + res.stderr
+    assert "changed during the walk on every one of" in res.stderr, res.stderr
+    assert "could not be reached" not in res.stderr, res.stderr
+    assert "selected artifact" not in res.stdout, res.stdout
+
+
 def test_a_MATRIX_uploader_is_rejected_by_the_serialization_gate(tmp_path,
                                                                  monkeypatch):
     """Codex round 15, finding 2. A matrix expands ONE job key into N

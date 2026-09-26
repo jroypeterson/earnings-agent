@@ -147,8 +147,11 @@ PROJECTION='.artifacts[] | "\(.id) \(.created_at) \(.expired) \(.workflow_run.he
 # SIZE THE WALK BY total_count; do not guess a prefix (round 10, H5).
 #
 # The old cap was 4 pages x 50 = 200 rows. Measured 2026-09-23 the
-# earnings-db listing holds 825 artifacts -- EXPIRED ROWS NEVER LEAVE IT,
-# so it only grows (~7/day). The walk was therefore truncated on every
+# earnings-db listing holds 825 artifacts, expired rows included, growing
+# ~7/day. (⛑ That was read as "expired rows never leave it" -- FALSE:
+# measured 2026-09-25 it had dropped to 444, because GitHub purges
+# expired artifacts on its own schedule, OUTSIDE the concurrency group.
+# See the snapshot invariant below.) The walk was therefore truncated on every
 # run, and the review's remedy ("fail when the final page is full at the
 # cap") would have failed 100% of runs across all four restoring
 # workflows, none of which has continue-on-error on its restore step. A
@@ -164,6 +167,7 @@ PROJECTION='.artifacts[] | "\(.id) \(.created_at) \(.expired) \(.workflow_run.he
 MAX_PAGES="${EA_DB_ARTIFACT_MAX_PAGES:-50}"
 RAW=""
 LIST_OK=0
+INVARIANT_TRIPPED=0
 for attempt in $(seq 1 "$TRIES"); do
   # Refetched EVERY attempt (Codex round 12). Read once, a retry would
   # size and validate its walk against a snapshot of the world taken
@@ -207,6 +211,7 @@ for attempt in $(seq 1 "$TRIES"); do
   [ "$WALK_PAGES" -gt "$MAX_PAGES" ] && WALK_PAGES="$MAX_PAGES"
   RAW=""
   ATTEMPT_OK=1
+  INVARIANT_TRIPPED=0
   page=1
   while [ "$page" -le "$WALK_PAGES" ]; do
     if ! PAGE_RAW="$(gh api \
@@ -287,25 +292,37 @@ for attempt in $(seq 1 "$TRIES"); do
       if [ "$all_rows" -ne "$uniq_rows" ] \
          || [ "$all_rows" -ne "$TOTAL_COUNT" ] \
          || { [ -n "$COUNT_AFTER" ] && [ "$COUNT_AFTER" -ne "$TOTAL_COUNT" ]; }; then
-        echo "ERROR: the artifact listing changed during the walk." >&2
+        # ⛑ A TRIP COSTS A RETRY, NOT THE RUN (Codex round 16). Two things
+        # outside the concurrency group can trip this on a HEALTHY repository:
+        # GitHub purging expired artifacts on its own schedule (measured: the
+        # listing fell 830 -> 444 between 2026-09-23 and 09-25, so rows DO
+        # leave it), and the endpoint serving an unchanged collection in a
+        # different order to two page requests (it documents no ordering and
+        # no snapshot token). Both are transient -- a fresh walk with fresh
+        # counts sees a consistent listing. Exiting on the first trip made
+        # either one stop all four workflows, none of which has
+        # continue-on-error on its restore. Only a trip that PERSISTS across
+        # every attempt is fatal, and it is still refused, never selected from.
+        INVARIANT_TRIPPED=1
+        echo "ERROR: the artifact listing changed during the walk (attempt ${attempt}/${TRIES})." >&2
         echo "  total_count before=${TOTAL_COUNT} after=${COUNT_AFTER:-unknown};" >&2
         echo "  rows collected=${all_rows}, unique=${uniq_rows}." >&2
         echo "  listing head before=${HEAD_BEFORE:-none} after=${HEAD_AFTER:-unknown}." >&2
-        echo "  The earnings-db writers are serialized by the" >&2
-        echo "  'earnings-db-writer' concurrency group, so this should be" >&2
-        echo "  impossible. Check that group, or an operator deleting" >&2
-        echo "  artifacts. Refusing to select from a listing that moved." >&2
-        exit 1
+        ATTEMPT_OK=0
+      else
+        INVARIANT_TRIPPED=0
       fi
-      # ADVISORY, never fatal -- see the rationale above. A failed read is
-      # reported rather than silently dropping the only check that can see a
-      # count-preserving replacement (round 15, finding 3).
-      if [ "$HEAD_AFTER" = "READ_FAILED" ]; then
-        log "WARNING: could not re-read the listing head; the count-preserving-replacement check is DEGRADED for this run"
-      elif [ -n "$HEAD_AFTER" ] && [ -n "$HEAD_BEFORE" ] \
-           && [ "$HEAD_AFTER" != "$HEAD_BEFORE" ]; then
-        log "WARNING: the listing head moved during the walk (${HEAD_BEFORE} -> ${HEAD_AFTER}). Either an artifact was created -- which the earnings-db-writer concurrency group should prevent -- or the endpoint reordered. The ordering-independent checks passed, so selection continues."
-      fi
+    fi
+  fi
+  if [ "$ATTEMPT_OK" -eq 1 ] && [ -n "$TOTAL_COUNT" ] && [ "$NEED_PAGES" -le "$MAX_PAGES" ]; then
+    # ADVISORY, never fatal -- see the rationale above. A failed read is
+    # reported rather than silently dropping the only check that can see a
+    # count-preserving replacement (round 15, finding 3).
+    if [ "$HEAD_AFTER" = "READ_FAILED" ]; then
+      log "WARNING: could not re-read the listing head; the count-preserving-replacement check is DEGRADED for this run"
+    elif [ -n "$HEAD_AFTER" ] && [ -n "$HEAD_BEFORE" ] \
+         && [ "$HEAD_AFTER" != "$HEAD_BEFORE" ]; then
+      log "WARNING: the listing head moved during the walk (${HEAD_BEFORE} -> ${HEAD_AFTER}). Either an artifact was created -- which the earnings-db-writer concurrency group should prevent -- or the endpoint reordered. The ordering-independent checks passed, so selection continues."
     fi
   fi
   if [ "$ATTEMPT_OK" -eq 1 ]; then
@@ -350,6 +367,14 @@ LISTING="$(printf '%s\n' "$RAW" \
 # Distinguish "the API never answered" from "the API answered, and there are no
 # artifacts". Conflating them is what turns a transient outage into a fresh-DB run
 # that silently erases date locks, kv_store watermarks and Slack thread state.
+if [ "$LIST_OK" -ne 1 ] && [ "$INVARIANT_TRIPPED" -eq 1 ]; then
+  echo "[db-restore] the artifact listing changed during the walk on every one of" >&2
+  echo "  ${TRIES} attempts. A purge or a reorder is transient; this is not. The" >&2
+  echo "  earnings-db writers are serialized by the 'earnings-db-writer'" >&2
+  echo "  concurrency group -- check that group, or an operator deleting artifacts." >&2
+  echo "  Refusing to select from a listing that will not hold still." >&2
+  exit 1
+fi
 if [ "$LIST_OK" -ne 1 ]; then
   echo "[db-restore] the artifacts API could not be reached after ${TRIES} attempts." >&2
   echo "  Refusing to continue: an unreachable API is NOT an absent artifact." >&2
