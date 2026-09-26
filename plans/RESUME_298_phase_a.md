@@ -36,7 +36,8 @@ comes next.
 | 14 | count-preserving replacement missed; concurrency gate had 3 escapes | fixed |
 | 15 | 3 High: head not API-ordered, matrix escape, silent head-read failure | all fixed (`df6a447`) |
 | 16 | 1 High: the invariant's first trip was fatal, and GitHub's expired-artifact purge (outside the group) trips it | fixed (`762bfc9`) |
-| **17** | **running / see below** | |
+| 17 | 1 High: the duplicate term deduped whole ROWS, so an id whose `expired` flag flipped mid-walk counted twice | fixed (`837bb20`) |
+| **18** | **running / see below** | |
 
 A Fable gate between 13 and 14 produced the reframing that matters: **the
 mid-walk listing mutation rounds 12–13 kept chasing is unreachable in
@@ -46,6 +47,17 @@ serialized job. Measured: 4/4 uploaders, 0 job-level overlaps across 159 group
 runs. The configuration IS the guarantee — which is why
 `test_the_earnings_db_writers_are_SERIALIZED` exists and why round 14's gate
 escapes mattered so much.
+
+## Round 17 — FIXED in `837bb20` (2026-09-25 overnight, #460)
+
+Lens: **interruption and partial state.** Prompt/log: `codex_feedback/round17_*`.
+Verdict: **0 Critical, 1 High**, no pre-existing Critical/High.
+
+- **High — the duplicate-id term matched nothing when metadata changed.** `sort -u`
+  ran over whole projected rows; the same artifact read on two pages with a
+  different `expired` flag counted as two. Pages `[900,200 false]+[200 true,100]`,
+  total 4 → every term silent. **Verdict: real, introduced by the branch** (the
+  invariant is branch code). Fix: unique by the id column. Mutation-checked. 682 green.
 
 ## Round 16 — FIXED in `762bfc9` (2026-09-25 overnight, #460)
 
