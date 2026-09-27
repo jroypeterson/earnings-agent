@@ -1,33 +1,15 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-09-26T15:00:44Z",
+  "generated_at": "2026-09-27T15:40:40Z",
   "window": {
-    "start": "2026-09-24",
-    "end": "2026-10-10"
+    "start": "2026-09-25",
+    "end": "2026-10-11"
   },
   "counts": {
-    "events": 13
+    "events": 11
   },
   "events": [
-    {
-      "ticker": "APLM",
-      "event_date": "2026-09-24",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Apollomics, Inc."
-    },
-    {
-      "ticker": "LITS",
-      "event_date": "2026-09-24",
-      "event_hour": "amc",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Lite Strategy, Inc."
-    },
     {
       "ticker": "IVA",
       "event_date": "2026-09-25",
