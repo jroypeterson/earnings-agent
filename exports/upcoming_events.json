@@ -1,33 +1,15 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-09-27T15:40:40Z",
+  "generated_at": "2026-09-28T18:38:21Z",
   "window": {
-    "start": "2026-09-25",
-    "end": "2026-10-11"
+    "start": "2026-09-26",
+    "end": "2026-10-12"
   },
   "counts": {
-    "events": 11
+    "events": 10
   },
   "events": [
-    {
-      "ticker": "IVA",
-      "event_date": "2026-09-25",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Inventiva ADR Representing Ord Shs"
-    },
-    {
-      "ticker": "ADXN",
-      "event_date": "2026-09-28",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Addex Therapeutics Ltd - ADR"
-    },
     {
       "ticker": "GDTC",
       "event_date": "2026-09-28",
@@ -45,6 +27,15 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Lunai Bioworks Inc."
+    },
+    {
+      "ticker": "PBM",
+      "event_date": "2026-09-28",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Psyence Biomedical Ltd."
     },
     {
       "ticker": "TRAK",
