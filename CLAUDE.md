@@ -404,7 +404,8 @@ Optional for Gmail IR-alert scanning: `GMAIL_TOKEN_JSON` + `GMAIL_CLIENT_CREDENT
 
 ## Required repo variables
 
-- `EA_CONSENSUS_BOOTSTRAPPED=true` — **not set yet, and deliberately so.** Arms the
+- `EA_CONSENSUS_BOOTSTRAPPED=true` (set 2026-09-28, after 4 successful uploads 2026-09-26..28;
+  a local restore with the guard armed pulled the newest artifact, 216 rows, rc 0). Arms the
   mandatory-artifact guard on the `consensus-snapshots` restore step (board #298 Phase A).
   Set it *after* the first successful upload, never before: the guard makes the restore step
   exit 1, and the upload step is gated on that step succeeding, so flipping it early deadlocks
