@@ -303,6 +303,15 @@ def _map_period(r_line: str, label: str, quarter_end: date,
 # assess()
 # ---------------------------------------------------------------------------
 
+def snapshot_gap_reason(snapshot_status: str) -> str:
+    """The stated reason for a non-ok, non-empty snapshot status."""
+    if snapshot_status == "missing":
+        return "no pre-print snapshot"
+    if snapshot_status.startswith("partial:currency_error"):
+        return f"snapshot currency unresolved ({snapshot_status})"
+    return f"snapshot not usable ({snapshot_status or 'no status'})"
+
+
 def assess(
     release_text: str,
     event_date,
@@ -331,13 +340,16 @@ def assess(
         return GuidanceVerdict("no_guide", "no FY $ range parsed")
 
     # --- snapshot state (pipeline gaps vs coverage facts) -----------------
-    if snapshot_status in ("missing", "error", "suspect_empty"):
-        return could_not_check({
-            "missing": "no pre-print snapshot",
-            "error": "snapshot fetch failed",
-            "suspect_empty": "snapshot went empty after an ok fetch",
-        }[snapshot_status])
-    if snapshot_status == "empty" or not snapshots:
+    # The status vocabulary is consensus_snapshot.pre_release_snapshot_set's
+    # (Phase A's contract wins): "ok" | "empty" | "missing" |
+    # "partial:<reason>". Anything that is not "ok" or "empty" is a pipeline
+    # gap and the square degrades with the status named -- an unknown status
+    # must never fall through to a comparison.
+    if snapshot_status == "empty":
+        return GuidanceVerdict("not_comparable", "no Street FY consensus")
+    if snapshot_status != "ok":
+        return could_not_check(snapshot_gap_reason(snapshot_status))
+    if not snapshots:
         return GuidanceVerdict("not_comparable", "no Street FY consensus")
 
     qe_iso = extract_period_end(release_text, event_date)

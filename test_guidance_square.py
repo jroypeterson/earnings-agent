@@ -141,12 +141,18 @@ def test_3_five_q2_compares_adjusted_9_83_to_10_31():
 
 # --- 4: snapshot status -----------------------------------------------------
 
-def test_4_empty_is_not_comparable_and_missing_is_could_not_check():
+def test_4_empty_is_not_comparable_and_every_gap_is_could_not_check():
+    # Status vocabulary is consensus_snapshot.pre_release_snapshot_set's
+    # (Phase A): ok | empty | missing | partial:<reason>. Phase B invents none.
     assert assess(JP_EXAMPLE, "2026-08-05", "empty", {}, CUTOFF).state == "not_comparable"
-    assert assess(JP_EXAMPLE, "2026-08-05", "missing", {}, CUTOFF).state == "no_check"
-    assert assess(JP_EXAMPLE, "2026-08-05", "error", {}, CUTOFF).state == "no_check"
-    # v5: empty after an earlier ok is a pipeline gap, not a coverage fact.
-    assert assess(JP_EXAMPLE, "2026-08-05", "suspect_empty", {}, CUTOFF).state == "no_check"
+    v = assess(JP_EXAMPLE, "2026-08-05", "missing", {}, CUTOFF)
+    assert v.state == "no_check" and "no pre-print snapshot" in v.reason
+    v = assess(JP_EXAMPLE, "2026-08-05", "partial:currency_error:402", {}, CUTOFF)
+    assert v.state == "no_check" and "partial:currency_error:402" in v.reason
+    # A status nobody anticipated degrades, naming itself; it never compares.
+    v = assess(JP_EXAMPLE, "2026-08-05", "something_new",
+               snaps(snap("2026-12-31", revenue=2.0e9)), CUTOFF)
+    assert v.state == "no_check" and "something_new" in v.reason
 
 
 @pytest.fixture
@@ -165,7 +171,15 @@ def _ins(conn, ticker, period, taken, status="ok", rev=1e9, eps=1.0):
         (ticker, period, taken, "2026-08-05", rev, eps, 10, 10, "USD", status))
 
 
+def _reported_event(conn, ticker, event_date):
+    conn.execute(
+        "INSERT INTO events (ticker, event_date, event_hour, date_confirmed, "
+        "reported, tier) VALUES (?,?,?,?,?,1)", (ticker, event_date, "bmo", 1, 1))
+    conn.commit()
+
+
 def test_4_snapshot_set_statuses_from_the_db(db):
+    """Phase B reads Phase A's reader and its labels -- nothing of its own."""
     from consensus_snapshot import pre_release_snapshot_set
     cutoff = datetime(2026, 8, 5, 4, 0, tzinfo=timezone.utc)
     assert pre_release_snapshot_set(db, "AAA", cutoff) == ("missing", {})
@@ -173,12 +187,15 @@ def test_4_snapshot_set_statuses_from_the_db(db):
     _ins(db, "BBB", "", "2026-08-04T12:00:00Z", status="empty")
     assert pre_release_snapshot_set(db, "BBB", cutoff) == ("empty", {})
 
+    # Phase A's contract: the newest in-cycle ANSWER wins, so an empty after
+    # an ok is "empty" (Phase B's former "suspect_empty" is not a label).
     _ins(db, "CCC", "2026-12-31", "2026-08-03T12:00:00Z")
     _ins(db, "CCC", "", "2026-08-04T12:00:00Z", status="empty")
-    assert pre_release_snapshot_set(db, "CCC", cutoff)[0] == "suspect_empty"
+    assert pre_release_snapshot_set(db, "CCC", cutoff) == ("empty", {})
 
+    # Only error rows: no answer in this cycle -> missing.
     _ins(db, "DDD", "", "2026-08-04T12:00:00Z", status="error:429")
-    assert pre_release_snapshot_set(db, "DDD", cutoff) == ("error", {})
+    assert pre_release_snapshot_set(db, "DDD", cutoff) == ("missing", {})
 
     # An error AFTER a clean fetch keeps the clean pre-print set.
     _ins(db, "EEE", "2026-12-31", "2026-08-03T12:00:00Z")
@@ -190,6 +207,71 @@ def test_4_snapshot_set_statuses_from_the_db(db):
     # A snapshot AFTER the cutoff is invisible (circular post-print).
     _ins(db, "FFF", "2026-12-31", "2026-08-05T21:00:00Z")
     assert pre_release_snapshot_set(db, "FFF", cutoff) == ("missing", {})
+
+    # Currency unresolved: the partial label passes through verbatim.
+    _ins(db, "GGG", "2026-12-31", "2026-08-04T12:00:00Z",
+         status="partial:currency_error:402")
+    assert pre_release_snapshot_set(db, "GGG", cutoff) == (
+        "partial:currency_error:402", {})
+
+
+def test_consensus_snapshot_defines_each_top_level_name_once():
+    """The shadowing guard. Phase B once re-defined pre_release_snapshot_set
+    lower in consensus_snapshot.py; Python kept the LATER def, silently
+    replacing Phase A's cycle-scoped reader (and latest_pre_release_snapshot,
+    which is built on it) with no error anywhere."""
+    import ast
+    import collections
+    from pathlib import Path
+    for name in ("consensus_snapshot.py", "guidance_compare.py"):
+        tree = ast.parse(Path(__file__).with_name(name).read_text(encoding="utf-8"))
+        defs = collections.Counter(
+            n.name for n in tree.body
+            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)))
+        dupes = sorted(k for k, c in defs.items() if c > 1)
+        assert not dupes, f"{name} defines {dupes} more than once"
+
+
+class _Edgar:
+    def __init__(self, text):
+        self.text = text
+
+    def find_earnings_release_filing(self, ticker, lo, hi):
+        return "filing"
+
+    def find_results_6k(self, ticker, lo, hi):
+        return None
+
+    def fetch_release_document(self, ticker, filing):
+        from types import SimpleNamespace
+        return SimpleNamespace(text=self.text)
+
+
+@pytest.mark.parametrize("taken,expected", [
+    # Taken AFTER the previous print (07-20), before this cutoff: this cycle's.
+    ("2026-07-25T12:00:00Z", "red"),
+    # Taken BEFORE the previous print, yet inside the 30-day age bound: that
+    # print's consensus. Served here it would grade Q2 against stale Street.
+    ("2026-07-18T12:00:00Z", "no_check"),
+])
+def test_phase_b_path_never_serves_a_prior_cycles_snapshot(db, taken, expected):
+    """End to end through main._guidance_verdict_for -> Phase A's reader. The
+    shadowing defect served the 07-18 row as this release's consensus."""
+    from types import SimpleNamespace
+    import consensus_snapshot as cs
+    import main
+    _reported_event(db, "ACME", "2026-07-20")
+    db.execute(
+        "INSERT INTO events (ticker, event_date, event_hour, date_confirmed, "
+        "reported, tier) VALUES ('ACME', '2026-08-05', 'bmo', 1, 0, 1)")
+    _ins(db, "ACME", "2025-12-31", taken, rev=1.8e9)
+    _ins(db, "ACME", "2026-12-31", taken, rev=2.0e9)
+    db.commit()
+    r = SimpleNamespace(ticker="ACME", event_date="2026-08-05", event_hour="bmo")
+    v = main._guidance_verdict_for(db, r, cs, _Edgar(JP_EXAMPLE), gc)
+    assert v.state == expected, v.reason
+    if expected == "no_check":
+        assert "no pre-print snapshot" in v.reason
 
 
 # --- 5: structural match from a period set ----------------------------------
