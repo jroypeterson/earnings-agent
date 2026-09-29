@@ -57,9 +57,17 @@ _FY_EVIDENCE = re.compile(
     r"20\d\d\s+(?:outlook|guidance))\b",
     re.IGNORECASE,
 )
+# Any SUB-ANNUAL period (quarter, half, three/six/nine months, remainder of
+# the year, year-to-date). Named _QUARTER for history. A half-year guide under
+# a generic "2026 Outlook" heading must not inherit FY evidence from that
+# heading (Codex 2026-09-29 r1: an H2 guide graded against FY Street = false red).
 _QUARTER = re.compile(
     r"\b(?:(?:first|second|third|fourth)\s+quarter|Q[1-4]|[1-4]Q|"
-    r"for\s+the\s+quarter|quarterly)\b",
+    r"for\s+the\s+quarter|quarterly|"
+    r"(?:first|second|back|front|latter)[\s-]+half|[12]H|H[12]|half[- ]year|"
+    r"(?:three|six|nine)[- ]months?|"
+    r"(?:remainder|rest|balance)\s+of\s+(?:the\s+)?(?:fiscal\s+)?(?:year|20\d\d)|"
+    r"year[- ]to[- ]date|YTD)\b",
     re.IGNORECASE,
 )
 _EXPLICIT_YEAR = re.compile(
@@ -336,20 +344,21 @@ def assess(
             if is_fy:
                 fy[metric].append((r, b, on_line))
 
-    if not fy["revenue"] and not fy["eps"]:
-        return GuidanceVerdict("no_guide", "no FY $ range parsed")
-
     # --- snapshot state (pipeline gaps vs coverage facts) -----------------
     # The status vocabulary is consensus_snapshot.pre_release_snapshot_set's
     # (Phase A's contract wins): "ok" | "empty" | "missing" |
     # "partial:<reason>". Anything that is not "ok" or "empty" is a pipeline
     # gap and the square degrades with the status named -- an unknown status
-    # must never fall through to a comparison.
-    if snapshot_status == "empty":
-        return GuidanceVerdict("not_comparable", "no Street FY consensus")
-    if snapshot_status != "ok":
+    # must never fall through to a comparison. Checked BEFORE no_guide (Codex
+    # 2026-09-29 r1): a broken snapshot pipeline must surface on every cohort
+    # row, not hide behind a release that happened to carry no $ range.
+    if snapshot_status not in ("ok", "empty"):
         return could_not_check(snapshot_gap_reason(snapshot_status))
-    if not snapshots:
+
+    if not fy["revenue"] and not fy["eps"]:
+        return GuidanceVerdict("no_guide", "no FY $ range parsed")
+
+    if snapshot_status == "empty" or not snapshots:
         return GuidanceVerdict("not_comparable", "no Street FY consensus")
 
     qe_iso = extract_period_end(release_text, event_date)

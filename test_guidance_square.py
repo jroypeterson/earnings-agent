@@ -622,3 +622,68 @@ def _row(ticker, tier=1, position="", event_date="2026-08-05"):
         event_hour="bmo", eps_actual=1.0, eps_estimate=0.9, rev_actual=None,
         rev_estimate=None, tier=tier, sector="Other", position=position,
     )
+
+
+# --- Codex 2026-09-29 round 1 regressions ------------------------------------
+
+@pytest.mark.parametrize("line", [
+    "For the second half of 2026, revenue is expected to be $900 million to $950 million.",
+    "Second-half revenue is expected to be $900 million to $950 million.",
+    "H2 2026 revenue is expected to be $900 million to $950 million.",
+    "For the remainder of the year, revenue is expected to be $900 million to $950 million.",
+    "Revenue for the nine months ending December 31, 2026 of $900 million to $950 million.",
+])
+def test_r1_a_half_year_guide_does_not_inherit_fy_from_an_annual_heading(line):
+    """Under a generic '2026 Outlook' heading, a SUB-annual range graded against
+    FY Street ($1.8B/$2.0B) is a false red. It must not be read as FY at all."""
+    text = f"Quarter ended June 30, 2026.\n2026 Outlook\n{line}\n"
+    v = assess(text, "2026-08-05", "ok",
+               snaps(snap("2025-12-31", revenue=1.8e9), snap("2026-12-31", revenue=2.0e9)),
+               CUTOFF)
+    assert v.state == "no_guide", (v.state, v.reason)
+
+
+def test_r1_control_a_full_year_line_under_the_same_heading_still_compares():
+    text = ("Quarter ended June 30, 2026.\n2026 Outlook\n"
+            "Full year revenue is expected to be $0.95 billion to $1.05 billion.\n")
+    v = assess(text, "2026-08-05", "ok",
+               snaps(snap("2025-12-31", revenue=1.8e9), snap("2026-12-31", revenue=2.0e9)),
+               CUTOFF)
+    assert v.state == "red"
+
+
+@pytest.mark.parametrize("status", ["missing", "partial:currency_error:402"])
+def test_r1_a_snapshot_gap_surfaces_even_when_the_release_has_no_dollar_guide(status):
+    """The gap is checked before no_guide, so a broken snapshot pipeline is
+    alerted on a qualitative-outlook release instead of rendering a quiet
+    'no guide'."""
+    text = "Quarter ended June 30, 2026.\nOutlook\nWe remain confident in our strategy.\n"
+    v = assess(text, "2026-08-05", status, {}, CUTOFF)
+    assert v.state == "no_check"
+    expected = "no pre-print snapshot" if status == "missing" else status
+    assert expected in v.reason
+
+
+def test_r1_budget_is_rechecked_between_edgar_calls_within_a_row(db, monkeypatch):
+    """One row makes up to three blocking SEC calls. Once the budget is spent
+    mid-row, the remaining calls must not run."""
+    import edgar_client
+    import main
+    calls = []
+    now = [0.0]
+
+    def slow_8k(t, a, b):
+        calls.append("8k")
+        now[0] = 1000.0          # this call alone exhausts the budget
+        return None
+
+    monkeypatch.setattr(edgar_client, "get_request_stats", lambda: (0, 0))
+    monkeypatch.setattr(edgar_client, "find_earnings_release_filing", slow_8k)
+    monkeypatch.setattr(edgar_client, "find_results_6k",
+                        lambda t, a, b: calls.append("6k") or object())
+    monkeypatch.setattr(edgar_client, "fetch_release_document",
+                        lambda t, f: calls.append("doc"))
+    r = _row("JPX", tier=1, position="Portfolio", event_date="2026-08-05")
+    main.attach_guidance_verdicts(db, [r], budget_s=150, clock=lambda: now[0])
+    assert calls == ["8k"]
+    assert r.guidance_verdict.state == "no_check" and r.guidance_verdict.reason == "budget"

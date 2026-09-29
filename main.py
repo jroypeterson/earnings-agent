@@ -2551,7 +2551,9 @@ def attach_guidance_verdicts(
             r.guidance_verdict = gc.could_not_check("EDGAR failing (breaker)")
         else:
             try:
-                r.guidance_verdict = _guidance_verdict_for(conn, r, cs, edgar_client, gc)
+                r.guidance_verdict = _guidance_verdict_for(
+                    conn, r, cs, edgar_client, gc,
+                    out_of_time=lambda: clock() - start > budget_s)
             except Exception as exc:  # per row: never blocks the post
                 logger.warning("guidance square: %s parser/enrichment error: %s",
                                r.ticker, exc)
@@ -2561,7 +2563,12 @@ def attach_guidance_verdicts(
     return alerts
 
 
-def _guidance_verdict_for(conn, r: ResultRow, cs, edgar_client, gc):
+def _guidance_verdict_for(conn, r: ResultRow, cs, edgar_client, gc,
+                          out_of_time=lambda: False):
+    # The budget is re-checked between EDGAR calls, not only between rows
+    # (Codex 2026-09-29 r1): one row makes up to three blocking SEC calls, so
+    # a between-rows check alone let a hanging SEC overrun the budget by a
+    # whole row before the results post. Overrun is now at most ONE call.
     ev = conn.execute(
         "SELECT event_hour, event_hour_yf, date_confirmed FROM events "
         # A closed event never reports, so it has no cutoff to read.
@@ -2575,10 +2582,15 @@ def _guidance_verdict_for(conn, r: ResultRow, cs, edgar_client, gc):
     status, snaps = cs.pre_release_snapshot_set(conn, r.ticker, cutoff)
     evd = date.fromisoformat(r.event_date)
     lo, hi = evd - timedelta(days=1), evd + timedelta(days=2)
-    filing = (edgar_client.find_earnings_release_filing(r.ticker, lo, hi)
-              or edgar_client.find_results_6k(r.ticker, lo, hi))
+    filing = edgar_client.find_earnings_release_filing(r.ticker, lo, hi)
+    if not filing:
+        if out_of_time():
+            return gc.could_not_check("budget")
+        filing = edgar_client.find_results_6k(r.ticker, lo, hi)
     if not filing:
         return gc.could_not_check("no release on EDGAR")
+    if out_of_time():
+        return gc.could_not_check("budget")
     doc = edgar_client.fetch_release_document(r.ticker, filing)
     if not doc or not doc.text:
         return gc.could_not_check("release fetch failed")
