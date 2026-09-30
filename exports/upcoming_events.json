@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-09-29T23:04:02Z",
+  "generated_at": "2026-09-30T16:50:58Z",
   "window": {
-    "start": "2026-09-27",
-    "end": "2026-10-13"
+    "start": "2026-09-28",
+    "end": "2026-10-14"
   },
   "counts": {
-    "events": 13
+    "events": 16
   },
   "events": [
     {
@@ -126,6 +126,33 @@
       "date_confirmed": true,
       "call_datetime_utc": "2026-10-13T12:00:00+00:00",
       "company_name": "UnitedHealth Group Inc"
+    },
+    {
+      "ticker": "ASML",
+      "event_date": "2026-10-14",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "ASML Holding NV"
+    },
+    {
+      "ticker": "HEPA",
+      "event_date": "2026-10-14",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Hepion Pharmaceuticals Inc"
+    },
+    {
+      "ticker": "PULM",
+      "event_date": "2026-10-14",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Pulmatrix Inc"
     }
   ]
 }
