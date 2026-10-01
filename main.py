@@ -2568,11 +2568,10 @@ def _guidance_verdict_for(conn, r: ResultRow, cs, edgar_client, gc,
     # The budget is re-checked between EDGAR calls, not only between rows
     # (Codex 2026-09-29 r1): one row makes up to three blocking SEC calls, so
     # a between-rows check alone let a hanging SEC overrun the budget by a
-    # whole row before the results post. Overrun is now at most ONE step --
-    # but fetch_release_document is itself several requests (headers, full
-    # .txt fallback, each EX-99 candidate; 30-60s timeouts each), so the
-    # budget is soft by up to that one fetch. Bounding it needs a deadline
-    # inside edgar_client, which consensus_preview shares (Codex r2, filed).
+    # whole row before the results post. fetch_release_document is itself
+    # several requests (headers, .txt fallback, each EX-99 candidate), so it
+    # takes the same budget callback (Codex r3): overrun is now at most ONE
+    # HTTP request (30-60s timeout).
     ev = conn.execute(
         "SELECT event_hour, event_hour_yf, date_confirmed FROM events "
         # A closed event never reports, so it has no cutoff to read.
@@ -2601,8 +2600,11 @@ def _guidance_verdict_for(conn, r: ResultRow, cs, edgar_client, gc,
         return gc.could_not_check("no release on EDGAR")
     if out_of_time():
         return gc.could_not_check("budget")
-    doc = edgar_client.fetch_release_document(r.ticker, filing)
+    doc = edgar_client.fetch_release_document(r.ticker, filing,
+                                              should_stop=out_of_time)
     if not doc or not doc.text:
+        if out_of_time():
+            return gc.could_not_check("budget")
         return gc.could_not_check("release fetch failed")
     return gc.assess(doc.text, evd, status, snaps, cs._utc_stamp(cutoff))
 

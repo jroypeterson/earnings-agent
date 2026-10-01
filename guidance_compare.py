@@ -482,6 +482,12 @@ def assess(
         if n is None or n < ANALYST_FLOOR:
             abstained[metric] = "analysts<3"
             continue
+        # Annual revenue of zero or less is a missing figure, not a consensus
+        # (vendors zero-fill pre-revenue names). The zero exemption below
+        # exists for EPS; on revenue it graded any guide green vs $0 (Codex r3).
+        if metric == "revenue" and c <= 0:
+            abstained[metric] = "no Street figure"
+            continue
         mid = r.midpoint
         # H3: the sign must agree; sign(0) matches either (v4 Lows).
         if _sign(mid) and _sign(c) and _sign(mid) != _sign(c):

@@ -242,7 +242,7 @@ class _Edgar:
     def find_results_6k(self, ticker, lo, hi):
         return None
 
-    def fetch_release_document(self, ticker, filing):
+    def fetch_release_document(self, ticker, filing, should_stop=None):
         from types import SimpleNamespace
         return SimpleNamespace(text=self.text)
 
@@ -561,7 +561,7 @@ def test_seam_enrichment_to_rendered_payload(db, monkeypatch):
                         lambda t, a, b: object())
     monkeypatch.setattr(edgar_client, "find_results_6k", lambda t, a, b: None)
     monkeypatch.setattr(edgar_client, "fetch_release_document",
-                        lambda t, f: _Doc(JP_EXAMPLE))
+                        lambda t, f, should_stop=None: _Doc(JP_EXAMPLE))
     monkeypatch.setattr(edgar_client, "get_request_stats", lambda: (0, 0))
 
     held = _row("JPX", tier=1, position="Portfolio", event_date="2026-08-05")
@@ -687,7 +687,7 @@ def test_r1_budget_is_rechecked_between_edgar_calls_within_a_row(db, monkeypatch
     monkeypatch.setattr(edgar_client, "find_results_6k",
                         lambda t, a, b: calls.append("6k") or object())
     monkeypatch.setattr(edgar_client, "fetch_release_document",
-                        lambda t, f: calls.append("doc"))
+                        lambda t, f, should_stop=None: calls.append("doc"))
     r = _row("JPX", tier=1, position="Portfolio", event_date="2026-08-05")
     main.attach_guidance_verdicts(db, [r], budget_s=150, clock=lambda: now[0])
     assert calls == ["8k"]
@@ -823,3 +823,58 @@ def test_r2_a_snapshot_gap_is_named_before_any_edgar_early_return(db, monkeypatc
     assert r.guidance_verdict.reason == "no pre-print snapshot"
     assert calls == []
     assert alerts == ["JPX: no pre-print snapshot"]
+
+
+# --- Codex 2026-09-30 round 3 regressions (resilience) -----------------------
+
+def test_r3_a_zero_revenue_consensus_abstains_rather_than_grading_green():
+    text = ("Quarter ended June 30, 2026.\n2026 Outlook\n"
+            "Full year revenue is expected to be $0.95 billion to $1.05 billion.\n")
+    v = assess(text, "2026-08-05", "ok", _FY26(revenue=0.0), CUTOFF)
+    assert v.state not in COLOURED, (v.state, v.reason)
+
+
+def test_r3_release_fetch_stops_between_exhibit_requests(monkeypatch):
+    """A run of slow EX-99 candidates must not hold the results post: the
+    caller's budget is consulted before each further request."""
+    import edgar_client
+    headers = "".join(
+        f"<DOCUMENT>\n<TYPE>EX-99.{i}\n<SEQUENCE>{i}\n<FILENAME>ex99{i}.htm\n"
+        for i in (1, 2, 3))
+    fetched = []
+
+    def fake_get(url):
+        fetched.append(url)
+        return headers if url.endswith("-index-headers.html") else "<p>short</p>"
+
+    monkeypatch.setattr(edgar_client, "get_cik", lambda t: "123")
+    monkeypatch.setattr(edgar_client, "_get_text", fake_get)
+    f = edgar_client.Filing8K("8-K", "2026-08-05", "0000000123-26-000001", "", ("2.02",))
+    stop = lambda: len(fetched) >= 2      # budget spent after the first exhibit
+    assert edgar_client.fetch_release_document("X", f, should_stop=stop) is None
+    assert len(fetched) == 2
+    # Default: unchanged behaviour, every candidate tried.
+    fetched.clear()
+    assert edgar_client.fetch_release_document("X", f) is None
+    assert len(fetched) == 4
+
+
+def test_r3_a_budget_spent_inside_the_fetch_reads_budget_not_fetch_failed(db, monkeypatch):
+    import consensus_snapshot
+    import edgar_client
+    import main
+    now = [0.0]
+    monkeypatch.setattr(consensus_snapshot, "pre_release_snapshot_set",
+                        lambda conn, t, cutoff: ("ok", {}))
+    monkeypatch.setattr(edgar_client, "get_request_stats", lambda: (0, 0))
+    monkeypatch.setattr(edgar_client, "find_earnings_release_filing",
+                        lambda t, a, b: object())
+
+    def slow_fetch(t, f, should_stop=None):
+        now[0] = 1000.0
+        return None
+
+    monkeypatch.setattr(edgar_client, "fetch_release_document", slow_fetch)
+    r = _row("JPX", tier=1, position="Portfolio", event_date="2026-08-05")
+    main.attach_guidance_verdicts(db, [r], budget_s=150, clock=lambda: now[0])
+    assert r.guidance_verdict.reason == "budget"

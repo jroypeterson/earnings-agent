@@ -740,14 +740,22 @@ def fetch_document_bytes(url: str) -> bytes | None:
     return r.content
 
 
-def fetch_release_document(ticker: str, filing: Filing8K) -> ReleaseDoc | None:
+def fetch_release_document(ticker: str, filing: Filing8K,
+                           should_stop=None) -> ReleaseDoc | None:
     """The earnings press release attached to an 8-K/6-K, as text.
 
     Returns None when the filing carries no readable EX-99 exhibit. A
     candidate shorter than _MIN_RELEASE_CHARS is treated as a cover page and
     the next candidate is tried -- an EX-99.1 that is a one-paragraph
     "we issued a press release" note is common and carries no guidance.
+
+    ``should_stop`` (optional, no-arg callable) is consulted before each
+    further request; when it returns True the fetch gives up and returns
+    None. The guidance square passes its wall-clock budget here (board #298
+    Phase B, Codex r3) so a run of slow EX-99 candidates cannot hold the
+    results post for minutes. Default None = unchanged behaviour.
     """
+    stop = should_stop or (lambda: False)
     cik = get_cik(ticker)
     if not cik or not filing or not filing.accession:
         return None
@@ -759,7 +767,7 @@ def fetch_release_document(ticker: str, filing: Filing8K) -> ReleaseDoc | None:
     docs: list[dict] = []
     if headers:
         docs = [m.groupdict() for m in _DOC_HEADER_RE.finditer(html.unescape(headers))]
-    if not docs:
+    if not docs and not stop():
         # Fallback: the multi-MB full submission, only when headers are unusable.
         full = _get_text(f"{base}/{filing.accession}.txt")
         if full:
@@ -783,6 +791,10 @@ def fetch_release_document(ticker: str, filing: Filing8K) -> ReleaseDoc | None:
     candidates.sort(key=lambda c: c[0])
 
     for _, dtype, filename in candidates:
+        if stop():
+            logger.warning("%s %s: release fetch stopped by caller budget",
+                           ticker, filing.accession)
+            return None
         url = f"{base}/{filename}"
         raw = _get_text(url)
         if not raw:
