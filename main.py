@@ -2293,6 +2293,45 @@ def run_snapshot_consensus(dry_run: bool = False) -> dict:
                 f"({export_failed}); side artifact NOT refreshed")
 
 
+def run_merge_consensus_snapshots() -> int:
+    """Merge the restored `consensus-snapshots` side file into the DB, and
+    nothing else. Board #298 Phase B prerequisite (Codex 2026-10-01 round 5).
+
+    The square reads pre-print snapshots from the DB. If a day's earnings-db
+    save is lost, those rows survive only in the side artifact -- and until
+    this existed they were merged back only inside `--snapshot-consensus`,
+    which runs AFTER the daily sync has posted results and never runs in
+    post_earnings_check at all. So both workflows now restore the side file
+    and run this BEFORE any step that can post a results card.
+
+    - CONSENSUS_SNAPSHOT_FILE unset (local runs) -> no-op.
+    - File absent (bootstrap, branch run, or a failed restore that already
+      alerted on its own outcome) -> logged loudly, no-op.
+    - Unreadable file -> raises, so the step's outcome-keyed alert fires.
+      Never deletes or rewrites the side file: `--snapshot-consensus` owns
+      its lifecycle (and removes an unmergeable one before the upload).
+    INSERT OR IGNORE on an immutable PK, so re-merging later is a no-op.
+    """
+    from consensus_snapshot import merge_snapshot_file
+
+    side_file = os.environ.get("CONSENSUS_SNAPSHOT_FILE", "").strip()
+    if not side_file:
+        logger.info("Consensus snapshot merge: CONSENSUS_SNAPSHOT_FILE unset -- skipped")
+        return 0
+    if not os.path.exists(side_file):
+        logger.warning(
+            "Consensus snapshot merge: %s not present (bootstrap or failed restore) "
+            "-- results this run see only the snapshots already in the DB", side_file)
+        return 0
+    conn = init_db()
+    try:
+        added = merge_snapshot_file(conn, side_file)
+    finally:
+        conn.close()
+    logger.info("Consensus snapshot merge: %d new row(s) from %s", added, side_file)
+    return added
+
+
 def run_consensus_preview(
     dry_run: bool = False,
     days_ahead: int = 3,
@@ -2671,7 +2710,6 @@ def notify_results(
 
     blocks = build_results_slack_blocks(results, as_of, season_stats)
     fallback = build_results_fallback_text(results, as_of)
-    _alert_guidance_gaps(guidance_alerts, as_of)
 
     posted = False
     if SLACK_WEBHOOK_EARNINGS:
@@ -2680,7 +2718,13 @@ def notify_results(
             posted = True
         except NotificationError as exc:
             logger.error(f"Slack results post failed: {exc}")
-    else:
+    # The gap alert describes THIS card's ⚠️ squares, so it is sent only once
+    # the card is delivered. Sent before the post, a failing results webhook
+    # (rows stay reported=0 and retry) repeated it on every run for a card
+    # nobody saw (Codex 2026-10-01 round 5).
+    if posted:
+        _alert_guidance_gaps(guidance_alerts, as_of)
+    elif not SLACK_WEBHOOK_EARNINGS:
         # We have deliverable results (non-empty, guarded above) but no webhook.
         # Historically this returned posted=True ("no retry target"), which let
         # the caller mark the rows reported=1 — so a config-missing webhook made
@@ -5736,6 +5780,14 @@ def main():
              "With --dry-run: list the window, make zero FMP calls.",
     )
     parser.add_argument(
+        "--merge-consensus-snapshots",
+        action="store_true",
+        help="Merge the restored consensus-snapshots side file "
+             "(CONSENSUS_SNAPSHOT_FILE) into consensus_snapshot, then exit. CI runs "
+             "it before any results step so the guidance square sees snapshots "
+             "whose earnings-db save was lost. No FMP calls.",
+    )
+    parser.add_argument(
         "--preview-ticker",
         type=str,
         default=None,
@@ -5819,6 +5871,8 @@ def main():
         )
     elif args.snapshot_consensus:
         run_snapshot_consensus(dry_run=args.dry_run)
+    elif args.merge_consensus_snapshots:
+        run_merge_consensus_snapshots()
     elif args.consensus_preview:
         run_consensus_preview(
             dry_run=args.dry_run,

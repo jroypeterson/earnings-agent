@@ -138,6 +138,71 @@ jobs:
           EA_DB_RESTORE_ARTIFACT_ID: ${{ inputs.restore_artifact_id }}
         run: bash scripts/ci_db_rollback_guard.sh
 
+      # Pre-print consensus snapshots, restored and merged BEFORE anything can
+      # post a results card (board #298 Phase B; Codex 2026-10-01 round 5). The
+      # daily sync (`python main.py`) posts results for overnight AMC actuals,
+      # and the guidance square on that card reads snapshots from the DB. If a
+      # previous run's earnings-db save was lost, those rows live ONLY in the
+      # newest `consensus-snapshots` artifact -- which used to be restored and
+      # merged after the sync had already posted. Restoring here, after the
+      # rollback guard has settled the DB, closes that window.
+      #
+      # NOT gated on main (Codex 2026-10-01 r2): both steps are read-only on the
+      # artifact store (the script always reads main's newest copy), and the
+      # results-posting steps are ungated, so a branch dispatch must see the
+      # same snapshots. Only the UPLOAD below stays main-only.
+      #
+      # The snapshot rows ALSO persist on their own (Codex round 3), because
+      # the earnings-db save at the end of the job is skipped when any later
+      # step fails. The newest `consensus-snapshots` artifact is restored here
+      # (same newest-by-created_at + verify-before-overwrite script as the DB),
+      # merged into the DB by the next step (and again, idempotently, by the
+      # snapshot step BEFORE it snapshots), and the
+      # whole table is exported and uploaded again after -- so the newest
+      # artifact is always cumulative, and restoring just it recovers every
+      # run whose DB save was lost. It never touches the earnings-db artifact.
+      - name: Restore consensus snapshots side artifact
+        id: restore_snapshots
+        continue-on-error: true
+        timeout-minutes: 5
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EA_DB_ARTIFACT_NAME: consensus-snapshots
+          EA_DB_PATH: consensus_snapshots.db
+          EA_DB_VERIFY_TABLE: consensus_snapshot
+          # Codex round 10, C1: the script's mandatory-artifact refusal was
+          # gated on this flag and NOTHING set it, so the guard was inert in
+          # production while its test injected the value by hand.
+          #
+          # ⛑ It must NOT be a literal "true". Measured 2026-09-23: the
+          # consensus-snapshots artifact has total_count = 0 -- it has never
+          # been uploaded, because this branch is unmerged. A literal would
+          # make the first post-merge run exit 1 here, which sets this step's
+          # `outcome` to failure, which skips "Save consensus snapshots side
+          # artifact" below (it is gated on outcome == 'success'), so the
+          # artifact could NEVER be created and the alert would fire twice a
+          # day forever with no manual way out. The guard would become the
+          # outage.
+          #
+          # Same bootstrap shape as vars.EA_DB_BOOTSTRAPPED. An unset repo
+          # variable renders as the empty string, which fails the script's
+          # `= "true"` test and takes the bootstrap exit-0 path. The persist
+          # step below announces the flip until it is set, so the inert window
+          # cannot be forgotten the way the earnings-db one was (~85 days).
+          EA_DB_REQUIRE_ARTIFACT: ${{ vars.EA_CONSENSUS_BOOTSTRAPPED }}
+        run: bash scripts/ci_restore_db_artifact.sh
+
+      # Read-only on the side file; --snapshot-consensus below owns its
+      # lifecycle. continue-on-error: a feature, never a reason to fail the
+      # critical sync -- but its outcome feeds the snapshot alerts below.
+      - name: Merge consensus snapshots into the DB
+        id: merge_snapshots
+        continue-on-error: true
+        timeout-minutes: 5
+        env:
+          CONSENSUS_SNAPSHOT_FILE: consensus_snapshots.db
+        run: python main.py --merge-consensus-snapshots
+
       # Write the Google service account credentials from a GitHub secret
       - name: Write Google credentials
         run: echo '${{ secrets.GOOGLE_CREDENTIALS_JSON }}' > credentials.json
@@ -156,6 +221,11 @@ jobs:
           SLACK_CHANNEL_ID: ${{ secrets.SLACK_CHANNEL_ID }}
           SLACK_STATUS_CHANNEL_ID: ${{ secrets.SLACK_STATUS_CHANNEL_ID }}
           TICKERS: ${{ vars.TICKERS }}  # Legacy fallback
+          # Board #298 Phase B: the FY guide vs pre-print Street square on the
+          # results card. Read at runtime, ON only when the repo variable is
+          # exactly "1". Rollback: gh variable delete GUIDANCE_SQUARE.
+          GUIDANCE_SQUARE: ${{ vars.GUIDANCE_SQUARE }}
+          SEC_EDGAR_USER_AGENT: ${{ secrets.SEC_EDGAR_USER_AGENT }}
         run: python main.py
 
       # Description drift: the daily sync's existing-event fast path
@@ -257,44 +327,11 @@ jobs:
       # when only some did.
       # The snapshot rows ALSO persist on their own (Codex round 3), because
       # the earnings-db save at the end of the job is skipped when any later
-      # step fails. The newest `consensus-snapshots` artifact is restored here
-      # (same newest-by-created_at + verify-before-overwrite script as the DB),
-      # merged into the DB by the snapshot step BEFORE it snapshots, and the
-      # whole table is exported and uploaded again after -- so the newest
-      # artifact is always cumulative, and restoring just it recovers every
-      # run whose DB save was lost. It never touches the earnings-db artifact.
-      - name: Restore consensus snapshots side artifact
-        id: restore_snapshots
-        if: github.ref == 'refs/heads/main'
-        continue-on-error: true
-        timeout-minutes: 5
-        env:
-          GH_TOKEN: ${{ github.token }}
-          EA_DB_ARTIFACT_NAME: consensus-snapshots
-          EA_DB_PATH: consensus_snapshots.db
-          EA_DB_VERIFY_TABLE: consensus_snapshot
-          # Codex round 10, C1: the script's mandatory-artifact refusal was
-          # gated on this flag and NOTHING set it, so the guard was inert in
-          # production while its test injected the value by hand.
-          #
-          # ⛑ It must NOT be a literal "true". Measured 2026-09-23: the
-          # consensus-snapshots artifact has total_count = 0 -- it has never
-          # been uploaded, because this branch is unmerged. A literal would
-          # make the first post-merge run exit 1 here, which sets this step's
-          # `outcome` to failure, which skips "Save consensus snapshots side
-          # artifact" below (it is gated on outcome == 'success'), so the
-          # artifact could NEVER be created and the alert would fire twice a
-          # day forever with no manual way out. The guard would become the
-          # outage.
-          #
-          # Same bootstrap shape as vars.EA_DB_BOOTSTRAPPED. An unset repo
-          # variable renders as the empty string, which fails the script's
-          # `= "true"` test and takes the bootstrap exit-0 path. The persist
-          # step below announces the flip until it is set, so the inert window
-          # cannot be forgotten the way the earnings-db one was (~85 days).
-          EA_DB_REQUIRE_ARTIFACT: ${{ vars.EA_CONSENSUS_BOOTSTRAPPED }}
-        run: bash scripts/ci_restore_db_artifact.sh
-
+      # step fails. The `consensus-snapshots` side artifact is restored and
+      # merged into the DB near the TOP of the job (see "Restore consensus
+      # snapshots side artifact"); this step merges it again (an idempotent
+      # no-op on a clean run), snapshots, and exports the whole table so the
+      # upload below stays cumulative.
       - name: Snapshot pre-print annual consensus (FMP)
         id: snapshot_consensus
         if: github.ref == 'refs/heads/main'
@@ -368,7 +405,7 @@ jobs:
       # Both alerts are themselves continue-on-error: a failed curl must not
       # skip the "Save earnings database" step below and lose this run's DB.
       - name: Notify Slack on consensus snapshot failure
-        if: always() && ((steps.snapshot_consensus.outcome != 'success' && steps.snapshot_consensus.outcome != 'skipped') || steps.restore_snapshots.outcome == 'failure' || steps.persist_snapshots.outcome == 'failure')
+        if: always() && ((steps.snapshot_consensus.outcome != 'success' && steps.snapshot_consensus.outcome != 'skipped') || steps.restore_snapshots.outcome == 'failure' || steps.merge_snapshots.outcome == 'failure' || steps.persist_snapshots.outcome == 'failure')
         continue-on-error: true
         timeout-minutes: 2
         env:
@@ -386,7 +423,7 @@ jobs:
       # Out-of-band backup, inline (runner python3 + stdlib) per the workflow
       # convention -- never a call into scripts/.
       - name: Email backup on consensus snapshot failure
-        if: always() && ((steps.snapshot_consensus.outcome != 'success' && steps.snapshot_consensus.outcome != 'skipped') || steps.restore_snapshots.outcome == 'failure' || steps.persist_snapshots.outcome == 'failure')
+        if: always() && ((steps.snapshot_consensus.outcome != 'success' && steps.snapshot_consensus.outcome != 'skipped') || steps.restore_snapshots.outcome == 'failure' || steps.merge_snapshots.outcome == 'failure' || steps.persist_snapshots.outcome == 'failure')
         continue-on-error: true
         timeout-minutes: 2
         env:

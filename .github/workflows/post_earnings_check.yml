@@ -117,6 +117,55 @@ jobs:
           WEBHOOK_EARNINGS: ${{ secrets.SLACK_WEBHOOK_EARNINGS }}
         run: bash scripts/ci_db_rollback_guard.sh
 
+      # Pre-print consensus snapshots for the guidance square (board #298
+      # Phase B; Codex 2026-10-01 round 5). The square on the results card
+      # reads snapshots from the DB. If a daily run's earnings-db save was
+      # lost, that day's snapshots live ONLY in the `consensus-snapshots` side
+      # artifact, and this workflow never restored it -- so the evening card
+      # graded those names "could not check". Same script, same armed guard
+      # (vars.EA_CONSENSUS_BOOTSTRAPPED) as the daily workflow; read-only here:
+      # this job never uploads that artifact. The merged rows ride this job's
+      # earnings-db save. Feature, not safeguard: continue-on-error, but a
+      # failure alerts ("Notify Slack on consensus snapshot restore failure").
+      # Not gated on main: read-only, and the results steps are ungated, so a
+      # branch dispatch must see the same snapshots (Codex 2026-10-01 r2).
+      - name: Restore consensus snapshots side artifact
+        id: restore_snapshots
+        continue-on-error: true
+        timeout-minutes: 5
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EA_DB_ARTIFACT_NAME: consensus-snapshots
+          EA_DB_PATH: consensus_snapshots.db
+          EA_DB_VERIFY_TABLE: consensus_snapshot
+          EA_DB_REQUIRE_ARTIFACT: ${{ vars.EA_CONSENSUS_BOOTSTRAPPED }}
+        run: bash scripts/ci_restore_db_artifact.sh
+
+      - name: Merge consensus snapshots into the DB
+        id: merge_snapshots
+        continue-on-error: true
+        timeout-minutes: 5
+        env:
+          CONSENSUS_SNAPSHOT_FILE: consensus_snapshots.db
+        run: python main.py --merge-consensus-snapshots
+
+      # Outcome, not failure(): continue-on-error makes the CONCLUSION success.
+      - name: Notify Slack on consensus snapshot restore failure
+        if: always() && (steps.restore_snapshots.outcome == 'failure' || steps.merge_snapshots.outcome == 'failure')
+        continue-on-error: true
+        timeout-minutes: 2
+        env:
+          SLACK_WEBHOOK_STATUS: ${{ secrets.SLACK_WEBHOOK_STATUS }}
+          SLACK_WEBHOOK_EARNINGS: ${{ secrets.SLACK_WEBHOOK_EARNINGS }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          WEBHOOK="${SLACK_WEBHOOK_STATUS:-$SLACK_WEBHOOK_EARNINGS}"
+          if [ -n "$WEBHOOK" ]; then
+            curl -sS --connect-timeout 10 --max-time 20 -X POST -H 'Content-Type: application/json' \
+              --data "{\"text\":\":warning: *Post-Earnings Results Check*: consensus-snapshots side artifact was not restored/merged — this run's FY guide square may show 'could not check' for names whose snapshot was lost with an earnings-db save. <${RUN_URL}|run details>\"}" \
+              "$WEBHOOK" || true
+          fi
+
       - name: Write Google credentials
         run: echo '${{ secrets.GOOGLE_CREDENTIALS_JSON }}' > credentials.json
         continue-on-error: true  # calendar updates are best-effort
@@ -140,6 +189,12 @@ jobs:
           COVERAGE_MANAGER_PATH: ${{ github.workspace }}/coverage-manager
           SLACK_WEBHOOK_EARNINGS: ${{ secrets.SLACK_WEBHOOK_EARNINGS }}
           TICKTICK_ACCESS_TOKEN: ${{ secrets.TICKTICK_ACCESS_TOKEN }}
+          # Board #298 Phase B square; ON only when the repo variable is exactly
+          # "1". Rollback: gh variable delete GUIDANCE_SQUARE. STATUS routes its
+          # gap alert to #status-reports; the UA is for its EDGAR reads.
+          GUIDANCE_SQUARE: ${{ vars.GUIDANCE_SQUARE }}
+          SLACK_WEBHOOK_STATUS: ${{ secrets.SLACK_WEBHOOK_STATUS }}
+          SEC_EDGAR_USER_AGENT: ${{ secrets.SEC_EDGAR_USER_AGENT }}
         run: |
           if [ -n "${{ inputs.date }}" ]; then
             python main.py --check-results --date "${{ inputs.date }}"
@@ -158,6 +213,12 @@ jobs:
           COVERAGE_MANAGER_PATH: ${{ github.workspace }}/coverage-manager
           SLACK_WEBHOOK_EARNINGS: ${{ secrets.SLACK_WEBHOOK_EARNINGS }}
           TICKTICK_ACCESS_TOKEN: ${{ secrets.TICKTICK_ACCESS_TOKEN }}
+          # Board #298 Phase B square; ON only when the repo variable is exactly
+          # "1". Rollback: gh variable delete GUIDANCE_SQUARE. STATUS routes its
+          # gap alert to #status-reports; the UA is for its EDGAR reads.
+          GUIDANCE_SQUARE: ${{ vars.GUIDANCE_SQUARE }}
+          SLACK_WEBHOOK_STATUS: ${{ secrets.SLACK_WEBHOOK_STATUS }}
+          SEC_EDGAR_USER_AGENT: ${{ secrets.SEC_EDGAR_USER_AGENT }}
         run: |
           YESTERDAY=$(date -u -d 'yesterday' +%Y-%m-%d)
           python main.py --check-results --date "$YESTERDAY"

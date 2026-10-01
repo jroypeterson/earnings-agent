@@ -29,6 +29,7 @@ python main.py --daily-summary [--date YYYY-MM-DD] [--no-llm]  # Same-day NARRAT
 python main.py --check-missed-results # EDGAR backstop: alert when a Tier 1/2 name filed an 8-K Item 2.02 but Finnhub has no actuals yet (FIVE-class silent miss). Two passes: DB candidates + a DB-independent Tier-1 blind sweep.
 python main.py --reconcile-ticktick [--dry-run]  # DB->TickTick projection reconcile: correct stale task dates, mark [REPORTED]; refuses on a stale DB
 python main.py --snapshot-consensus [--dry-run]  # Snapshot FMP forward ANNUAL consensus for every open event still ahead (all tiers) into consensus_snapshot; --dry-run lists the window, 0 FMP calls. Board #298 Phase A; see consensus_snapshot.py
+python main.py --merge-consensus-snapshots  # Merge the restored consensus-snapshots side file (CONSENSUS_SNAPSHOT_FILE) into the DB; CI runs it BEFORE any results step in daily + post workflows so the #298 guidance square sees snapshots whose earnings-db save was lost
 python main.py --populate-db-only   # Alias for --dry-run, named for the CI use of seeding the SQLite DB (events + estimates) with no external writes
 python main.py --ticktick-status   # Show TickTick review queue
 python main.py --no-ticktick       # Skip TickTick during --sync
@@ -406,6 +407,12 @@ Optional for Gmail IR-alert scanning: `GMAIL_TOKEN_JSON` + `GMAIL_CLIENT_CREDENT
 
 ## Required repo variables
 
+- `GUIDANCE_SQUARE=1` (set 2026-10-01, JP-approved) turns on board #298 Phase B's 4th results
+  square, "FY guide vs Street (pre-print)". Read at runtime (`notifications.guidance_square_enabled`,
+  exactly `"1"`), mapped into the env of every results-posting step — the daily sync step and both
+  `--check-results` steps in `post_earnings_check.yml` (`test_guidance_square_ci.py` pins that,
+  and that the `consensus-snapshots` restore + `--merge-consensus-snapshots` run before them).
+  Rollback: `gh variable delete GUIDANCE_SQUARE`; the next run renders three squares.
 - `EA_CONSENSUS_BOOTSTRAPPED=true` (set 2026-09-28, after 4 successful uploads 2026-09-26..28;
   a local restore with the guard armed pulled the newest artifact, 216 rows, rc 0). Arms the
   mandatory-artifact guard on the `consensus-snapshots` restore step (board #298 Phase A).
