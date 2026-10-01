@@ -295,12 +295,15 @@ def _label_window(r: GuidanceRange, chars: int = 40) -> str:
     return r.source_line[max(0, i - chars): i + len(r.label)]
 
 
-_OTHER_METRIC_CUT = re.compile(r"[$\d;,]|\band\b", re.IGNORECASE)
+# Cut at a FIGURE (currency or percent), not at any digit: "Adjusted FY 2025
+# EPS" must keep its "Adjusted" across the year (Codex r4, HUM wording).
+_OTHER_METRIC_CUT = re.compile(
+    r"\$\s?\(?-?[\d,.]*\d|\b\d+(?:\.\d+)?\s?%|[;,]|\band\b", re.IGNORECASE)
 
 
 def _own_label_window(r: GuidanceRange, chars: int = 40) -> str:
     """The label plus only the words before it that belong to THIS metric: the
-    40-char window is cut after the last figure, comma, semicolon or "and".
+    40-char window is cut after the last figure ($ or %), comma, semicolon or "and".
     "Adjusted EBITDA of $100 million and diluted EPS of $1.00 to $1.10" must
     not lend its "adjusted" to the GAAP EPS (Codex r2)."""
     head = _label_window(r, chars)

@@ -878,3 +878,16 @@ def test_r3_a_budget_spent_inside_the_fetch_reads_budget_not_fetch_failed(db, mo
     r = _row("JPX", tier=1, position="Portfolio", event_date="2026-08-05")
     main.attach_guidance_verdicts(db, [r], budget_s=150, clock=lambda: now[0])
     assert r.guidance_verdict.reason == "budget"
+
+
+# --- Codex 2026-09-30 round 4 regression --------------------------------------
+
+def test_r4_a_fiscal_year_between_adjusted_and_eps_keeps_the_basis():
+    """HUM 1Q25 wording: the year digits are not a metric separator."""
+    text = ("Quarter ended March 31, 2025.\n2025 Outlook\n"
+            "Affirms Adjusted FY 2025 EPS guidance of $16.00 to $16.50.\n")
+    v = assess(text, "2025-04-30", "ok",
+               snaps(snap("2025-12-31", eps=16.0, taken_at="2025-04-29T12:00:00Z"),
+                     snap("2026-12-31", eps=18.0, taken_at="2025-04-29T12:00:00Z")),
+               "2025-05-01T04:00:00Z")
+    assert v.state == "green", (v.state, v.reason)
