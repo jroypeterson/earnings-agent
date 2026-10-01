@@ -426,7 +426,7 @@ def test_9_53_week_footnote_leaves_the_label_alone():
             "Net sales are expected to be in the range of $5.40 billion to $5.48 billion.\n"
             "Fiscal 2026 is a 53-week year\n"
             "Adjusted diluted income per common share of $8.65 to $9.05.\n")
-    blocks = extract_guidance_blocks(text)
+    blocks = extract_guidance_blocks(text, fy_headings=True)
     assert [b.label for b in blocks] == ["For the full year of Fiscal 2026"]
     assert len(blocks[0].lines) == 2
 
@@ -436,12 +436,12 @@ def test_9_colon_less_period_heading_opens_a_block():
             "Net sales of $1.18 billion to $1.20 billion.\n"
             "For the full year of Fiscal 2026\n"
             "Net sales of $5.40 billion to $5.48 billion.\n")
-    labels = [b.label for b in extract_guidance_blocks(text)]
+    labels = [b.label for b in extract_guidance_blocks(text, fy_headings=True)]
     assert "For the full year of Fiscal 2026" in labels
 
 
 def test_10_full_year_caption_keeps_fy_evidence_under_a_column_header():
-    blocks = extract_guidance_blocks(EHC)
+    blocks = extract_guidance_blocks(EHC, fy_headings=True)
     assert len(blocks) == 1
     b = blocks[0]
     assert b.label == "Full-Year 2026 Guidance" and b.period_label
@@ -449,7 +449,7 @@ def test_10_full_year_caption_keeps_fy_evidence_under_a_column_header():
 
 
 def test_five_current_prior_header_is_captured_and_passes():
-    blocks = extract_guidance_blocks(FIVE_Q2)
+    blocks = extract_guidance_blocks(FIVE_Q2, fy_headings=True)
     fy = [b for b in blocks if "full year" in b.label.lower()]
     assert fy and fy[0].column_header == "Current Outlook Prior Outlook"
     assert gc._column_verdict(fy[0].column_header, "eps") is None
@@ -677,6 +677,11 @@ def test_r1_budget_is_rechecked_between_edgar_calls_within_a_row(db, monkeypatch
         now[0] = 1000.0          # this call alone exhausts the budget
         return None
 
+    import consensus_snapshot
+    # A usable snapshot, so the row reaches EDGAR at all (since r2 a snapshot
+    # gap returns before any SEC call).
+    monkeypatch.setattr(consensus_snapshot, "pre_release_snapshot_set",
+                        lambda conn, t, cutoff: ("ok", {}))
     monkeypatch.setattr(edgar_client, "get_request_stats", lambda: (0, 0))
     monkeypatch.setattr(edgar_client, "find_earnings_release_filing", slow_8k)
     monkeypatch.setattr(edgar_client, "find_results_6k",
@@ -687,3 +692,134 @@ def test_r1_budget_is_rechecked_between_edgar_calls_within_a_row(db, monkeypatch
     main.attach_guidance_verdicts(db, [r], budget_s=150, clock=lambda: now[0])
     assert calls == ["8k"]
     assert r.guidance_verdict.state == "no_check" and r.guidance_verdict.reason == "budget"
+
+
+# --- flag-off invariance: the default extractor is the consensus preview's ----
+# (2026-09-30 review). Phase B's block-splitting rules changed 17 of 80 live
+# releases in the PRODUCTION consensus preview with GUIDANCE_SQUARE off; CON
+# lost its whole outlook to a period-captioned press-release title.
+
+CON_SHAPED = """
+Concentra Reports Results For Its Second Quarter Ended June 30, 2026 and Raises FY 2026 Guidance
+Revenue of $606.0 million, an increase of 10.0% from $550.8 million in Q2 2025
+Adjusted EBITDA of $140.9 million, an increase of 22.5% from $115.0 million in Q2 2025
+2026 Business Outlook
+Revenue in the range of $2.325 billion to $2.375 billion
+Adjusted EBITDA in the range of $485 million to $495 million
+"""
+
+
+def _outlook_lines(blocks):
+    return [l for b in blocks if b.label == "2026 Business Outlook" for l in b.lines]
+
+
+@pytest.mark.parametrize("fy_headings", [False, True])
+def test_a_period_captioned_title_does_not_swallow_the_real_outlook(fy_headings):
+    blocks = extract_guidance_blocks(CON_SHAPED, fy_headings=fy_headings)
+    assert any("$2.325 billion" in l for l in _outlook_lines(blocks))
+
+
+def test_default_mode_does_not_open_a_block_on_a_colon_less_period_line():
+    text = ("2026 Outlook:\n"
+            "Net sales of $5.40 billion to $5.48 billion.\n"
+            "Full Year Results\n"
+            "Net sales of $1,518.1 million for the year ended June 30, 2026.\n")
+    labels = [b.label for b in extract_guidance_blocks(text)]
+    assert labels == ["2026 Outlook"]
+
+
+def test_default_mode_caption_is_not_period_labelled():
+    assert not any(b.period_label for b in extract_guidance_blocks(EHC))
+
+
+# --- Codex 2026-09-30 round 2 regressions ------------------------------------
+
+from guidance_compare import COLOURED
+
+_FY26 = lambda **kw: snaps(snap("2025-12-31", **kw), snap("2026-12-31", **kw))
+
+
+@pytest.mark.parametrize("line", [
+    "For 1H26, revenue is expected to be $900 million to $950 million.",
+    "2H'26 revenue is expected to be $900 million to $950 million.",
+    "1Q26 revenue is expected to be $900 million to $950 million.",
+    "Revenue for the 9-month period ending December 31, 2026 of $900 million to $950 million.",
+    "Fourth-quarter revenue is expected to be $900 million to $950 million.",
+])
+def test_r2_compact_sub_annual_labels_do_not_inherit_fy(line):
+    text = f"Quarter ended June 30, 2026.\n2026 Outlook\n{line}\n"
+    v = assess(text, "2026-08-05", "ok", _FY26(revenue=2.0e9), CUTOFF)
+    assert v.state == "no_guide", (v.state, v.reason)
+
+
+def test_r2_another_metrics_adjusted_does_not_qualify_gaap_eps():
+    text = ("Quarter ended June 30, 2026.\n2026 Outlook\n"
+            "Full-year 2026 adjusted EBITDA of $100 million and diluted EPS of $1.00 to $1.10.\n")
+    v = assess(text, "2026-08-05", "ok", _FY26(eps=1.5), CUTOFF)
+    assert v.state not in COLOURED, (v.state, v.reason)
+
+
+def test_r2_control_adjusted_eps_still_compares():
+    text = ("Quarter ended June 30, 2026.\n2026 Outlook\n"
+            "Full-year 2026 adjusted diluted EPS of $1.00 to $1.10.\n")
+    v = assess(text, "2026-08-05", "ok", _FY26(eps=1.5), CUTOFF)
+    assert v.state == "red"
+
+
+def test_r2_a_product_named_after_the_metric_narrows_scope():
+    text = ("Quarter ended June 30, 2026.\n2026 Outlook\n"
+            "Full-year 2026 net sales guidance for ARIKAYCE is $900 million to $950 million.\n")
+    v = assess(text, "2026-08-05", "ok", _FY26(revenue=2.0e9), CUTOFF)
+    assert v.state not in COLOURED, (v.state, v.reason)
+
+
+def test_r2_control_unqualified_net_sales_still_compares():
+    text = ("Quarter ended June 30, 2026.\n2026 Outlook\n"
+            "Full-year 2026 net sales guidance is $1.90 billion to $1.95 billion.\n")
+    v = assess(text, "2026-08-05", "ok", _FY26(revenue=2.0e9), CUTOFF)
+    assert v.state == "red"
+
+
+def test_r2_the_year_nearest_before_the_figure_picks_the_snapshot():
+    text = ("Quarter ended September 30, 2026.\n2027 Outlook\n"
+            "Compared with fiscal 2026, fiscal 2027 revenue is expected at "
+            "$2.00 billion to $2.10 billion.\n")
+    v = assess(text, "2026-10-28", "ok",
+               snaps(snap("2026-12-31", revenue=3.0e9), snap("2027-12-31", revenue=2.0e9)),
+               "2026-10-29T04:00:00Z")
+    assert v.state == "green", (v.state, v.reason)
+    assert v.compared[0].period_end == "2027-12-31"
+
+
+@pytest.mark.parametrize("prefix", ["C$", "A$", "EUR "])
+def test_r2_a_foreign_currency_guide_abstains(prefix):
+    text = ("Quarter ended June 30, 2026.\n2026 Outlook\n"
+            f"Full-year 2026 revenue is expected to be {prefix}2.00 billion to $2.10 billion.\n")
+    v = assess(text, "2026-08-05", "ok", _FY26(revenue=1.5e9), CUTOFF)
+    assert v.state not in COLOURED, (v.state, v.reason)
+
+
+def test_r2_control_us_dollar_prefix_still_compares():
+    text = ("Quarter ended June 30, 2026.\n2026 Outlook\n"
+            "Full-year 2026 revenue is expected to be US$2.00 billion to $2.10 billion.\n")
+    v = assess(text, "2026-08-05", "ok", _FY26(revenue=1.5e9), CUTOFF)
+    assert v.state == "green", (v.state, v.reason)
+
+
+def test_r2_a_snapshot_gap_is_named_before_any_edgar_early_return(db, monkeypatch):
+    """No snapshot AND no release on EDGAR must still say 'no pre-print
+    snapshot' -- and spend no SEC calls finding that out."""
+    import edgar_client
+    import main
+    calls = []
+    monkeypatch.setattr(edgar_client, "get_request_stats", lambda: (0, 0))
+    monkeypatch.setattr(edgar_client, "find_earnings_release_filing",
+                        lambda t, a, b: calls.append("8k"))
+    monkeypatch.setattr(edgar_client, "find_results_6k",
+                        lambda t, a, b: calls.append("6k"))
+    r = _row("JPX", tier=1, position="Portfolio", event_date="2026-08-05")
+    alerts = main.attach_guidance_verdicts(db, [r], budget_s=150, clock=lambda: 0.0)
+    assert r.guidance_verdict.state == "no_check"
+    assert r.guidance_verdict.reason == "no pre-print snapshot"
+    assert calls == []
+    assert alerts == ["JPX: no pre-print snapshot"]

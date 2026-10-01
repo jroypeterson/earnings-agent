@@ -2568,7 +2568,11 @@ def _guidance_verdict_for(conn, r: ResultRow, cs, edgar_client, gc,
     # The budget is re-checked between EDGAR calls, not only between rows
     # (Codex 2026-09-29 r1): one row makes up to three blocking SEC calls, so
     # a between-rows check alone let a hanging SEC overrun the budget by a
-    # whole row before the results post. Overrun is now at most ONE call.
+    # whole row before the results post. Overrun is now at most ONE step --
+    # but fetch_release_document is itself several requests (headers, full
+    # .txt fallback, each EX-99 candidate; 30-60s timeouts each), so the
+    # budget is soft by up to that one fetch. Bounding it needs a deadline
+    # inside edgar_client, which consensus_preview shares (Codex r2, filed).
     ev = conn.execute(
         "SELECT event_hour, event_hour_yf, date_confirmed FROM events "
         # A closed event never reports, so it has no cutoff to read.
@@ -2580,6 +2584,12 @@ def _guidance_verdict_for(conn, r: ResultRow, cs, edgar_client, gc,
         ev = (r.event_hour, None, 0)
     cutoff = cs.pre_release_cutoff(r.event_date, ev[0], ev[1], ev[2])
     status, snaps = cs.pre_release_snapshot_set(conn, r.ticker, cutoff)
+    # A snapshot-pipeline gap is named BEFORE any EDGAR early return (Codex
+    # r2): "no release on EDGAR" / "budget" / "fetch failed" otherwise hid a
+    # missing snapshot, the a-chokepoint-some-paths-return-before class. It
+    # also spends no SEC calls on a row that cannot be graded anyway.
+    if status not in ("ok", "empty"):
+        return gc.could_not_check(gc.snapshot_gap_reason(status))
     evd = date.fromisoformat(r.event_date)
     lo, hi = evd - timedelta(days=1), evd + timedelta(days=2)
     filing = edgar_client.find_earnings_release_filing(r.ticker, lo, hi)

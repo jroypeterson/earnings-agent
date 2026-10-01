@@ -663,6 +663,10 @@ class GuidanceBlock:
     # period-labelled block is protected from being replaced by a table
     # column header.
     period_label: bool = False
+    # True when period_label came from an OUTLOOK caption that names a period
+    # ("Full-Year 2026 Guidance") rather than a period sub-heading. Only the
+    # square's extraction mode sets it (``fy_headings=True``).
+    from_caption: bool = False
     # A dropped multi-column table header ("Previous Guidance | Updated
     # Guidance", "GAAP | Adjusted", "Current Outlook | Prior Outlook"). The
     # parser takes the FIRST range on a line as current, so the header is the
@@ -704,7 +708,8 @@ def is_column_header(line: str) -> bool:
 
 
 def extract_guidance_blocks(
-    text: str, *, max_blocks: int = 3, max_lines: int = 10
+    text: str, *, max_blocks: int = 3, max_lines: int = 10,
+    fy_headings: bool = False,
 ) -> list[GuidanceBlock]:
     """Outlook sections with their figures, in document order.
 
@@ -712,6 +717,15 @@ def extract_guidance_blocks(
     it: callers should prefer these blocks and fall back to the sentence-level
     extractor for releases that state guidance in running prose with no
     heading (which is common for issuers that guide in a single sentence).
+
+    ``fy_headings`` (board #298 Phase B, the guidance square ONLY) turns on the
+    two block-splitting rules the square needs: an outlook caption that names a
+    period is protected from a following column-header line (M4), and a
+    colon-less period heading opens a block (H3-NEW). They are OFF by default
+    because they change block boundaries for every other caller: measured
+    2026-09-30 on 80 live 3Q-season releases, 17 rendered differently in the
+    consensus preview, and CON / ELAN / TFX lost their real outlook lines (a
+    period-captioned press-release TITLE swallowed every later outlook heading).
     """
     if not text:
         return []
@@ -745,12 +759,18 @@ def extract_guidance_blocks(
             # that the figures beneath actually belong to.
             if (current is not None and current.period_label
                     and not _GUIDANCE_PERIOD.search(line)):
-                continue
+                # A caption-derived period label (fy_headings mode) yields only
+                # to a COLUMN header ("Previous Guidance Updated Guidance",
+                # "Current Outlook"); a real outlook heading such as "2026
+                # Business Outlook" still opens its own block.
+                if not current.from_caption or is_hdr or _COLUMN_TOKEN.match(label):
+                    continue
             # M4: a "Full-Year 2026 Guidance" caption carries FY evidence, so
             # it is protected from the column-header line that follows it.
+            caption_period = fy_headings and bool(_GUIDANCE_PERIOD.search(label))
             current = GuidanceBlock(
                 label=label or "Outlook", lines=[],
-                period_label=bool(_GUIDANCE_PERIOD.search(label)),
+                period_label=caption_period, from_caption=caption_period,
                 column_header=pending_header)
             blocks.append(current)
             continue
@@ -767,7 +787,8 @@ def extract_guidance_blocks(
         # shaped like a heading (plan v3 H3-NEW, v4 M2). The terminator branch
         # keeps `endswith(":")`.
         colon_less_period = (
-            not line.endswith(":") and len(line) < 90
+            fy_headings
+            and not line.endswith(":") and len(line) < 90
             and not _HAS_FIGURE.search(line)
             and _GUIDANCE_PERIOD.search(line) is not None
             and _HEADING_SHAPE.match(line) is not None

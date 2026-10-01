@@ -62,10 +62,14 @@ _FY_EVIDENCE = re.compile(
 # a generic "2026 Outlook" heading must not inherit FY evidence from that
 # heading (Codex 2026-09-29 r1: an H2 guide graded against FY Street = false red).
 _QUARTER = re.compile(
-    r"\b(?:(?:first|second|third|fourth)\s+quarter|Q[1-4]|[1-4]Q|"
+    r"\b(?:(?:first|second|third|fourth)[\s-]+quarter|Q[1-4]|"
+    # Compact forms carry a glued year ("1Q26", "2H'26", "H2 2026"); without
+    # the optional suffix the trailing \b never matched them (Codex r2).
+    r"[1-4]Q(?:\s*'?(?:20)?\d\d)?|"
     r"for\s+the\s+quarter|quarterly|"
-    r"(?:first|second|back|front|latter)[\s-]+half|[12]H|H[12]|half[- ]year|"
-    r"(?:three|six|nine)[- ]months?|"
+    r"(?:first|second|back|front|latter)[\s-]+half|"
+    r"[12]H(?:\s*'?(?:20)?\d\d)?|H[12](?:\s*'?(?:20)?\d\d)?|half[- ]year|"
+    r"(?:three|six|nine|3|6|9)[- ]months?|"
     r"(?:remainder|rest|balance)\s+of\s+(?:the\s+)?(?:fiscal\s+)?(?:year|20\d\d)|"
     r"year[- ]to[- ]date|YTD)\b",
     re.IGNORECASE,
@@ -85,6 +89,13 @@ _SCOPE_NARROWER = re.compile(
 _PRODUCT_CAPS = re.compile(r"\b(?!GAAP\b|USD\b|FY\b|EPS\b)[A-Z]{4,}\b")
 _EPS_ADJUSTED = re.compile(r"\b(adjusted|non[- ]gaap|core)\b", re.IGNORECASE)
 _FROM_TO = re.compile(r"\bfrom\s+\$?\(?-?[\d.,]+", re.IGNORECASE)
+# A non-USD currency marker immediately before the guide's first figure. The
+# range parser starts at "$", so "C$2.00 billion" otherwise reads as USD
+# (Codex r2). "US$" is USD and is allowed.
+_FOREIGN_CCY_ADJACENT = re.compile(r"(?<![A-Za-z])(?!US$)[A-Z]{1,3}$")
+_FOREIGN_CCY_CODE = re.compile(
+    r"(?:[\u20ac\u00a3\u00a5]|\b(?:EUR|GBP|CAD|AUD|NZD|HKD|JPY|CHF|DKK|SEK|NOK|"
+    r"RMB|CNY|INR|BRL|MXN|KRW|SGD)\b)\s*$")
 _BOILERPLATE = re.compile(
     r"(?:with|has)\s+annual\s+(?:sales|revenues?)|\bis\s+a\s+(?:global|leading)\b",
     re.IGNORECASE,
@@ -220,12 +231,25 @@ def _fy_evidence(line: str, label: str) -> tuple[bool, bool]:
     return False, False
 
 
-def _explicit_year(line: str, label: str) -> Optional[int]:
-    for text in (line, label):
-        for m in _EXPLICIT_YEAR.finditer(text or ""):
-            raw = m.group(1) or m.group(2)
-            y = int(raw)
-            return y + 2000 if y < 100 else y
+def _explicit_year(line: str, label: str,
+                   figure_start: Optional[int] = None) -> Optional[int]:
+    """The fiscal year a guide names. On the source line, the LAST year
+    mentioned before the figure wins ("Compared with fiscal 2026, fiscal 2027
+    revenue is expected at $2.0B" guides 2027 -- Codex r2: the first mention
+    picked 2026 and graded against the wrong snapshot). With no year before
+    the figure, the first year on the line, then the heading's."""
+    def _y(m):
+        y = int(m.group(1) or m.group(2))
+        return y + 2000 if y < 100 else y
+    hits = list(_EXPLICIT_YEAR.finditer(line or ""))
+    if figure_start is not None:
+        before = [m for m in hits if m.end() <= figure_start]
+        if before:
+            return _y(before[-1])
+    if hits:
+        return _y(hits[0])
+    for m in _EXPLICIT_YEAR.finditer(label or ""):
+        return _y(m)
     return None
 
 
@@ -271,6 +295,46 @@ def _label_window(r: GuidanceRange, chars: int = 40) -> str:
     return r.source_line[max(0, i - chars): i + len(r.label)]
 
 
+_OTHER_METRIC_CUT = re.compile(r"[$\d;,]|\band\b", re.IGNORECASE)
+
+
+def _own_label_window(r: GuidanceRange, chars: int = 40) -> str:
+    """The label plus only the words before it that belong to THIS metric: the
+    40-char window is cut after the last figure, comma, semicolon or "and".
+    "Adjusted EBITDA of $100 million and diluted EPS of $1.00 to $1.10" must
+    not lend its "adjusted" to the GAAP EPS (Codex r2)."""
+    head = _label_window(r, chars)
+    before = head[: max(0, len(head) - len(r.label))]
+    cuts = list(_OTHER_METRIC_CUT.finditer(before))
+    if cuts:
+        before = before[cuts[-1].end():]
+    return before + head[len(head) - len(r.label):]
+
+
+def _between_label_and_figure(r: GuidanceRange) -> str:
+    """Words after the metric label and before its figure ("net sales guidance
+    for ARIKAYCE is $900M"), where a product/segment qualifier also narrows
+    scope (Codex r2)."""
+    if r.figure_span is None:
+        return ""
+    i = r.source_line.lower().find(r.label.lower())
+    if i < 0:
+        return ""
+    j = i + len(r.label)
+    return r.source_line[j:r.figure_span[0]] if r.figure_span[0] > j else ""
+
+
+def _foreign_currency_guide(r: GuidanceRange) -> bool:
+    if r.figure_span is None:
+        return False
+    start, end = r.figure_span
+    frag = r.source_line[start:end]
+    k = next((n for n, ch in enumerate(frag) if ch == "$" or ch.isdigit()), 0)
+    pre = r.source_line[:start + k]
+    return bool(_FOREIGN_CCY_ADJACENT.search(pre)
+                or _FOREIGN_CCY_CODE.search(pre))
+
+
 # ---------------------------------------------------------------------------
 # Structural FY match (plan v2 C1, v3 C1-NEW + M1)
 # ---------------------------------------------------------------------------
@@ -281,7 +345,8 @@ def _period_candidates(quarter_end: date, period_ends: list[date]) -> list[date]
 
 
 def _map_period(r_line: str, label: str, quarter_end: date,
-                period_ends: list[date]) -> tuple[Optional[date], str]:
+                period_ends: list[date],
+                figure_start: Optional[int] = None) -> tuple[Optional[date], str]:
     cands = _period_candidates(quarter_end, period_ends)
     if not cands:
         return None, "period"
@@ -289,7 +354,7 @@ def _map_period(r_line: str, label: str, quarter_end: date,
     if first > quarter_end + timedelta(days=380):
         return None, "period"
     second = cands[1] if len(cands) > 1 else None
-    year = _explicit_year(r_line, label)
+    year = _explicit_year(r_line, label, figure_start)
     if year is None:
         matched = first
     elif _year_fits(year, first):
@@ -331,7 +396,8 @@ def assess(
     if isinstance(event_date, str):
         event_date = date.fromisoformat(event_date)
 
-    blocks = extract_guidance_blocks(release_text or "", max_blocks=6, max_lines=12)
+    blocks = extract_guidance_blocks(release_text or "", max_blocks=6, max_lines=12,
+                                     fy_headings=True)
 
     # --- candidate FY $ ranges per metric (G1 + unit) ---------------------
     fy: dict[str, list[tuple[GuidanceRange, object, bool]]] = {"revenue": [], "eps": []}
@@ -384,7 +450,9 @@ def assess(
             if reason:
                 reasons.append(reason)
                 continue
-            matched, why = _map_period(r.source_line, b.label, qe, period_ends)
+            matched, why = _map_period(
+                r.source_line, b.label, qe, period_ends,
+                r.figure_span[0] if r.figure_span else None)
             if matched is None:
                 reasons.append(why)
                 continue
@@ -456,14 +524,18 @@ def _gates_g3_g6(r: GuidanceRange, block, metric: str) -> str:
     if metric == "revenue":
         head = _label_window(r, 40)
         before = head[: max(0, len(head) - len(r.label))]
-        if _SCOPE_NARROWER.search(before) or _PRODUCT_CAPS.search(before):
+        after = _between_label_and_figure(r)
+        if (_SCOPE_NARROWER.search(before) or _PRODUCT_CAPS.search(before)
+                or _SCOPE_NARROWER.search(after) or _PRODUCT_CAPS.search(after)):
             return "scope"
         if r.low <= 0:
             return "sanity"
     else:
         # G4: the metric label itself (plus 40 chars before) must say adjusted.
-        if not _EPS_ADJUSTED.search(_label_window(r, 40)):
+        if not _EPS_ADJUSTED.search(_own_label_window(r, 40)):
             return "basis"
+    if _foreign_currency_guide(r):
+        return "currency"
     if r.low > r.high:
         return "sanity"
     if r.low > 0 and r.high / r.low > 1.5:
