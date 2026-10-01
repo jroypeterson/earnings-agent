@@ -11,6 +11,7 @@ from __future__ import annotations
 import html
 import json
 import logging
+import os
 from dataclasses import dataclass
 from datetime import date, datetime
 
@@ -44,6 +45,10 @@ class ResultRow:
     # ISO-8601 datetime (with offset) of the conference call, or None. Drives
     # the "call same day / next morning" context in the results line.
     call_datetime_utc: str | None = None
+    # Board #298 Phase B: guidance_compare.GuidanceVerdict, set by
+    # main.attach_guidance_verdicts. None = enrichment did not run for this
+    # row, which renders the "could not check" glyph, never a colour.
+    guidance_verdict: object | None = None
 
 logger = logging.getLogger("earnings_agent")
 
@@ -666,22 +671,53 @@ def _move_marker(move: PostEarningsMove | None) -> str:
 # are both generated from this one tuple, so they cannot drift apart — a legend
 # that mislabels the squares is worse than having no legend at all. Adding a
 # slot here makes it appear in both places automatically (board #298).
+def _guidance_marker(r: ResultRow) -> str:
+    """4th square: FY guide vs pre-print Street (board #298 Phase B)."""
+    from guidance_compare import NO_CHECK
+    v = getattr(r, "guidance_verdict", None)
+    return v.glyph if v is not None else NO_CHECK
+
+
+GUIDANCE_SLOT_LABEL = "FY guide vs Street (pre-print)"
+
 _RESULT_MARKER_SLOTS: tuple[tuple[str, object], ...] = (
     ("EPS vs est.", lambda r: _beat_marker(r.eps_actual, r.eps_estimate)),
     ("Revenue vs est.", lambda r: _beat_marker(r.rev_actual, r.rev_estimate)),
     ("Stock reaction", lambda r: _move_marker(r.move)),
+    (GUIDANCE_SLOT_LABEL, _guidance_marker),
 )
+
+
+def guidance_square_enabled() -> bool:
+    """GUIDANCE_SQUARE=1 turns the 4th slot on (plan section 6). Off, the slot
+    AND its legend entry are absent, so the flag cannot leave a dead column."""
+    return os.environ.get("GUIDANCE_SQUARE", "").strip() == "1"
+
+
+def active_result_marker_slots() -> tuple[tuple[str, object], ...]:
+    if guidance_square_enabled():
+        return _RESULT_MARKER_SLOTS
+    return tuple(s for s in _RESULT_MARKER_SLOTS if s[0] != GUIDANCE_SLOT_LABEL)
+
 
 # Colour key. Kept beside the slots because both halves of the legend have to
 # stay true to _beat_marker()/_move_marker() above.
 _MARKER_COLOUR_KEY = (
     "\U0001F7E9 beat/up · \U0001F7E5 miss/down · ⬜ n/a · ⚠️ no data"
 )
+# The 4th slot's meanings are stated SEPARATELY (plan v4 M3): ⬜ and ⚠️ mean
+# something narrower there. Every glyph guidance_compare can emit must appear
+# here -- test_guidance_square asserts it against STATE_GLYPH.
+_GUIDANCE_COLOUR_KEY = (
+    "FY guide (level, not direction): \U0001F7E9 ≥ Street · \U0001F7E5 below · "
+    "\U0001F7E8 straddles · \U0001F532 not comparable · ⬜ no FY $ range parsed · "
+    "⬛ not checked (outside v1 cohort) · ⚠️ no pre-print data / not fetched"
+)
 
 
 def _render_result_markers(r: ResultRow) -> str:
-    """The marker prefix for one results line, in _RESULT_MARKER_SLOTS order."""
-    return " ".join(fn(r) for _, fn in _RESULT_MARKER_SLOTS)
+    """The marker prefix for one results line, in active slot order."""
+    return " ".join(fn(r) for _, fn in active_result_marker_slots())
 
 
 def build_results_legend_text() -> str:
@@ -691,8 +727,11 @@ def build_results_legend_text() -> str:
     _RESULT_MARKER_SLOTS rather than written out, so it cannot describe an
     order the renderer no longer uses.
     """
-    names = " · ".join(label for label, _ in _RESULT_MARKER_SLOTS)
-    return f"Squares, left to right: {names}  |  {_MARKER_COLOUR_KEY}"
+    names = " · ".join(label for label, _ in active_result_marker_slots())
+    text = f"Squares, left to right: {names}  |  {_MARKER_COLOUR_KEY}"
+    if guidance_square_enabled():
+        text += f"  |  {_GUIDANCE_COLOUR_KEY}"
+    return text
 
 
 def _fmt_call_compact(earnings_date: str | None, call_dt_iso: str | None) -> str | None:
@@ -894,6 +933,95 @@ def build_season_funnel_elements(stats: dict | None) -> list[dict]:
 # payload never exceeds SLACK_MAX_BLOCKS even in the pathological case.
 _OVERFLOW_RESERVE = 2
 
+# Guidance-square footer budget (plan v4 H4). Slack: a context block holds at
+# most 10 elements, and a mrkdwn text object at most 3000 chars (2000 kept for
+# headroom). The footer is ONE context block, reserved up front beside the
+# overflow reserve, so neither the subgroup loop nor the final slice can drop it.
+GUIDANCE_FOOTER_ELEMENT_CHARS = 2000
+GUIDANCE_FOOTER_MAX_ELEMENTS = 10
+
+
+def _fmt_guide_value(metric: str, v: float) -> str:
+    if metric == "eps":
+        return f"-${abs(v):.2f}" if v < 0 else f"${v:.2f}"
+    a = abs(v)
+    sign = "-" if v < 0 else ""
+    if a >= 1e9:
+        return f"{sign}${a / 1e9:.2f}B"
+    if a >= 1e6:
+        return f"{sign}${a / 1e6:.0f}M"
+    return f"{sign}${a:,.0f}"
+
+
+def _guidance_footer_row_text(r: ResultRow) -> str:
+    v = r.guidance_verdict
+    parts = []
+    for c in v.compared:
+        name = "Rev" if c.metric == "revenue" else "Adj. EPS"
+        parts.append(
+            f"{name} guide {_fmt_guide_value(c.metric, c.low)}–"
+            f"{_fmt_guide_value(c.metric, c.high)} vs Street "
+            f"{_fmt_guide_value(c.metric, c.consensus)} "
+            f"({c.analysts} analysts, snapshot {c.snapshot_taken_at[:16].replace('T', ' ')}Z, "
+            f"FY ending {c.period_end})"
+        )
+    sentence = v.compared[0].sentence if v.compared else v.sentence
+    return f"`{r.ticker}` {v.glyph} " + " · ".join(parts) + f" — “{sentence}”"
+
+
+def build_guidance_footer_blocks(results: list[ResultRow]) -> list[dict]:
+    """One context block: the square's counts, then every coloured row with the
+    verbatim guide sentence and both snapshot figures (plan v2 design verdict)
+    so a colour is checkable in five seconds. Full text is also logged."""
+    if not guidance_square_enabled() or not results:
+        return []
+    from guidance_compare import COLOURED
+    counts: dict[str, int] = {}
+    reasons: dict[str, int] = {}
+    for r in results:
+        v = r.guidance_verdict
+        state = v.state if v is not None else "no_check"
+        counts[state] = counts.get(state, 0) + 1
+        if v is not None and state in ("not_comparable", "no_check") and v.reason:
+            reasons[v.reason] = reasons.get(v.reason, 0) + 1
+    order = [("green", "≥ Street"), ("red", "below"), ("yellow", "straddle"),
+             ("not_comparable", "not comparable"), ("no_guide", "no FY $ range"),
+             ("no_check", "could not check"), ("outside", "outside cohort")]
+    summary = "FY guide square: " + " · ".join(
+        f"{counts[k]} {label}" for k, label in order if counts.get(k))
+    if reasons:
+        summary += " (" + "; ".join(f"{k} {n}" for k, n in sorted(reasons.items())) + ")"
+    summary = summary[:GUIDANCE_FOOTER_ELEMENT_CHARS]
+
+    coloured = [r for r in results
+                if r.guidance_verdict is not None and r.guidance_verdict.state in COLOURED]
+    lines = [_guidance_footer_row_text(r) for r in coloured]
+    for line in lines:
+        logger.info("guidance square: %s", line)
+
+    elements = [{"type": "mrkdwn", "text": summary}]
+    buf = ""
+    shown = 0
+    for i, line in enumerate(lines):
+        line = line[:GUIDANCE_FOOTER_ELEMENT_CHARS]
+        cand = line if not buf else buf + "\n" + line
+        if len(cand) <= GUIDANCE_FOOTER_ELEMENT_CHARS:
+            buf = cand
+            shown += 1
+            continue
+        # Keep one element free for the "+N more" note.
+        if len(elements) + 1 >= GUIDANCE_FOOTER_MAX_ELEMENTS - 1:
+            break
+        elements.append({"type": "mrkdwn", "text": buf})
+        buf = line
+        shown += 1
+    if buf:
+        elements.append({"type": "mrkdwn", "text": buf})
+    if shown < len(lines):
+        elements.append({"type": "mrkdwn", "text": (
+            f"_+{len(lines) - shown} more coloured row(s) — full text in the run log_")})
+    return [{"type": "context", "elements": elements[:GUIDANCE_FOOTER_MAX_ELEMENTS]}]
+
 
 def _overflow_blocks(rows: list[ResultRow], budget: int = _OVERFLOW_RESERVE) -> list[dict]:
     """Compact, ticker-only rendering for rows that did not fit in full detail.
@@ -991,6 +1119,12 @@ def build_results_slack_blocks(
         },
     ]
 
+    # The guidance-square footer is built FIRST and its blocks reserved beside
+    # the overflow reserve (plan v4 H4), so no amount of results can crowd it
+    # out and the final slice below can never cut it.
+    footer = build_guidance_footer_blocks(results)
+    reserve = _OVERFLOW_RESERVE + len(footer)
+
     funnel_elements = build_season_funnel_elements(season_stats)
     if funnel_elements:
         blocks.append({"type": "context", "elements": funnel_elements})
@@ -1029,7 +1163,7 @@ def build_results_slack_blocks(
         divider_cost = 0 if first_tier else 1
         header_blocks = _chunk_result_section(tier_header, [])
         if (len(blocks) + divider_cost + len(header_blocks)
-                + _OVERFLOW_RESERVE > SLACK_MAX_BLOCKS):
+                + reserve > SLACK_MAX_BLOCKS):
             overflow.extend(tier_rows)
             continue
 
@@ -1051,7 +1185,7 @@ def build_results_slack_blocks(
             # chunk for a subgroup and only then tested the cap, so one large
             # subgroup could push the payload past Slack's hard 50-block limit
             # and fail the entire post.
-            avail = (SLACK_MAX_BLOCKS - _OVERFLOW_RESERVE
+            avail = (SLACK_MAX_BLOCKS - reserve
                      - len(blocks) - len(pending))
             if len(candidate) <= avail:
                 pending.extend(candidate)
@@ -1097,7 +1231,7 @@ def build_results_slack_blocks(
     # The budget checks above reserve room for the overflow notice, so this
     # slice is a belt-and-braces no-op. It must never be the thing that drops
     # the overflow notice — a test asserts the notice survives.
-    return blocks[:SLACK_MAX_BLOCKS]
+    return blocks[:SLACK_MAX_BLOCKS - len(footer)] + footer
 
 
 def build_results_fallback_text(results: list[ResultRow], as_of: date) -> str:

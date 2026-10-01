@@ -125,6 +125,10 @@ class GuidanceRange:
     # reaffirmed metric with a differently-worded one.
     prior_low: Optional[float] = None
     prior_high: Optional[float] = None
+    # (start, end) of the figure match inside source_line. Board #298 Phase B
+    # truncates the verbatim sentence AROUND this span, so both ends of the
+    # range survive a long line (4 of 67 FY ranges end past char 160).
+    figure_span: Optional[tuple[int, int]] = None
 
     @property
     def midpoint(self) -> float:
@@ -263,6 +267,7 @@ def parse_guidance_line(line: str, *, period: str = "") -> Optional[GuidanceRang
         key=key, label=label.strip(), low=low, high=high, unit=unit,
         basis=_basis_for(line), period=period, source_line=line,
         prior_low=prior_low, prior_high=prior_high,
+        figure_span=((m or point).start(), (m or point).end()),
     )
 
 

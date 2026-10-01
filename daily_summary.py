@@ -663,10 +663,53 @@ class GuidanceBlock:
     # period-labelled block is protected from being replaced by a table
     # column header.
     period_label: bool = False
+    # True when period_label came from an OUTLOOK caption that names a period
+    # ("Full-Year 2026 Guidance") rather than a period sub-heading. Only the
+    # square's extraction mode sets it (``fy_headings=True``).
+    from_caption: bool = False
+    # A dropped multi-column table header ("Previous Guidance | Updated
+    # Guidance", "GAAP | Adjusted", "Current Outlook | Prior Outlook"). The
+    # parser takes the FIRST range on a line as current, so the header is the
+    # only record of which column that is. Board #298 Phase B (plan v4 C1,
+    # v5 H-A) reads it in guidance_compare._column_verdict.
+    column_header: str = ""
+
+
+# Column tokens for header capture (plan v5 H-A). `non-gaap` precedes `gaap` so
+# the alternation takes the longer token.
+_COLUMN_TOKEN = re.compile(
+    r"\b(current|updated|revised|new|prior|previous|original|initial|"
+    r"non[- ]gaap|gaap|adjusted|low|high)\b",
+    re.IGNORECASE,
+)
+_RECONCIL = re.compile(r"\breconcil", re.IGNORECASE)
+# A period sub-heading with no trailing colon must LOOK like a heading (plan v4
+# M2): "Fiscal 2026 is a 53-week year" names a period but is a sentence.
+_HEADING_SHAPE = re.compile(r"^(?:for\s+the|fiscal|full|fy)\b", re.IGNORECASE)
+_SENTENCE_VERB = re.compile(
+    r"\b(is|are|was|were|will|includes?|has|have|expects?|reflects?|"
+    r"anticipates?|remains?)\b",
+    re.IGNORECASE,
+)
+
+
+def is_column_header(line: str) -> bool:
+    """A short, figure-free line naming >=2 table-column tokens.
+
+    Deliberately independent of the outlook wording (v5 H-A): FICO prints
+    ``Previous Fiscal 2026 | Updated Fiscal 2026`` and VRTX ``Current FY |
+    Previous FY`` -- neither says "outlook" or "guidance". A
+    "Reconciliation of GAAP to Non-GAAP ..." caption is never a header (round
+    5: it fired in 5 VRTX blocks).
+    """
+    if len(line) >= 110 or _HAS_FIGURE.search(line) or _RECONCIL.search(line):
+        return False
+    return len(_COLUMN_TOKEN.findall(line)) >= 2
 
 
 def extract_guidance_blocks(
-    text: str, *, max_blocks: int = 3, max_lines: int = 10
+    text: str, *, max_blocks: int = 3, max_lines: int = 10,
+    fy_headings: bool = False,
 ) -> list[GuidanceBlock]:
     """Outlook sections with their figures, in document order.
 
@@ -674,6 +717,15 @@ def extract_guidance_blocks(
     it: callers should prefer these blocks and fall back to the sentence-level
     extractor for releases that state guidance in running prose with no
     heading (which is common for issuers that guide in a single sentence).
+
+    ``fy_headings`` (board #298 Phase B, the guidance square ONLY) turns on the
+    two block-splitting rules the square needs: an outlook caption that names a
+    period is protected from a following column-header line (M4), and a
+    colon-less period heading opens a block (H3-NEW). They are OFF by default
+    because they change block boundaries for every other caller: measured
+    2026-09-30 on 80 live 3Q-season releases, 17 rendered differently in the
+    consensus preview, and CON / ELAN / TFX lost their real outlook lines (a
+    period-captioned press-release TITLE swallowed every later outlook heading).
     """
     if not text:
         return []
@@ -681,11 +733,22 @@ def extract_guidance_blocks(
     blocks: list[GuidanceBlock] = []
     current: GuidanceBlock | None = None
     pending_label = ""
+    # A column header seen just before a block opens (or inside one before its
+    # first figure line). Cleared once a figure line lands, so a header can
+    # never attach to a table it does not sit above.
+    pending_header = ""
 
     for raw_line in text.splitlines():
         line = " ".join(raw_line.split()).strip()
         if not line:
             continue
+
+        is_hdr = is_column_header(line)
+        if is_hdr:
+            if current is not None and not current.lines:
+                # Nearest figure-free header ABOVE the first figure line wins.
+                current.column_header = line
+            pending_header = line
 
         heading = _OUTLOOK_HEADING.match(line)
         if heading and not _GUIDANCE_NOISE.search(line):
@@ -696,8 +759,19 @@ def extract_guidance_blocks(
             # that the figures beneath actually belong to.
             if (current is not None and current.period_label
                     and not _GUIDANCE_PERIOD.search(line)):
-                continue
-            current = GuidanceBlock(label=label or "Outlook", lines=[])
+                # A caption-derived period label (fy_headings mode) yields only
+                # to a COLUMN header ("Previous Guidance Updated Guidance",
+                # "Current Outlook"); a real outlook heading such as "2026
+                # Business Outlook" still opens its own block.
+                if not current.from_caption or is_hdr or _COLUMN_TOKEN.match(label):
+                    continue
+            # M4: a "Full-Year 2026 Guidance" caption carries FY evidence, so
+            # it is protected from the column-header line that follows it.
+            caption_period = fy_headings and bool(_GUIDANCE_PERIOD.search(label))
+            current = GuidanceBlock(
+                label=label or "Outlook", lines=[],
+                period_label=caption_period, from_caption=caption_period,
+                column_header=pending_header)
             blocks.append(current)
             continue
 
@@ -709,10 +783,24 @@ def extract_guidance_blocks(
         # of the block. Treating it as a terminator dropped every figure in the
         # Five Below reference case. It opens a new block instead, which is also
         # how StreetAccount splits the same content (Q2 block, FY block).
-        if line.endswith(":") and len(line) < 90 and not _HAS_FIGURE.search(line):
+        # The colon is relaxed ONLY for the period branch, and only for a line
+        # shaped like a heading (plan v3 H3-NEW, v4 M2). The terminator branch
+        # keeps `endswith(":")`.
+        colon_less_period = (
+            fy_headings
+            and not line.endswith(":") and len(line) < 90
+            and not _HAS_FIGURE.search(line)
+            and _GUIDANCE_PERIOD.search(line) is not None
+            and _HEADING_SHAPE.match(line) is not None
+            and not _SENTENCE_VERB.search(line)
+        )
+        if colon_less_period or (
+                line.endswith(":") and len(line) < 90
+                and not _HAS_FIGURE.search(line)):
             if _GUIDANCE_PERIOD.search(line):
                 current = GuidanceBlock(
-                    label=line.rstrip(":").strip(), lines=[], period_label=True)
+                    label=line.rstrip(":").strip(), lines=[], period_label=True,
+                    column_header=pending_header if is_hdr else "")
                 blocks.append(current)
             else:
                 # An unrelated heading (e.g. "Non-GAAP Information:") ends it.
@@ -751,6 +839,7 @@ def extract_guidance_blocks(
                     continue
                 if s not in current.lines and len(current.lines) < max_lines:
                     current.lines.append(s)
+                    pending_header = ""
 
     # Filter empties BEFORE slicing. A release opens with heading-only blocks
     # ("Increases Full Year 2026 Sales and EPS Outlook", then "Second Quarter

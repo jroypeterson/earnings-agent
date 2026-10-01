@@ -17,6 +17,7 @@ from datetime import date
 import config
 from notifications import (
     _RESULT_MARKER_SLOTS,
+    active_result_marker_slots,
     _SUBCATEGORY_ORDER,
     _results_subcategory,
     _results_tier_label,
@@ -102,7 +103,7 @@ class TestTierLabelDoesNotDrift:
 class TestLegend:
     def test_legend_names_every_marker_slot_in_order(self):
         text = build_results_legend_text()
-        labels = [label for label, _ in _RESULT_MARKER_SLOTS]
+        labels = [label for label, _ in active_result_marker_slots()]
         assert all(label in text for label in labels)
         positions = [text.index(label) for label in labels]
         assert positions == sorted(positions), "legend order must match render order"
@@ -444,7 +445,7 @@ class TestMarkerSingleSourceOfTruth:
         from notifications import _render_result_markers
 
         r = _row("UNH", sector="MedTech")
-        assert len(_render_result_markers(r).split()) == len(_RESULT_MARKER_SLOTS)
+        assert len(_render_result_markers(r).split()) == len(active_result_marker_slots())
 
 
 if __name__ == "__main__":
