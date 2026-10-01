@@ -1411,6 +1411,16 @@ class DisagreementRow:
     # auto-resolve — rendered as a hint line on the question thread.
     # High-confidence matches auto-lock instead and never reach here.
     web_note: str | None = None
+    # Structured web verdict behind web_note (board #515). The verdict line
+    # must be computed from THESE, not left to a heuristic that never saw the
+    # web result: on 2026-09-30 ABT's card carried "Abbott's own release says
+    # Oct 21 (yfinance)" in its web line and "Finnhub likely right" in its Read
+    # line, because _xcheck_verdict never consulted the web result at all.
+    web_announced_date: str | None = None
+    web_confidence: str | None = None  # "high" | "medium" | "low"
+    # WebVerdict.source_verified: cited by the search AND a company-IR/wire
+    # host. Unverified evidence never earns lock advice.
+    web_source_verified: bool = False
 
 
 def _fmt_yf_dates(yf_dates: list) -> str:
@@ -1560,6 +1570,47 @@ _REPLY_HINT_URGENT = (
 )
 
 
+def _web_verdict_recommendation(r: DisagreementRow) -> str | None:
+    """Read line driven by the company's own announced date, or None.
+
+    None when there is no usable web verdict (absent, low confidence, or no
+    date), so the caller falls through to the vendor/cadence heuristics.
+    """
+    ann = r.web_announced_date
+    conf = (r.web_confidence or "").lower()
+    if not ann or conf not in ("high", "medium"):
+        return None
+    try:
+        ann_label = _fmt_date_safe(ann)
+    except Exception:  # noqa: BLE001 — rendering must never break the card
+        ann_label = ann
+    if not r.web_source_verified:
+        # The trust gate rejected the source (uncited, or not a company-IR /
+        # wire host) - it might be the aggregator class that is disagreeing.
+        # Say what it claims and that it is unverified; recommend neither
+        # vendor and advise no lock (ABT 2026-09-30 was this shape, and the
+        # old card answered it with "Finnhub likely right").
+        yf_iso = [d.isoformat() for d in r.yf_dates] if r.yf_dates else []
+        which = ("matches Finnhub" if ann == r.finnhub_date
+                 else "matches yfinance" if ann in yf_iso
+                 else "matches neither source")
+        return (f"Unresolved — web search reports a company date of {ann_label} "
+                f"({which}) but could not verify the source. Check the "
+                f"company's IR page before replying.")
+    basis = f"company's own announcement (web search, {conf} confidence)"
+    if ann == r.finnhub_date:
+        return (f"Finnhub likely right — {basis} says {ann_label}. "
+                f"Reply `lock fh` to pin it.")
+    yf_iso = [d.isoformat() for d in r.yf_dates] if r.yf_dates else []
+    if ann in yf_iso:
+        # `lock <date>`, never `lock yf`: with several yfinance candidates
+        # `lock yf` takes the EARLIEST, which need not be the announced one.
+        return (f"yfinance likely right — {basis} says {ann_label}; "
+                f"Finnhub off. Reply `lock {ann}` to apply.")
+    return (f"Neither source — {basis} says {ann_label}. "
+            f"Verify, then reply `lock {ann}`.")
+
+
 def _xcheck_verdict(r: DisagreementRow) -> str:
     """
     Tentative read on which source is right, given Finnhub's confirmed
@@ -1581,6 +1632,17 @@ def _xcheck_verdict(r: DisagreementRow) -> str:
     # appear at two different dates depending on which event a vendor
     # tracks. Calendar event is anchored to the press release; this is
     # informational, not a conflict to resolve.
+    # The company's own announcement, found by the web resolver, outranks
+    # both vendors and the EDGAR cadence heuristic (board #515). Only HIGH
+    # confidence auto-locks (upstream, in run_cross_check); a MEDIUM verdict
+    # was downgraded by the trust gate (source domain/citation unverified),
+    # so it drives the RECOMMENDATION but never a silent lock. LOW is at best
+    # an inference from aggregators/cadence and is not company evidence.
+    # Checked BEFORE the split-day pattern: a company date can show both
+    # vendors wrong, and "no action needed" would bury it.
+    web_rec = _web_verdict_recommendation(r)
+    if web_rec:
+        return web_rec
     if r.split_day_call_date:
         return (
             f"Release/call split-day pattern — yfinance shows the press release "
@@ -1590,9 +1652,13 @@ def _xcheck_verdict(r: DisagreementRow) -> str:
     fh_off = r.edgar_finnhub_offset
     yf_off = r.edgar_yf_offset
     if r.finnhub_confirmed:
+        # `finnhub_confirmed` is Finnhub's own `hour` field (bmo/amc/dmh) — a
+        # VENDOR attribute, not evidence the company announced anything. It
+        # used to be labelled "company-confirmed", which read as company
+        # evidence beside a web line quoting the company saying the opposite.
         if fh_off is not None and yf_off is not None and abs(fh_off) <= abs(yf_off):
-            return "Finnhub likely right (company-confirmed + on cadence)."
-        return "Finnhub likely right (company-confirmed timing)."
+            return "Finnhub likely right (Finnhub lists a release session + on cadence)."
+        return "Finnhub likely right (Finnhub lists a release session)."
     if fh_off is None or yf_off is None:
         return "Low confidence — both sources estimated, no EDGAR signal."
     if abs(yf_off) + 2 <= abs(fh_off):
@@ -1600,6 +1666,13 @@ def _xcheck_verdict(r: DisagreementRow) -> str:
     if abs(fh_off) + 2 <= abs(yf_off):
         return "Finnhub closer to cadence."
     return "Low confidence — both within a few days of cadence anniversary."
+
+
+def _is_informational_split(r: DisagreementRow) -> bool:
+    """A split-day row is informational ONLY when no company evidence
+    overrides it - the same precedence `_xcheck_verdict` uses, so the summary
+    header and the thread can never disagree about whether to act."""
+    return bool(r.split_day_call_date) and _web_verdict_recommendation(r) is None
 
 
 def build_crosscheck_summary_blocks(
@@ -1613,7 +1686,7 @@ def build_crosscheck_summary_blocks(
     """
     t1 = sum(1 for r in rows if r.tier == 1)
     t2 = sum(1 for r in rows if r.tier == 2)
-    splits = sum(1 for r in rows if r.split_day_call_date)
+    splits = sum(1 for r in rows if _is_informational_split(r))
     real_conflicts = len(rows) - splits
 
     if real_conflicts == 0:

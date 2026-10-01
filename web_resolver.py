@@ -43,6 +43,11 @@ class WebVerdict:
     confidence: str              # "high" | "medium" | "low"
     source_url: str              # where the date was found ("" if none)
     note: str                    # one-line human-readable summary for the Slack thread
+    # True only when source_url was actually retrieved by the search AND is a
+    # company-IR / trusted-wire host - the same two checks the high-confidence
+    # trust gate applies. A verdict that fails them is a HINT: it may name a
+    # date, but nothing may advise locking it (#515, codex r2).
+    source_verified: bool = False
 
     def matches(self, candidate_iso: str) -> bool:
         return bool(self.announced_date) and self.announced_date == candidate_iso
@@ -97,6 +102,12 @@ def resolve_disagreement(
             block.text for block in resp.content if getattr(block, "type", "") == "text"
         )
         verdict = _parse_verdict(text)
+        if verdict:
+            _cited = _cited_urls(resp.content)
+            verdict.source_verified = (
+                _url_was_cited(verdict.source_url, _cited)
+                and _is_trusted_source(verdict.source_url)
+            )
         # Trust gate (codex 2026-07-08): the model's self-reported confidence is
         # steerable by page content (prompt injection), and "high" is what
         # authorizes an auto-lock. Downgrade to medium — hint, never lock —
@@ -111,6 +122,13 @@ def resolve_disagreement(
                 verdict.note = ("[downgraded: claimed source not among search "
                                 "citations] " + verdict.note)[:300]
             elif not _is_trusted_source(verdict.source_url):
+                # Log the URL: ABT 2026-09-30 was downgraded here while a
+                # re-run cited www.prnewswire.com (trusted), and with no URL
+                # in the log the cause could not be reconstructed (#515).
+                logger.warning(
+                    f"web_resolver: {ticker} high verdict downgraded, untrusted "
+                    f"source {verdict.source_url!r}"
+                )
                 verdict.confidence = "medium"
                 verdict.note = ("[downgraded: source not a company-IR/wire "
                                 "domain] " + verdict.note)[:300]
@@ -126,14 +144,41 @@ _TRUSTED_WIRE_DOMAINS = (
 )
 
 
+def _normalize_url(url: str) -> str:
+    """A scheme-less echo ("www.prnewswire.com/news-releases/...") parses
+    with an EMPTY netloc, which read as untrusted AND uncited (#515). Both
+    halves of the trust gate must see the same normalized URL."""
+    url = (url or "").strip()
+    if url and "://" not in url:
+        url = "https://" + url
+    return url
+
+
+def _safe_host(url: str) -> str:
+    """Destination hostname of an http(s) URL, or "" when it cannot be
+    trusted. `netloc` includes userinfo, so "https://prnewswire.com:443@evil.
+    example/x" has a prnewswire-looking netloc but goes to evil.example
+    (codex r3) - read `hostname`, and refuse any URL carrying credentials."""
+    from urllib.parse import urlparse
+    try:
+        parsed = urlparse(_normalize_url(url))
+        host = parsed.hostname or ""
+    except ValueError:
+        return ""
+    if parsed.scheme not in ("http", "https") or "@" in (parsed.netloc or ""):
+        return ""
+    return host.lower()
+
+
 def _is_trusted_source(url: str) -> bool:
     """True for newswire domains and company investor-relations hosts/paths."""
     from urllib.parse import urlparse
+    url = _normalize_url(url)
     try:
         parsed = urlparse(url)
     except ValueError:
         return False
-    host = (parsed.netloc or "").lower()
+    host = _safe_host(url)
     if not host:
         return False
     if any(host == d or host.endswith("." + d) for d in _TRUSTED_WIRE_DOMAINS):
@@ -162,17 +207,15 @@ def _cited_urls(content_blocks) -> set[str]:
 
 
 def _url_was_cited(source_url: str, cited: set[str]) -> bool:
+    source_url = _normalize_url(source_url)
     if not source_url:
         return False
     if source_url in cited:
         return True
-    # Tolerate tracking-param / trailing-slash drift between the model's echo
-    # and the raw citation, but require a real prefix relationship.
-    base = source_url.rstrip("/")
-    for c in cited:
-        cb = c.rstrip("/")
-        if cb.startswith(base) or base.startswith(cb):
-            return True
+    # (A raw string-prefix branch used to sit here. It compared URLs as text,
+    # so "www.prnewswire.com" was a prefix of a cited
+    # "https://www.prnewswire.com.evil.example/..." (codex r4). Tracking-param
+    # / slash drift is fully covered by the parsed-host comparison below.)
     # Same-host fallback: the model often reconstructs a canonical URL rather
     # than echoing the retrieved one verbatim (live 2026-07-09: Mastercard's
     # real Business Wire release was downgraded on an exact-URL miss). If the
@@ -181,14 +224,14 @@ def _url_was_cited(source_url: str, cited: set[str]) -> bool:
     # injected-aggregator case, which fails the trusted-domain check anyway.
     from urllib.parse import urlparse
     try:
-        host = (urlparse(source_url).netloc or "").lower()
+        host = _safe_host(source_url)
     except ValueError:
         return False
     if not host:
         return False
     for c in cited:
         try:
-            if (urlparse(c).netloc or "").lower() == host:
+            if _safe_host(c) == host:
                 return True
         except ValueError:
             continue

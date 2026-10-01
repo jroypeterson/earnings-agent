@@ -146,6 +146,7 @@ from notifications import (
     build_crosscheck_summary_blocks,
     build_crosscheck_summary_fallback,
     build_crosscheck_thread_blocks,
+    _web_verdict_recommendation,
     build_crosscheck_thread_fallback,
     build_web_resolution_blocks,
     build_web_resolution_fallback,
@@ -4475,6 +4476,111 @@ def _apply_edgar_auto_correction(
     return True
 
 
+def _web_reresolve_key(ticker: str, event_date: str) -> str:
+    return f"web_reresolve:{ticker.upper()}:{event_date}"
+
+
+def _web_reresolve_note_key(ticker: str, event_date: str) -> str:
+    return f"web_reresolve_note:{ticker.upper()}:{event_date}"
+
+
+def _web_evidence_mark(r) -> str | None:
+    if not (r.web_announced_date and r.web_confidence):
+        return None
+    return (f"{r.web_announced_date}|{r.web_confidence}|"
+            f"{'v' if r.web_source_verified else 'u'}")
+
+
+def _mark_web_evidence_delivered(conn, r) -> None:
+    mark = _web_evidence_mark(r)
+    key = _web_reresolve_note_key(r.ticker, r.finnhub_date)
+    if mark:
+        kv_set(conn, key, mark)
+    else:
+        # A card with no evidence supersedes any older delivered mark.
+        conn.execute("DELETE FROM kv_store WHERE key = ?", (key,))
+        conn.commit()
+
+
+def _surface_web_reresolve(conn, r, dry_run: bool) -> str:
+    """Reply new web-resolver evidence into an open cross-check thread.
+
+    Used when a re-resolution found a company date it may not act on (medium
+    confidence, or a third date). Posts only when the date+confidence differs
+    from what the thread already carries; the dedup mark is written only after
+    a successful post. Never raises. Returns "posted", "skipped" (nothing
+    new to say, or no bot path), or "failed" - on failure the day's attempt
+    stamp is cleared so the next run retries, and the caller fails the run.
+    """
+    rec = _web_verdict_recommendation(r)
+    if not rec or dry_run or not SLACK_BOT_TOKEN:
+        return "skipped"
+    key = _web_reresolve_note_key(r.ticker, r.finnhub_date)
+    mark = _web_evidence_mark(r)
+    if kv_get(conn, key) == mark:
+        return "skipped"
+    snap = get_question_snapshot(conn, r.ticker, r.finnhub_date) or {}
+    thread_ts = snap.get("slack_thread_ts")
+    channel = snap.get("slack_channel_id") or SLACK_CHANNEL_ID
+    text = f":mag: Web re-check: {rec}"
+    if not thread_ts or not channel:
+        # Eligibility requires an xcheck question, which always records its
+        # thread - so this is a broken row, surfaced loudly, not skipped.
+        logger.error(f"Web re-resolve: {r.ticker} has no thread to reply into")
+        return "failed"
+    try:
+        slack_post_message(
+            SLACK_BOT_TOKEN, channel,
+            blocks=[{"type": "section", "text": {"type": "mrkdwn", "text": text}}],
+            text=text, thread_ts=thread_ts,
+        )
+    except Exception as exc:  # noqa: BLE001 — retried next run, run fails
+        logger.error(f"Web re-resolve reply failed for {r.ticker}: {exc}")
+        conn.execute("DELETE FROM kv_store WHERE key = ?",
+                     (_web_reresolve_key(r.ticker, r.finnhub_date),))
+        conn.commit()
+        return "failed"
+    kv_set(conn, key, mark)
+    return "posted"
+
+
+def _has_unread_operator_reply(conn, ticker: str, event_date: str) -> bool:
+    """True when the question thread holds a human reply newer than the
+    reply watermark (i.e. not yet applied by --check-replies), or when that
+    cannot be determined. Fails CLOSED: an unreadable thread means the web
+    re-resolver must not act. No bot token -> replies cannot drive state at
+    all, so there is nothing to pre-empt."""
+    if not SLACK_BOT_TOKEN:
+        return False
+    snap = get_question_snapshot(conn, ticker, event_date) or {}
+    thread_ts = snap.get("slack_thread_ts")
+    channel = snap.get("slack_channel_id") or SLACK_CHANNEL_ID
+    if not thread_ts or not channel:
+        return False
+    try:
+        replies = fetch_thread_replies(
+            SLACK_BOT_TOKEN, channel, thread_ts,
+            oldest=snap.get("slack_last_reply_ts"),
+        )
+    except Exception as exc:  # noqa: BLE001 — fail closed
+        logger.warning(f"Web re-resolve: {ticker} reply check failed ({exc})")
+        return True
+    return any(not rep.is_bot for rep in replies)
+
+
+def _web_reresolve_eligible(conn, ticker: str, event_date: str, today: date) -> bool:
+    """True when an already-alerted disagreement may be re-sent to the web
+    resolver this run: its cross-check question is still unanswered (open, or
+    `wait`/monitoring) and it has not been re-tried today. Snoozed, dismissed
+    and resolved questions are the operator's call and are left alone."""
+    snap = get_question_snapshot(conn, ticker, event_date)
+    if not snap or snap.get("slack_question_kind") != "xcheck":
+        return False
+    if snap.get("question_state") not in ("open", "monitoring"):
+        return False
+    return kv_get(conn, _web_reresolve_key(ticker, event_date)) != today.isoformat()
+
+
 def run_cross_check(dry_run: bool = False, days_ahead: int = 14):
     """
     Compare Finnhub's date against yfinance for upcoming Tier 1/2 events.
@@ -4529,6 +4635,8 @@ def run_cross_check(dry_run: bool = False, days_ahead: int = 14):
             logger.warning(f"Calendar service unavailable for cross-check: {exc}")
 
     new_disagreements = []  # list[tuple[DisagreementRow, signature_str]]
+    # Already-alerted rows with an unanswered question: web re-resolution only.
+    reresolve_candidates: list[tuple[DisagreementRow, str]] = []
     suppressed_count = 0
     yf_missing = 0
     edgar_corrections = 0
@@ -4624,6 +4732,23 @@ def run_cross_check(dry_run: bool = False, days_ahead: int = 14):
         if last_sig == current_sig and not edgar_release:
             # Already alerted with these yf dates AND no new EDGAR signal.
             suppressed_count += 1
+            # ...but an UNANSWERED question is still a live disagreement the
+            # web resolver may now be able to settle (board #515). The
+            # resolver used to get exactly one shot, at first detection; a
+            # flaky or premature miss then left the row on the vendor's date
+            # until a human replied - ABT sat on Finnhub's wrong Oct 13 while
+            # a re-run of the same resolver returned Abbott's own release
+            # (Oct 21) at high confidence. Re-try once per row per day; only
+            # a HIGH-confidence match acts, and nothing is re-posted.
+            if _web_reresolve_eligible(conn, ticker, event_date, today):
+                reresolve_candidates.append((DisagreementRow(
+                    ticker=ticker,
+                    company_name=company_name or "",
+                    finnhub_date=event_date,
+                    yf_dates=yf_dates,
+                    tier=tier,
+                    finnhub_confirmed=bool(date_confirmed),
+                ), current_sig))
             continue
 
         # Enrich with EDGAR cadence signal. Fail silently if EDGAR has no
@@ -4696,7 +4821,7 @@ def run_cross_check(dry_run: bool = False, days_ahead: int = 14):
             f"nothing this run (not trusting the 'no disagreements' result)."
         )
 
-    if not new_disagreements:
+    if not new_disagreements and not reresolve_candidates:
         conn.close()
         return
 
@@ -4724,15 +4849,56 @@ def run_cross_check(dry_run: bool = False, days_ahead: int = 14):
     # is back — loud beats silently stuck.
     web_retry_keys: set[tuple[str, str]] = set()
     web_attempts = 0
-    for r, sig in new_disagreements:
+    reresolve_delivery_failures: list[str] = []
+    # New disagreements first (they are about to be posted); re-resolution of
+    # already-open questions only spends whatever is left of the per-run cap.
+    # Re-checks go least-recently-attempted first (never-tried = ""), so
+    # rows beyond the per-run cap rotate in instead of starving (codex r3).
+    reresolve_candidates.sort(key=lambda rs: (
+        kv_get(conn, _web_reresolve_key(rs[0].ticker, rs[0].finnhub_date)) or "",
+        rs[0].finnhub_date, rs[0].ticker,
+    ))
+    web_work = [(r, sig, False) for r, sig in new_disagreements] + [
+        (r, sig, True) for r, sig in reresolve_candidates
+    ]
+    for r, sig, is_reresolve in web_work:
         verdict = None
+        if is_reresolve and not dry_run and _has_unread_operator_reply(
+            conn, r.ticker, r.finnhub_date
+        ):
+            # The operator has answered since the last poll; the reply poller
+            # runs AFTER this step, so acting now would pre-empt (and then
+            # silently discard) the human's command (codex r4).
+            logger.info(
+                f"Web re-resolve: {r.ticker} skipped - unread operator reply"
+            )
+            continue
         if not dry_run and ANTHROPIC_API_KEY and web_attempts < _WEB_RESOLVE_MAX:
             web_attempts += 1
+            if is_reresolve:
+                kv_set(conn, _web_reresolve_key(r.ticker, r.finnhub_date),
+                       today.isoformat())
             verdict = resolve_disagreement(
                 r.ticker, r.company_name, r.finnhub_date, r.yf_dates, today
             )
+        if verdict and verdict.announced_date:
+            # Structured verdict for the Read line (board #515) - set for
+            # every confidence; _xcheck_verdict decides what it may drive.
+            r.web_announced_date = verdict.announced_date
+            r.web_confidence = verdict.confidence
+            r.web_source_verified = bool(getattr(verdict, "source_verified", False))
         if verdict and verdict.confidence == "high" and verdict.announced_date:
             ann = verdict.announced_date
+            if is_reresolve and _has_unread_operator_reply(
+                conn, r.ticker, r.finnhub_date
+            ):
+                # Re-checked AFTER the (slow) web search, immediately before
+                # mutating: a reply posted during the lookup must win (r5).
+                logger.info(
+                    f"Web re-resolve: {r.ticker} not applied - operator "
+                    f"replied during the lookup"
+                )
+                continue
             if ann == r.finnhub_date:
                 # Company confirms Finnhub's date: lock in place, no move.
                 set_date_lock(conn, r.ticker, ann, True)
@@ -4743,6 +4909,10 @@ def run_cross_check(dry_run: bool = False, days_ahead: int = 14):
                     (r.ticker, ann),
                 )
                 conn.commit()
+                if is_reresolve:
+                    # The open question is answered - close it so the reply
+                    # poller and the open-question count stop carrying it.
+                    update_question_state(conn, r.ticker, ann, "resolved")
                 logger.info(
                     f"Web resolver: {r.ticker} locked at Finnhub date {ann} "
                     f"({verdict.source_url})"
@@ -4761,11 +4931,31 @@ def run_cross_check(dry_run: bool = False, days_ahead: int = 14):
                     logger.error(f"Web resolver lock failed for {r.ticker}: {exc}")
                     moved = False
                 if moved:
+                    # The move carries the question fields to the new row;
+                    # close the question there, or a stale reply in the old
+                    # thread could still drive the verified, locked date.
+                    _snap = get_question_snapshot(conn, r.ticker, ann)
+                    if _snap and _snap.get("question_state") in (
+                        "open", "monitoring", "snoozed"
+                    ):
+                        update_question_state(conn, r.ticker, ann, "resolved")
                     logger.info(
                         f"Web resolver: {r.ticker} moved+locked at yfinance "
                         f"date {ann} ({verdict.source_url})"
                     )
                     web_resolved.append((r, ann, "yfinance", verdict))
+                    continue
+                if is_reresolve:
+                    # Already has an open question; the kv stamp retries
+                    # tomorrow. Never re-post the thread.
+                    logger.warning(
+                        f"Web re-resolve: {r.ticker} company date {ann} matches "
+                        f"yfinance but the calendar move failed - retry next day"
+                    )
+                    # Still tell the thread (codex r6): the evidence must
+                    # not vanish while the calendar is down.
+                    if _surface_web_reresolve(conn, r, dry_run) == "failed":
+                        reresolve_delivery_failures.append(r.ticker)
                     continue
                 r.web_note = (
                     f"company announced {ann} (matches yfinance) but the "
@@ -4775,6 +4965,10 @@ def run_cross_check(dry_run: bool = False, days_ahead: int = 14):
             else:
                 # A third date neither source has: never auto-lock (mirrors
                 # the uncorroborated-EDGAR rule) — surface for the operator.
+                if is_reresolve:
+                    if _surface_web_reresolve(conn, r, dry_run) == "failed":
+                        reresolve_delivery_failures.append(r.ticker)
+                    continue
                 r.web_note = (
                     f"company announced *{ann}* — matches NEITHER source; "
                     f"{verdict.note}"
@@ -4784,6 +4978,13 @@ def run_cross_check(dry_run: bool = False, days_ahead: int = 14):
                 f"{verdict.confidence} confidence — "
                 f"{verdict.note or verdict.announced_date}"
             )
+        if is_reresolve:
+            # Its question thread is already posted: no move, no new thread,
+            # but NEW company evidence is replied into that thread (once per
+            # distinct date+confidence) so it is never silently discarded.
+            if _surface_web_reresolve(conn, r, dry_run) == "failed":
+                reresolve_delivery_failures.append(r.ticker)
+            continue
         still_open.append((r, sig))
 
     if web_resolved:
@@ -4847,6 +5048,10 @@ def run_cross_check(dry_run: bool = False, days_ahead: int = 14):
                     first_seen_iso=today.isoformat(),
                     channel_id=target_channel,
                 )
+                # Delivered: the card carries this web evidence, so a later
+                # re-resolve must not repeat it. Marked only AFTER the post
+                # succeeds - a failed card must not gag the evidence (r2).
+                _mark_web_evidence_delivered(conn, r)
         except SlackAPIError as exc:
             logger.error(f"Cross-check Slack post failed (bot path): {exc}")
             posted = False
@@ -4889,6 +5094,13 @@ def run_cross_check(dry_run: bool = False, days_ahead: int = 14):
         raise RuntimeError(
             f"Cross-check disagreement alert delivery failed for "
             f"{len(disagreement_rows)} row(s) — left for retry"
+        )
+    if not dry_run and reresolve_delivery_failures:
+        # Same fail-loud rule for re-resolution evidence: its attempt stamp
+        # was cleared, so the next run retries; this run must not look green.
+        raise RuntimeError(
+            f"Web re-resolution evidence undeliverable for "
+            f"{', '.join(reresolve_delivery_failures)} — left for retry"
         )
 
 
