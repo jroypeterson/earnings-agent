@@ -1,33 +1,15 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-09-30T23:07:34Z",
+  "generated_at": "2026-10-01T00:49:39Z",
   "window": {
-    "start": "2026-09-28",
-    "end": "2026-10-14"
+    "start": "2026-09-29",
+    "end": "2026-10-15"
   },
   "counts": {
     "events": 17
   },
   "events": [
-    {
-      "ticker": "LNAI",
-      "event_date": "2026-09-28",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Lunai Bioworks Inc."
-    },
-    {
-      "ticker": "PBM",
-      "event_date": "2026-09-28",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Psyence Biomedical Ltd."
-    },
     {
       "ticker": "BRTX",
       "event_date": "2026-09-29",
@@ -65,6 +47,24 @@
       "company_name": "Micron Technology, Inc."
     },
     {
+      "ticker": "LNAI",
+      "event_date": "2026-10-02",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Lunai Bioworks Inc."
+    },
+    {
+      "ticker": "BRTX",
+      "event_date": "2026-10-05",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "BioRestorative Therapies, Inc."
+    },
+    {
       "ticker": "NNVC",
       "event_date": "2026-10-05",
       "event_hour": "",
@@ -83,15 +83,6 @@
       "company_name": "Nurix Therapeutics Inc"
     },
     {
-      "ticker": "TLRY",
-      "event_date": "2026-10-07",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Tilray Brands Inc"
-    },
-    {
       "ticker": "TLSA",
       "event_date": "2026-10-07",
       "event_hour": "",
@@ -101,13 +92,13 @@
       "company_name": "Tiziana Life Sciences Ltd - ADR"
     },
     {
-      "ticker": "ABT",
-      "event_date": "2026-10-13",
-      "event_hour": "bmo",
-      "tier": 2,
-      "date_confirmed": true,
+      "ticker": "TLRY",
+      "event_date": "2026-10-08",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
       "call_datetime_utc": null,
-      "company_name": "Abbott Laboratories"
+      "company_name": "Tilray Brands Inc"
     },
     {
       "ticker": "JNJ",
@@ -162,6 +153,15 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Pulmatrix Inc"
+    },
+    {
+      "ticker": "TSM",
+      "event_date": "2026-10-15",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Taiwan Semiconductor Manufacturing Company Limited"
     }
   ]
 }
