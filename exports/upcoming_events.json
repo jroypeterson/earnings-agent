@@ -1,33 +1,15 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-10-01T23:17:28Z",
+  "generated_at": "2026-10-02T16:39:25Z",
   "window": {
-    "start": "2026-09-29",
-    "end": "2026-10-15"
+    "start": "2026-09-30",
+    "end": "2026-10-16"
   },
   "counts": {
-    "events": 17
+    "events": 14
   },
   "events": [
-    {
-      "ticker": "BRTX",
-      "event_date": "2026-09-29",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "BioRestorative Therapies, Inc."
-    },
-    {
-      "ticker": "POM",
-      "event_date": "2026-09-29",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "POMDOCTOR Ltd"
-    },
     {
       "ticker": "GDTC",
       "event_date": "2026-09-30",
@@ -36,15 +18,6 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "CytoMed Therapeutics Ltd"
-    },
-    {
-      "ticker": "CASIF",
-      "event_date": "2026-10-02",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "CASI Pharmaceuticals Inc"
     },
     {
       "ticker": "LNAI",
