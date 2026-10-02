@@ -1,0 +1,177 @@
+{
+ "id": "msg_011CfceihM6cCNMNu1H855kJ",
+ "container": {
+  "id": "container_01EpAfjdJSc5RGeznGxJtnbd",
+  "expires_at": "2026-10-02 03:51:02.126252+00:00"
+ },
+ "content": [
+  {
+   "id": "srvtoolu_01GPin4AYCa1v3q1fPUneD93",
+   "caller": null,
+   "input": {
+    "code": "\nresults = await web_search({\"query\": \"Abbott Laboratories ABT Q2 2026 earnings press release date announcement\"})\nimport json\nfor i, r in enumerate(results):\n    print(f\"[{i}] {r.get('title')} | {r.get('url')}\")\n    print(r.get('content','')[:300])\n    print()\n"
+   },
+   "name": "code_execution",
+   "type": "server_tool_use"
+  },
+  {
+   "id": "srvtoolu_01NEmVEFduyYY42W2x7Yzx5y",
+   "caller": {
+    "tool_id": "srvtoolu_01GPin4AYCa1v3q1fPUneD93",
+    "type": "code_execution_20260120"
+   },
+   "input": {
+    "query": "Abbott Laboratories ABT Q2 2026 earnings press release date announcement"
+   },
+   "name": "web_search",
+   "type": "server_tool_use"
+  },
+  {
+   "caller": {
+    "tool_id": "srvtoolu_01GPin4AYCa1v3q1fPUneD93",
+    "type": "code_execution_20260120"
+   },
+   "content": [
+    {
+     "encrypted_content": "x",
+     "page_age": null,
+     "title": "ABBOTT LABORATORIES - Form 8-K - FY2026",
+     "type": "web_search_result",
+     "url": "https://www.sec.gov/Archives/edgar/data/1800/000162828026002982/abt-2025q4xexhibitx991.htm"
+    },
+    {
+     "encrypted_content": "x",
+     "page_age": null,
+     "title": "ABBOTT LABORATORIES - Form 8-K - FY2026",
+     "type": "web_search_result",
+     "url": "https://www.sec.gov/Archives/edgar/data/0000001800/000162828026048377/abt-2026q2xexhibitx991.htm"
+    },
+    {
+     "encrypted_content": "x",
+     "page_age": null,
+     "title": "ABBOTT LABORATORIES - Form 8-K - FY2026",
+     "type": "web_search_result",
+     "url": "https://www.sec.gov/Archives/edgar/data/1800/000162828026025365/abt-2026q1xexhibitx991.htm"
+    },
+    {
+     "encrypted_content": "x",
+     "page_age": "78 days ago",
+     "title": "Abbott Laboratories (ABT) Set for Q2 Earnings with Positive Growth Expectations",
+     "type": "web_search_result",
+     "url": "https://www.gurufocus.com/news/8960619/abbott-laboratories-abt-set-for-q2-earnings-with-positive-growth-expectations"
+    }
+   ],
+   "tool_use_id": "srvtoolu_01NEmVEFduyYY42W2x7Yzx5y",
+   "type": "web_search_tool_result"
+  },
+  {
+   "content": {
+    "content": [],
+    "encrypted_stdout": "x",
+    "return_code": 1,
+    "stderr": "Traceback (most recent call last):\n  File \"/usr/local/lib/python3.11/asyncio/run",
+    "type": "encrypted_code_execution_result"
+   },
+   "tool_use_id": "srvtoolu_01GPin4AYCa1v3q1fPUneD93",
+   "type": "code_execution_tool_result"
+  },
+  {
+   "id": "srvtoolu_014ysxB6Krg6FEY4GyPrcWTy",
+   "caller": null,
+   "input": {
+    "code": "\nimport json\nraw = await web_search({\"query\": \"Abbott Laboratories ABT Q2 2026 earnings press release date announcement\"})\nresults = json.loads(raw) if isinstance(raw, str) else raw\nfor i, r in enumerate(results):\n    print(f\"[{i}] {r.get('title')} | {r.get('url')}\")\n    print(r.get('content','')[:400])\n    print()\n"
+   },
+   "name": "code_execution",
+   "type": "server_tool_use"
+  },
+  {
+   "id": "srvtoolu_01RMW7VDNpohAwK23YH3VBrH",
+   "caller": {
+    "tool_id": "srvtoolu_014ysxB6Krg6FEY4GyPrcWTy",
+    "type": "code_execution_20260120"
+   },
+   "input": {
+    "query": "Abbott Laboratories ABT Q2 2026 earnings press release date announcement"
+   },
+   "name": "web_search",
+   "type": "server_tool_use"
+  },
+  {
+   "caller": {
+    "tool_id": "srvtoolu_014ysxB6Krg6FEY4GyPrcWTy",
+    "type": "code_execution_20260120"
+   },
+   "content": [
+    {
+     "encrypted_content": "x",
+     "page_age": null,
+     "title": "ABBOTT LABORATORIES - Form 8-K - FY2026",
+     "type": "web_search_result",
+     "url": "https://www.sec.gov/Archives/edgar/data/1800/000162828026002982/abt-2025q4xexhibitx991.htm"
+    },
+    {
+     "encrypted_content": "x",
+     "page_age": null,
+     "title": "ABBOTT LABORATORIES - Form 8-K - FY2026",
+     "type": "web_search_result",
+     "url": "https://www.sec.gov/Archives/edgar/data/0000001800/000162828026048377/abt-2026q2xexhibitx991.htm"
+    },
+    {
+     "encrypted_content": "x",
+     "page_age": null,
+     "title": "ABBOTT LABORATORIES - Form 8-K - FY2026",
+     "type": "web_search_result",
+     "url": "https://www.sec.gov/Archives/edgar/data/1800/000162828026025365/abt-2026q1xexhibitx991.htm"
+    },
+    {
+     "encrypted_content": "x",
+     "page_age": "78 days ago",
+     "title": "Abbott Laboratories (ABT) Set for Q2 Earnings with Positive Growth Expectations",
+     "type": "web_search_result",
+     "url": "https://www.gurufocus.com/news/8960619/abbott-laboratories-abt-set-for-q2-earnings-with-positive-growth-expectations"
+    }
+   ],
+   "tool_use_id": "srvtoolu_01RMW7VDNpohAwK23YH3VBrH",
+   "type": "web_search_tool_result"
+  },
+  {
+   "content": {
+    "content": [],
+    "encrypted_stdout": "x",
+    "return_code": 0,
+    "stderr": "",
+    "type": "encrypted_code_execution_result"
+   },
+   "tool_use_id": "srvtoolu_014ysxB6Krg6FEY4GyPrcWTy",
+   "type": "code_execution_tool_result"
+  },
+  {
+   "citations": null,
+   "text": "The search results are definitive. Abbott's own press release (on their official media room) and the SEC 8-K filing confirm the date clearly.\n\n```json\n{\n  \"announced_date\": \"2026-07-16\",\n  \"confidence\": \"high\",\n  \"source_url\": \"https://abbott.mediaroom.com/2026-07-16-Abbott-Reports-Second-Quarter-2026-Results-and-Raises-Full-Year-EPS-Guidance\",\n  \"note\": \"Abbott's official newsroom press release dated July 16, 2026 confirms Q2 2026 results were published before market open on that date, matching Finnhub's date and contradicting yfinance's July 23 date.\"\n}\n```",
+   "type": "text"
+  }
+ ],
+ "model": "claude-sonnet-4-6",
+ "role": "assistant",
+ "stop_reason": "end_turn",
+ "stop_sequence": null,
+ "type": "message",
+ "usage": {
+  "cache_creation": {
+   "ephemeral_1h_input_tokens": 0,
+   "ephemeral_5m_input_tokens": 0
+  },
+  "cache_creation_input_tokens": 0,
+  "cache_read_input_tokens": 0,
+  "inference_geo": "global",
+  "input_tokens": 16302,
+  "output_tokens": 481,
+  "server_tool_use": {
+   "web_fetch_requests": 0,
+   "web_search_requests": 2
+  },
+  "service_tier": "standard"
+ },
+ "stop_details": null,
+ "diagnostics": null
+}
