@@ -51,7 +51,8 @@ jobs:
       - name: Checkout Coverage Manager exports
         uses: actions/checkout@v5
         with:
-          repository: jroypeterson/Coverage-Manager
+          repository: jroypeterson/coverage-manager-private
+          ssh-key: ${{ secrets.CM_DEPLOY_KEY }}
           path: coverage-manager
           sparse-checkout: |
             exports
