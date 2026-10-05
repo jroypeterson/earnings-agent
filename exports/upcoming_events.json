@@ -1,24 +1,15 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-10-04T15:49:04Z",
+  "generated_at": "2026-10-05T19:39:46Z",
   "window": {
-    "start": "2026-10-02",
-    "end": "2026-10-18"
+    "start": "2026-10-03",
+    "end": "2026-10-19"
   },
   "counts": {
-    "events": 13
+    "events": 12
   },
   "events": [
-    {
-      "ticker": "LNAI",
-      "event_date": "2026-10-02",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Lunai Bioworks Inc."
-    },
     {
       "ticker": "BRTX",
       "event_date": "2026-10-05",
@@ -110,15 +101,6 @@
       "company_name": "Hepion Pharmaceuticals Inc"
     },
     {
-      "ticker": "PULM",
-      "event_date": "2026-10-14",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Pulmatrix Inc"
-    },
-    {
       "ticker": "TSM",
       "event_date": "2026-10-15",
       "event_hour": "",
@@ -126,6 +108,15 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Taiwan Semiconductor Manufacturing Company Limited"
+    },
+    {
+      "ticker": "SMMT",
+      "event_date": "2026-10-19",
+      "event_hour": "",
+      "tier": 2,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Summit Therapeutics Inc"
     }
   ]
 }
