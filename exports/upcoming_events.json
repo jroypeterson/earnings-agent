@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-10-05T19:39:46Z",
+  "generated_at": "2026-10-06T00:55:03Z",
   "window": {
-    "start": "2026-10-03",
-    "end": "2026-10-19"
+    "start": "2026-10-04",
+    "end": "2026-10-20"
   },
   "counts": {
-    "events": 12
+    "events": 18
   },
   "events": [
     {
@@ -117,6 +117,60 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Summit Therapeutics Inc"
+    },
+    {
+      "ticker": "ICLR",
+      "event_date": "2026-10-20",
+      "event_hour": "amc",
+      "tier": 2,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "ICON PLC"
+    },
+    {
+      "ticker": "ISRG",
+      "event_date": "2026-10-20",
+      "event_hour": "amc",
+      "tier": 1,
+      "date_confirmed": true,
+      "call_datetime_utc": "2026-10-20T20:00:00+00:00",
+      "company_name": "Intuitive Surgical Inc"
+    },
+    {
+      "ticker": "NFLX",
+      "event_date": "2026-10-20",
+      "event_hour": "amc",
+      "tier": 1,
+      "date_confirmed": true,
+      "call_datetime_utc": "2026-10-20T20:00:00+00:00",
+      "company_name": "Netflix Inc"
+    },
+    {
+      "ticker": "OSSFF",
+      "event_date": "2026-10-20",
+      "event_hour": "",
+      "tier": 2,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Embla Medical hf."
+    },
+    {
+      "ticker": "TSLA",
+      "event_date": "2026-10-20",
+      "event_hour": "amc",
+      "tier": 1,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Tesla, Inc."
+    },
+    {
+      "ticker": "UCB",
+      "event_date": "2026-10-20",
+      "event_hour": "",
+      "tier": 2,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "UCB SA"
     }
   ]
 }
