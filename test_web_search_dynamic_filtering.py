@@ -245,8 +245,19 @@ def test_no_text_at_all_returns_none(monkeypatch):
     assert v is None
 
 
+def _transport():
+    """The HTTP library the INSTALLED SDK builds its errors from. anthropic 1.x moved
+    from httpx to httpx2, and CI (`anthropic>=0.40`, unpinned) installs 1.x while the
+    laptop has 0.86 -- so a bare `import httpx` failed only in CI (since 2026-10-02)."""
+    try:
+        import httpx2 as transport
+    except ImportError:
+        import httpx as transport
+    return transport
+
+
 def test_rejected_new_tool_falls_back_to_the_legacy_type(monkeypatch):
-    import httpx
+    httpx = _transport()
     req = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
     bad = anthropic.BadRequestError(
         "tool type not supported", response=httpx.Response(400, request=req),
@@ -262,7 +273,7 @@ def test_rejected_new_tool_falls_back_to_the_legacy_type(monkeypatch):
 
 
 def test_rejected_legacy_tool_does_not_loop(monkeypatch):
-    import httpx
+    httpx = _transport()
     req = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
     bad = anthropic.BadRequestError(
         "bad", response=httpx.Response(400, request=req), body=None)
@@ -320,7 +331,7 @@ def test_replay_budget_reserves_a_full_continuation_chain():
 def test_a_400_on_a_continuation_does_not_restart_on_legacy(monkeypatch):
     """codex r3: only a rejection of the FIRST request means the tool type is
     unsupported; a mid-chain 400 must not discard paid work and start over."""
-    import httpx
+    httpx = _transport()
     req = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
     bad = anthropic.BadRequestError(
         "bad", response=httpx.Response(400, request=req), body=None)
