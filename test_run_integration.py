@@ -437,6 +437,8 @@ def test_edgar_fallback_raises_on_degraded_edgar(monkeypatch, tmp_path):
     monkeypatch.setattr(main, "load_coverage", lambda: [_tkr("FIVE", tier=1)])
     monkeypatch.setattr(main, "find_earnings_release_filing", lambda *a, **k: None)
     monkeypatch.setattr(main, "get_cik", lambda t: "1")
+    # The 6-K foreign-filer fallback too, or it queries live EDGAR (#368, 2026-10-07).
+    monkeypatch.setattr(main, "find_results_6k", lambda *a, **k: None)
     # Simulate a degraded SEC: 8 of 10 requests hard-failed this run.
     monkeypatch.setattr(main, "edgar_get_request_stats", lambda: (10, 8))
 

@@ -1600,6 +1600,9 @@ def test_edgar_fallback_blind_sweep_flags_unlisted_tier1(monkeypatch):
                             primary_doc_title="Q1", items=("2.02",))
         return None
     monkeypatch.setattr(main, "find_earnings_release_filing", fake_filing)
+    # The blind sweep falls through to the foreign-filer 6-K path when the 8-K
+    # probe finds nothing; unstubbed, that queried live EDGAR (#368, 2026-10-07).
+    monkeypatch.setattr(main, "find_results_6k", lambda *a, **k: None)
 
     posted = {}
     monkeypatch.setattr(main, "SLACK_WEBHOOK_EARNINGS", "https://example.invalid/wh")
