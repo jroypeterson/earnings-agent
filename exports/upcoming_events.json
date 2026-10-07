@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-10-06T23:10:06Z",
+  "generated_at": "2026-10-07T17:50:34Z",
   "window": {
-    "start": "2026-10-04",
-    "end": "2026-10-20"
+    "start": "2026-10-05",
+    "end": "2026-10-21"
   },
   "counts": {
-    "events": 18
+    "events": 31
   },
   "events": [
     {
@@ -36,6 +36,15 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Nurix Therapeutics Inc"
+    },
+    {
+      "ticker": "SXTC",
+      "event_date": "2026-10-07",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "China SXT Pharmaceuticals, Inc."
     },
     {
       "ticker": "TLSA",
@@ -171,6 +180,114 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "UCB SA"
+    },
+    {
+      "ticker": "ABT",
+      "event_date": "2026-10-21",
+      "event_hour": "bmo",
+      "tier": 2,
+      "date_confirmed": true,
+      "call_datetime_utc": "2026-10-21T13:00:00+00:00",
+      "company_name": "Abbott Laboratories"
+    },
+    {
+      "ticker": "DHR",
+      "event_date": "2026-10-21",
+      "event_hour": "bmo",
+      "tier": 2,
+      "date_confirmed": true,
+      "call_datetime_utc": "2026-10-21T12:00:00+00:00",
+      "company_name": "Danaher Corp"
+    },
+    {
+      "ticker": "DOC",
+      "event_date": "2026-10-21",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Healthpeak Properties Inc"
+    },
+    {
+      "ticker": "ELV",
+      "event_date": "2026-10-21",
+      "event_hour": "bmo",
+      "tier": 2,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Elevance Health Inc"
+    },
+    {
+      "ticker": "HCSG",
+      "event_date": "2026-10-21",
+      "event_hour": "bmo",
+      "tier": 2,
+      "date_confirmed": true,
+      "call_datetime_utc": "2026-10-21T20:00:00+00:00",
+      "company_name": "Healthcare Services Group Inc"
+    },
+    {
+      "ticker": "IART",
+      "event_date": "2026-10-21",
+      "event_hour": "",
+      "tier": 2,
+      "date_confirmed": false,
+      "call_datetime_utc": "2026-10-21T12:30:00+00:00",
+      "company_name": "Integra LifeSciences Holdings Corporation"
+    },
+    {
+      "ticker": "MCO",
+      "event_date": "2026-10-21",
+      "event_hour": "bmo",
+      "tier": 1,
+      "date_confirmed": true,
+      "call_datetime_utc": "2026-10-21T20:00:00+00:00",
+      "company_name": "Moody's Corp"
+    },
+    {
+      "ticker": "MEDP",
+      "event_date": "2026-10-21",
+      "event_hour": "amc",
+      "tier": 2,
+      "date_confirmed": true,
+      "call_datetime_utc": "2026-10-22T20:00:00+00:00",
+      "company_name": "Medpace Holdings, Inc."
+    },
+    {
+      "ticker": "MOH",
+      "event_date": "2026-10-21",
+      "event_hour": "amc",
+      "tier": 2,
+      "date_confirmed": true,
+      "call_datetime_utc": "2026-10-22T20:00:00+00:00",
+      "company_name": "Molina Healthcare Inc"
+    },
+    {
+      "ticker": "SAP",
+      "event_date": "2026-10-21",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "SAP SE"
+    },
+    {
+      "ticker": "TMO",
+      "event_date": "2026-10-21",
+      "event_hour": "bmo",
+      "tier": 2,
+      "date_confirmed": true,
+      "call_datetime_utc": "2026-10-21T11:00:00+00:00",
+      "company_name": "Thermo Fisher Scientific Inc"
+    },
+    {
+      "ticker": "WST",
+      "event_date": "2026-10-21",
+      "event_hour": "bmo",
+      "tier": 1,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "West Pharmaceutical Services Inc"
     }
   ]
 }
