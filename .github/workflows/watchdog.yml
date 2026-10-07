@@ -106,8 +106,27 @@ jobs:
           for entry in "${WORKFLOWS[@]}"; do
             IFS='|' read -r label file sched hh grace_h fail_window <<< "$entry"
 
-            last=$(gh run list -R "$REPO" -w "$file" -s success -L 1 --json createdAt --jq '.[0].createdAt // ""')
-            last_failure=$(gh run list -R "$REPO" -w "$file" -s failure -L 1 --json createdAt --jq '.[0].createdAt // ""')
+            # Filter by conclusion CLIENT-SIDE over the unfiltered newest-first
+            # list. Do NOT go back to `gh run list -s success -L 1`: the
+            # server-side status filter returned STALE answers. Measured
+            # 2026-10-06: it gave 2026-09-04 for reconcile_calendar.yml while
+            # that workflow had succeeded on 10-02, 10-05 and 10-06, and two
+            # lookups of season_progress.yml seconds apart in one watchdog run
+            # disagreed (10-03 vs 10-06). That fabricated staleness is why
+            # recovery dispatches "never stuck" (board #356, #553): the
+            # recovered run succeeded and the next tick still read the old date.
+            # An unfiltered list is ordered by creation and consistent. 100
+            # runs is one API page and covers weeks of every cadence here; a
+            # success older than that reads as "never" (stale), which is safe.
+            # A FAILED listing must not read as "never": set -e is off inside
+            # $(), so check the exit status and refuse to judge this workflow.
+            if ! runs=$(gh run list -R "$REPO" -w "$file" -L 100 --json createdAt,conclusion); then
+              echo "ERROR: could not list runs for $label ($file)"
+              stale_lines+=("• \`$label\` — :warning: watchdog could not list its runs; freshness UNKNOWN (not dispatching).")
+              continue
+            fi
+            last=$(jq -r '[.[] | select(.conclusion == "success")] | max_by(.createdAt) | .createdAt // ""' <<< "$runs")
+            last_failure=$(jq -r '[.[] | select(.conclusion == "failure")] | max_by(.createdAt) | .createdAt // ""' <<< "$runs")
 
             if [ -z "$last" ]; then
               age_str="never"
