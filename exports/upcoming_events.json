@@ -1,33 +1,15 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-10-07T23:39:54Z",
+  "generated_at": "2026-10-08T17:55:43Z",
   "window": {
-    "start": "2026-10-05",
-    "end": "2026-10-21"
+    "start": "2026-10-06",
+    "end": "2026-10-22"
   },
   "counts": {
-    "events": 31
+    "events": 42
   },
   "events": [
-    {
-      "ticker": "BRTX",
-      "event_date": "2026-10-05",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "BioRestorative Therapies, Inc."
-    },
-    {
-      "ticker": "NNVC",
-      "event_date": "2026-10-05",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "NanoViricides, Inc"
-    },
     {
       "ticker": "NRIX",
       "event_date": "2026-10-07",
@@ -54,15 +36,6 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Tiziana Life Sciences Ltd - ADR"
-    },
-    {
-      "ticker": "TLRY",
-      "event_date": "2026-10-08",
-      "event_hour": "bmo",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Tilray Brands Inc"
     },
     {
       "ticker": "JNJ",
@@ -126,15 +99,6 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Summit Therapeutics Inc"
-    },
-    {
-      "ticker": "ICLR",
-      "event_date": "2026-10-20",
-      "event_hour": "amc",
-      "tier": 2,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "ICON PLC"
     },
     {
       "ticker": "ISRG",
@@ -281,13 +245,148 @@
       "company_name": "Thermo Fisher Scientific Inc"
     },
     {
-      "ticker": "WST",
-      "event_date": "2026-10-21",
+      "ticker": "ARGX",
+      "event_date": "2026-10-22",
+      "event_hour": "",
+      "tier": 2,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "argenx SE - ADR"
+    },
+    {
+      "ticker": "BIO",
+      "event_date": "2026-10-22",
+      "event_hour": "amc",
+      "tier": 2,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Bio-Rad Laboratories, Inc. Class A Common Stock"
+    },
+    {
+      "ticker": "CSL",
+      "event_date": "2026-10-22",
+      "event_hour": "amc",
+      "tier": 2,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "CSL Ltd"
+    },
+    {
+      "ticker": "DGX",
+      "event_date": "2026-10-22",
+      "event_hour": "bmo",
+      "tier": 2,
+      "date_confirmed": true,
+      "call_datetime_utc": "2026-10-22T12:30:00+00:00",
+      "company_name": "Quest Diagnostics Inc"
+    },
+    {
+      "ticker": "GILD",
+      "event_date": "2026-10-22",
+      "event_hour": "",
+      "tier": 2,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Gilead Sciences Inc"
+    },
+    {
+      "ticker": "ITGR",
+      "event_date": "2026-10-22",
+      "event_hour": "",
+      "tier": 2,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Integer Holdings Corporation"
+    },
+    {
+      "ticker": "KRC",
+      "event_date": "2026-10-22",
+      "event_hour": "",
+      "tier": 1,
+      "date_confirmed": false,
+      "call_datetime_utc": "2026-10-23T20:00:00+00:00",
+      "company_name": "Kilroy Realty Corporation"
+    },
+    {
+      "ticker": "LTC",
+      "event_date": "2026-10-22",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "LTC Properties Inc"
+    },
+    {
+      "ticker": "MA",
+      "event_date": "2026-10-22",
       "event_hour": "bmo",
       "tier": 1,
       "date_confirmed": true,
       "call_datetime_utc": null,
-      "company_name": "West Pharmaceutical Services Inc"
+      "company_name": "Mastercard Inc"
+    },
+    {
+      "ticker": "MPT",
+      "event_date": "2026-10-22",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Medical Properties Trust, Inc."
+    },
+    {
+      "ticker": "PTCT",
+      "event_date": "2026-10-22",
+      "event_hour": "amc",
+      "tier": 3,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "PTC Therapeutics, Inc."
+    },
+    {
+      "ticker": "SPOT",
+      "event_date": "2026-10-22",
+      "event_hour": "bmo",
+      "tier": 1,
+      "date_confirmed": true,
+      "call_datetime_utc": "2026-10-22T12:00:00+00:00",
+      "company_name": "Spotify Technology SA"
+    },
+    {
+      "ticker": "SPSC",
+      "event_date": "2026-10-22",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "SPS Commerce Inc"
+    },
+    {
+      "ticker": "TFX",
+      "event_date": "2026-10-22",
+      "event_hour": "bmo",
+      "tier": 2,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Teleflex Incorporated"
+    },
+    {
+      "ticker": "TVTX",
+      "event_date": "2026-10-22",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Travere Therapeutics Inc"
+    },
+    {
+      "ticker": "WDC",
+      "event_date": "2026-10-22",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Western Digital Corporation"
     }
   ]
 }
