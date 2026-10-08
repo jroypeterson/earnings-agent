@@ -179,3 +179,77 @@ def fetch_earnings(
         f"Matched {len(matched)} events for {len(tickers)} tickers."
     )
     return matched
+
+
+# Per-symbol probes allowed per run for events the bulk calendar missed. The
+# bulk scan normally leaves 0-1 Tier 1/2 events unseen, so this is a ceiling on
+# a pathological run, not a working budget (free tier: 60 calls/min).
+UNSEEN_PROBE_MAX = 10
+
+
+def probe_foreign_listing_dates(
+    client: finnhub.Client,
+    pairs: list[tuple[str, str]],
+    max_probes: int = UNSEEN_PROBE_MAX,
+) -> set[tuple[str, str]]:
+    """Confirm bulk-unseen (ticker, event_date) pairs by asking Finnhub by symbol.
+
+    Why (board #450, 2026-10-08): Finnhub re-homed argenx's event from the ADR
+    `ARGX` to its Euronext Brussels primary, `ARGX.BR`. The bulk calendar is
+    US-only (`international=False`; the international feed is premium and
+    401s), so the event vanished from it and B2 alerted "missing" for 29
+    straight runs on a date argenx itself publishes. A query BY SYMBOL
+    (`symbol="ARGX"`) still answers on the free tier, returning the row under
+    `ARGX.BR`.
+
+    Returns the subset of `pairs` the vendor confirms on the SAME date under
+    the queried symbol or a dotted listing of it (`ARGX` -> `ARGX.BR`). Only
+    the date is used: a foreign listing's estimates/actuals are in the home
+    currency (ARGX.BR revenue estimate EUR 1.69B vs the ADR's USD 1.86B), so
+    they must never be merged into an event. A different date is NOT a
+    confirmation - that is exactly the date move the unseen alert exists for.
+
+    Best-effort: any per-probe failure is logged and leaves that pair unseen,
+    which is today's behaviour.
+    """
+    confirmed: set[tuple[str, str]] = set()
+    for i, (ticker, event_date) in enumerate(pairs):
+        if i >= max_probes:
+            logger.warning(
+                f"B2 probe: cap of {max_probes} reached; {len(pairs) - i} "
+                f"unseen event(s) not probed this run"
+            )
+            break
+        want = ticker.upper()
+        try:
+            res = _retry(
+                client.earnings_calendar,
+                _from=event_date,
+                to=event_date,
+                symbol=want,
+                international=False,
+            )
+        except Exception as exc:  # best-effort; never abort the sync
+            logger.warning(f"B2 probe: {want} {event_date} failed: {exc}")
+            continue
+        rows = (res or {}).get("earningsCalendar") or []
+        for e in rows:
+            sym = (e.get("symbol") or "").upper()
+            if sym != want and sym.split(".", 1)[0] != want:
+                continue
+            if e.get("date") == event_date:
+                confirmed.add((ticker, event_date))
+                logger.info(
+                    f"B2 probe: {want} {event_date} confirmed by Finnhub "
+                    f"under {sym} (absent from the US bulk calendar)"
+                )
+                break
+        else:
+            logger.info(
+                f"B2 probe: {want} {event_date} not confirmed by symbol query "
+                f"({len(rows)} row(s): "
+                f"{[(r.get('symbol'), r.get('date')) for r in rows][:3]})"
+            )
+        if i + 1 < min(len(pairs), max_probes):
+            time.sleep(CHUNK_SLEEP)
+    return confirmed

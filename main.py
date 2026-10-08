@@ -69,7 +69,10 @@ from storage import (
     restamp_tiers_from_coverage,
     OPEN_EVENT_SQL,
 )
-from finnhub_client import get_client as get_finnhub_client, fetch_earnings, FinnhubError
+from finnhub_client import (
+    get_client as get_finnhub_client, fetch_earnings, FinnhubError,
+    probe_foreign_listing_dates,
+)
 from fmp_client import fetch_fmp_earnings, merge_earnings
 from config import FMP_API_KEY
 from config import ANTHROPIC_API_KEY
@@ -1576,7 +1579,18 @@ def run(
             (today.isoformat(), horizon_iso),
         )
         persistent_unseen: list[UnseenRow] = []
-        for row in cur.fetchall():
+        b2_rows = cur.fetchall()
+        # Ask Finnhub BY SYMBOL about anything the US-only bulk calendar missed:
+        # a name re-homed to its foreign primary listing (ARGX -> ARGX.BR, board
+        # #450) is absent from the bulk feed but still answers a symbol query on
+        # the free tier. Date confirmation only — see probe_foreign_listing_dates.
+        bulk_unseen = [
+            (r[0], r[1]) for r in b2_rows
+            if r[0] in coverage_map and (r[0], r[1]) not in seen_pairs
+        ]
+        if bulk_unseen:
+            seen_pairs |= probe_foreign_listing_dates(fh_client, bulk_unseen)
+        for row in b2_rows:
             (ticker, event_date, company_name, tier_val, prev_count,
              row_locked, row_confirmed, row_announcement) = row
             if ticker not in coverage_map:
