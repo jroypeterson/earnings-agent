@@ -1,0 +1,490 @@
+{
+ "frozen_at_utc": "2026-10-08T02:43:08+00:00",
+ "seed": 522,
+ "db": "earnings_events.db",
+ "after": "2026-10-09",
+ "until": "2026-11-20",
+ "n": 40,
+ "cases": [
+  {
+   "ticker": "CI",
+   "company_name": "Cigna Group",
+   "quarter": "2026Q3",
+   "tier": 1,
+   "date_confirmed": true,
+   "finnhub": "2026-10-29",
+   "yfinance": [
+    "2026-11-05"
+   ],
+   "providers_disagree": true
+  },
+  {
+   "ticker": "TSLA",
+   "company_name": "Tesla, Inc.",
+   "quarter": "2026Q3",
+   "tier": 1,
+   "date_confirmed": true,
+   "finnhub": "2026-10-20",
+   "yfinance": [
+    "2026-10-21"
+   ],
+   "providers_disagree": false
+  },
+  {
+   "ticker": "PACS",
+   "company_name": "PACS Group Inc",
+   "quarter": "2026Q3",
+   "tier": 1,
+   "date_confirmed": false,
+   "finnhub": "2026-11-17",
+   "yfinance": [
+    "2026-11-09"
+   ],
+   "providers_disagree": true
+  },
+  {
+   "ticker": "SPCX",
+   "company_name": "Space Exploration Technologies Corp.",
+   "quarter": "2026Q3",
+   "tier": 1,
+   "date_confirmed": false,
+   "finnhub": "2026-11-05",
+   "yfinance": [
+    "2026-11-03"
+   ],
+   "providers_disagree": true
+  },
+  {
+   "ticker": "ATEC",
+   "company_name": "Alphatec Holdings, Inc.",
+   "quarter": "2026Q3",
+   "tier": 1,
+   "date_confirmed": false,
+   "finnhub": "2026-10-29",
+   "yfinance": [
+    "2026-10-29"
+   ],
+   "providers_disagree": false
+  },
+  {
+   "ticker": "KRC",
+   "company_name": "Kilroy Realty Corporation",
+   "quarter": "2026Q3",
+   "tier": 1,
+   "date_confirmed": false,
+   "finnhub": "2026-10-22",
+   "yfinance": [
+    "2026-10-22"
+   ],
+   "providers_disagree": false
+  },
+  {
+   "ticker": "MSFT",
+   "company_name": "Microsoft Corporation",
+   "quarter": "2026Q3",
+   "tier": 1,
+   "date_confirmed": false,
+   "finnhub": "2026-10-27",
+   "yfinance": [
+    "2026-10-28"
+   ],
+   "providers_disagree": false
+  },
+  {
+   "ticker": "CNI",
+   "company_name": "Canadian National Railway Co",
+   "quarter": "2026Q3",
+   "tier": 1,
+   "date_confirmed": false,
+   "finnhub": "2026-10-30",
+   "yfinance": [
+    "2026-10-30"
+   ],
+   "providers_disagree": false
+  },
+  {
+   "ticker": "ENSG",
+   "company_name": "Ensign Group Inc",
+   "quarter": "2026Q3",
+   "tier": 1,
+   "date_confirmed": false,
+   "finnhub": "2026-11-03",
+   "yfinance": [
+    "2026-11-03"
+   ],
+   "providers_disagree": false
+  },
+  {
+   "ticker": "GRAL",
+   "company_name": "GRAIL, Inc.",
+   "quarter": "2026Q3",
+   "tier": 1,
+   "date_confirmed": false,
+   "finnhub": "2026-11-10",
+   "yfinance": [
+    "2026-11-11"
+   ],
+   "providers_disagree": false
+  },
+  {
+   "ticker": "TDOC",
+   "company_name": "Teladoc Health Inc",
+   "quarter": "2026Q3",
+   "tier": 2,
+   "date_confirmed": true,
+   "finnhub": "2026-10-28",
+   "yfinance": [
+    "2026-10-28"
+   ],
+   "providers_disagree": false
+  },
+  {
+   "ticker": "DVA",
+   "company_name": "Davita Inc",
+   "quarter": "2026Q3",
+   "tier": 2,
+   "date_confirmed": true,
+   "finnhub": "2026-10-23",
+   "yfinance": [
+    "2026-10-28"
+   ],
+   "providers_disagree": true
+  },
+  {
+   "ticker": "ACHC",
+   "company_name": "Acadia Healthcare Company Inc",
+   "quarter": "2026Q3",
+   "tier": 2,
+   "date_confirmed": true,
+   "finnhub": "2026-11-04",
+   "yfinance": [
+    "2026-11-04"
+   ],
+   "providers_disagree": false
+  },
+  {
+   "ticker": "UHS",
+   "company_name": "Universal Health Services Inc",
+   "quarter": "2026Q3",
+   "tier": 2,
+   "date_confirmed": true,
+   "finnhub": "2026-10-26",
+   "yfinance": [
+    "2026-10-26"
+   ],
+   "providers_disagree": false
+  },
+  {
+   "ticker": "GKOS",
+   "company_name": "Glaukos Corporation",
+   "quarter": "2026Q3",
+   "tier": 2,
+   "date_confirmed": false,
+   "finnhub": "2026-11-04",
+   "yfinance": [
+    "2026-10-28"
+   ],
+   "providers_disagree": true
+  },
+  {
+   "ticker": "DXCM",
+   "company_name": "DexCom, Inc.",
+   "quarter": "2026Q3",
+   "tier": 2,
+   "date_confirmed": false,
+   "finnhub": "2026-10-22",
+   "yfinance": [
+    "2026-10-29"
+   ],
+   "providers_disagree": true
+  },
+  {
+   "ticker": "GILD",
+   "company_name": "Gilead Sciences Inc",
+   "quarter": "2026Q3",
+   "tier": 2,
+   "date_confirmed": false,
+   "finnhub": "2026-10-22",
+   "yfinance": [
+    "2026-10-29"
+   ],
+   "providers_disagree": true
+  },
+  {
+   "ticker": "IMVT",
+   "company_name": "Immunovant Inc",
+   "quarter": "2026Q3",
+   "tier": 2,
+   "date_confirmed": false,
+   "finnhub": "2026-10-30",
+   "yfinance": [
+    "2026-11-09"
+   ],
+   "providers_disagree": true
+  },
+  {
+   "ticker": "PLSE",
+   "company_name": "Pulse Biosciences Inc",
+   "quarter": "2026Q3",
+   "tier": 2,
+   "date_confirmed": false,
+   "finnhub": "2026-11-03",
+   "yfinance": [
+    "2026-11-05"
+   ],
+   "providers_disagree": true
+  },
+  {
+   "ticker": "PGNY",
+   "company_name": "Progyny Inc",
+   "quarter": "2026Q3",
+   "tier": 2,
+   "date_confirmed": false,
+   "finnhub": "2026-10-29",
+   "yfinance": [
+    "2026-11-05"
+   ],
+   "providers_disagree": true
+  },
+  {
+   "ticker": "TMDX",
+   "company_name": "TransMedics Group Inc",
+   "quarter": "2026Q3",
+   "tier": 2,
+   "date_confirmed": false,
+   "finnhub": "2026-11-04",
+   "yfinance": [
+    "2026-10-29"
+   ],
+   "providers_disagree": true
+  },
+  {
+   "ticker": "QDEL",
+   "company_name": "QuidelOrtho Corporation",
+   "quarter": "2026Q3",
+   "tier": 2,
+   "date_confirmed": false,
+   "finnhub": "2026-11-03",
+   "yfinance": [
+    "2026-11-05"
+   ],
+   "providers_disagree": true
+  },
+  {
+   "ticker": "NVCR",
+   "company_name": "Novocure Limited",
+   "quarter": "2026Q3",
+   "tier": 2,
+   "date_confirmed": false,
+   "finnhub": "2026-10-26",
+   "yfinance": [
+    "2026-10-29"
+   ],
+   "providers_disagree": true
+  },
+  {
+   "ticker": "HIMS",
+   "company_name": "Hims & Hers Health Inc",
+   "quarter": "2026Q3",
+   "tier": 2,
+   "date_confirmed": false,
+   "finnhub": "2026-11-02",
+   "yfinance": [
+    "2026-11-09"
+   ],
+   "providers_disagree": true
+  },
+  {
+   "ticker": "AORT",
+   "company_name": "Artivion Inc",
+   "quarter": "2026Q3",
+   "tier": 2,
+   "date_confirmed": false,
+   "finnhub": "2026-10-29",
+   "yfinance": [
+    "2026-11-05"
+   ],
+   "providers_disagree": true
+  },
+  {
+   "ticker": "CON",
+   "company_name": "Concentra Group Holdings Parent Inc",
+   "quarter": "2026Q3",
+   "tier": 2,
+   "date_confirmed": false,
+   "finnhub": "2026-10-29",
+   "yfinance": [
+    "2026-11-05"
+   ],
+   "providers_disagree": true
+  },
+  {
+   "ticker": "CRSP",
+   "company_name": "Crispr Therapeutics AG",
+   "quarter": "2026Q3",
+   "tier": 2,
+   "date_confirmed": false,
+   "finnhub": "2026-11-04",
+   "yfinance": [
+    "2026-11-09"
+   ],
+   "providers_disagree": true
+  },
+  {
+   "ticker": "IRTC",
+   "company_name": "iRhythm Holdings, Inc",
+   "quarter": "2026Q3",
+   "tier": 2,
+   "date_confirmed": false,
+   "finnhub": "2026-10-28",
+   "yfinance": [
+    "2026-11-05"
+   ],
+   "providers_disagree": true
+  },
+  {
+   "ticker": "ITGR",
+   "company_name": "Integer Holdings Corporation",
+   "quarter": "2026Q3",
+   "tier": 2,
+   "date_confirmed": false,
+   "finnhub": "2026-10-22",
+   "yfinance": [
+    "2026-10-29"
+   ],
+   "providers_disagree": true
+  },
+  {
+   "ticker": "TECH",
+   "company_name": "Bio-Techne Corporation",
+   "quarter": "2026Q3",
+   "tier": 2,
+   "date_confirmed": false,
+   "finnhub": "2026-11-03",
+   "yfinance": [
+    "2026-11-09"
+   ],
+   "providers_disagree": true
+  },
+  {
+   "ticker": "RGNX",
+   "company_name": "Regenxbio Inc",
+   "quarter": "2026Q3",
+   "tier": 3,
+   "date_confirmed": true,
+   "finnhub": "2026-11-04",
+   "yfinance": [
+    "2026-11-05"
+   ],
+   "providers_disagree": false
+  },
+  {
+   "ticker": "PYXS",
+   "company_name": "Pyxis Oncology Inc",
+   "quarter": "2026Q3",
+   "tier": 3,
+   "date_confirmed": true,
+   "finnhub": "2026-11-02",
+   "yfinance": [
+    "2026-11-02"
+   ],
+   "providers_disagree": false
+  },
+  {
+   "ticker": "LYEL",
+   "company_name": "Lyell Immunopharma Inc",
+   "quarter": "2026Q3",
+   "tier": 3,
+   "date_confirmed": false,
+   "finnhub": "2026-11-09",
+   "yfinance": [
+    "2026-11-06"
+   ],
+   "providers_disagree": true
+  },
+  {
+   "ticker": "RNXT",
+   "company_name": "RenovoRx, Inc.",
+   "quarter": "2026Q3",
+   "tier": 3,
+   "date_confirmed": false,
+   "finnhub": "2026-11-11",
+   "yfinance": [
+    "2026-11-09"
+   ],
+   "providers_disagree": true
+  },
+  {
+   "ticker": "NGEN",
+   "company_name": "NervGen Pharma Corp. Common stock",
+   "quarter": "2026Q3",
+   "tier": 3,
+   "date_confirmed": false,
+   "finnhub": "2026-11-12",
+   "yfinance": [
+    "2026-11-23"
+   ],
+   "providers_disagree": true
+  },
+  {
+   "ticker": "AVTX",
+   "company_name": "Avalo Therapeutics, Inc.",
+   "quarter": "2026Q3",
+   "tier": 3,
+   "date_confirmed": false,
+   "finnhub": "2026-11-04",
+   "yfinance": [
+    "2026-11-12"
+   ],
+   "providers_disagree": true
+  },
+  {
+   "ticker": "GRFS",
+   "company_name": "Grifols SA - ADR ADR Class B",
+   "quarter": "2026Q3",
+   "tier": 3,
+   "date_confirmed": false,
+   "finnhub": "2026-11-10",
+   "yfinance": [
+    "2026-07-28"
+   ],
+   "providers_disagree": true
+  },
+  {
+   "ticker": "LFMD",
+   "company_name": "LifeMD, Inc.",
+   "quarter": "2026Q3",
+   "tier": 3,
+   "date_confirmed": false,
+   "finnhub": "2026-11-16",
+   "yfinance": [
+    "2026-11-09"
+   ],
+   "providers_disagree": true
+  },
+  {
+   "ticker": "NHI",
+   "company_name": "National Health Investors Inc",
+   "quarter": "2026Q3",
+   "tier": 3,
+   "date_confirmed": false,
+   "finnhub": "2026-11-04",
+   "yfinance": [
+    "2026-11-09"
+   ],
+   "providers_disagree": true
+  },
+  {
+   "ticker": "DHC",
+   "company_name": "Diversified Healthcare Trust",
+   "quarter": "2026Q3",
+   "tier": 3,
+   "date_confirmed": false,
+   "finnhub": "2026-11-04",
+   "yfinance": [
+    "2026-11-02"
+   ],
+   "providers_disagree": true
+  }
+ ]
+}
