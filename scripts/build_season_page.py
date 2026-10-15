@@ -29,6 +29,7 @@ import html
 import sqlite3
 import sys
 from datetime import date, datetime, timezone
+from dataclasses import replace
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -235,7 +236,30 @@ wire('reported'); wire('upcoming');
 """
 
 
-def render(p: SeasonProgress, *, generated_at: str, db_asof: str | None) -> str:
+# Two scopes share one renderer. "book" is the original Portfolio + Researching
+# page; "core" is every Coverage Manager Core=Y name (JP 2026-10-15: a page he
+# can see the current season's schedule on for core coverage, bookmarked in
+# #earnings-core-coverage). Core is the coverage universe, which is already
+# public on the Coverage Manager site, so it publishes nothing new.
+SCOPES = {
+    "book": {
+        "subtitle": "Portfolio &amp; Researching Companies",
+        "intro": "Every company in <strong>Portfolio</strong> and <strong>Researching</strong>",
+        "out": "season.html",
+    },
+    "core": {
+        "subtitle": "Core Coverage Companies",
+        "intro": ("Every <strong>Core coverage</strong> company (Coverage Manager "
+                  "<code>Core=Y</code>), labelled with its Position list where it has one "
+                  "and its sector otherwise,"),
+        "out": "core_season.html",
+    },
+}
+
+
+def render(p: SeasonProgress, *, generated_at: str, db_asof: str | None,
+           scope: str = "book") -> str:
+    sc = SCOPES[scope]
     reported = sorted(p.reported, key=lambda r: (r.event_date or "", r.ticker), reverse=True)
     upcoming = sorted(p.upcoming, key=lambda r: (r.event_date or "", r.ticker))
 
@@ -280,11 +304,11 @@ def render(p: SeasonProgress, *, generated_at: str, db_asof: str | None) -> str:
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>{html.escape(p.season)} Earnings Season Progress &mdash; Portfolio &amp; Researching Companies</title>
+<title>{html.escape(p.season)} Earnings Season Progress &mdash; {sc["subtitle"]}</title>
 <style>{CSS}</style>
 </head>
 <body>
-<h1>{html.escape(p.season)} Earnings Season Progress &mdash; Portfolio &amp; Researching Companies</h1>
+<h1>{html.escape(p.season)} Earnings Season Progress &mdash; {sc["subtitle"]}</h1>
 <p class="updated">{html.escape(p.season)} &middot; regenerated {html.escape(generated_at)}
  &middot; <a href="./index.html">full earnings calendar &rarr;</a></p>
 {stale}
@@ -298,7 +322,7 @@ def render(p: SeasonProgress, *, generated_at: str, db_asof: str | None) -> str:
 {bar}
 
 <div class="intro">
-  <p>Every company in <strong>Portfolio</strong> and <strong>Researching</strong>, and where
+  <p>{sc["intro"]} and where
   it stands in the {html.escape(p.season)} reporting season. Click any column heading to sort;
   a blank cell means <em>not measurable</em>, never zero.</p>
   <p><strong>Move</strong> is the post-earnings reaction: a BMO print is measured from the
@@ -344,17 +368,51 @@ def render(p: SeasonProgress, *, generated_at: str, db_asof: str | None) -> str:
 """
 
 
-def build(db_path: Path, out_path: Path, as_of: date | None = None) -> dict:
+CORE_LABEL = "Core"
+
+
+def core_scope_map(coverage, core_tickers: set[str]) -> dict:
+    """Coverage map restricted to Core names, each carrying a display label in
+    `.position`: its Position list when it has one, else its sector.
+
+    collect_season selects by `.position`, so labelling every Core name and
+    selecting on the label set is the whole scope rule — no second filter.
+    """
+    out = {}
+    for t in coverage:
+        tk = t.ticker.upper()
+        if tk not in core_tickers:
+            continue
+        label = t.position or t.sector or CORE_LABEL
+        out[tk] = replace(t, position=label)
+    return out
+
+
+def _core_tickers() -> set[str]:
+    from config import COVERAGE_MANAGER_PATH
+    from coverage import _read_universe_metadata
+    meta = _read_universe_metadata(Path(COVERAGE_MANAGER_PATH) / "exports")
+    return {t.upper() for t, m in meta.items()
+            if (m.get("core") or "").strip().upper() == "Y"}
+
+
+def build(db_path: Path, out_path: Path, as_of: date | None = None,
+          scope: str = "book") -> dict:
     as_of = as_of or datetime.now(timezone.utc).date()
 
     coverage = load_coverage()
     if not coverage:
         raise SystemExit("build_season_page: no coverage loaded — refusing to build")
-    coverage_map = {t.ticker.upper(): t for t in coverage}
+    if scope == "core":
+        coverage_map = core_scope_map(coverage, _core_tickers())
+        positions = tuple(sorted({t.position for t in coverage_map.values()}))
+    else:
+        coverage_map = {t.ticker.upper(): t for t in coverage}
+        positions = SCOPE_POSITIONS
 
     con = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
     try:
-        progress = collect_season(con, coverage_map, as_of, SCOPE_POSITIONS)
+        progress = collect_season(con, coverage_map, as_of, positions) if positions             else SeasonProgress(season="", as_of=as_of)
         db_asof = con.execute("SELECT MAX(updated_at) FROM events").fetchone()[0]
     finally:
         con.close()
@@ -381,6 +439,7 @@ def build(db_path: Path, out_path: Path, as_of: date | None = None) -> dict:
             progress,
             generated_at=datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
             db_asof=db_asof,
+            scope=scope,
         ),
         encoding="utf-8",
     )
@@ -396,14 +455,17 @@ def build(db_path: Path, out_path: Path, as_of: date | None = None) -> dict:
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--db", type=Path, default=DB_PATH)
-    ap.add_argument("--out", type=Path, default=DEFAULT_OUT,
-                    help=f"default: {DEFAULT_OUT}")
+    ap.add_argument("--out", type=Path, default=None,
+                    help="default: docs/season.html (book) or docs/core_season.html (core)")
+    ap.add_argument("--scope", choices=sorted(SCOPES), default="book")
     ap.add_argument("--date", help="as-of date (YYYY-MM-DD); defaults to today")
     args = ap.parse_args(argv)
 
+    out = args.out or DEFAULT_OUT.with_name(SCOPES[args.scope]["out"])
     stats = build(
-        args.db, args.out,
+        args.db, out,
         date.fromisoformat(args.date) if args.date else None,
+        scope=args.scope,
     )
     print(
         f"season page: {stats['season']} — {stats['reported']} reported / "

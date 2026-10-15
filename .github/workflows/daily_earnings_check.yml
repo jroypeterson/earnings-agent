@@ -528,6 +528,16 @@ jobs:
           COVERAGE_MANAGER_PATH: ${{ github.workspace }}/coverage-manager
         run: python scripts/build_season_page.py
 
+      # The Core-coverage schedule (docs/core_season.html): every Coverage
+      # Manager Core=Y name this season, bookmarked in #earnings-core-coverage.
+      # Same non-gating rule as the book page.
+      - name: Build core-coverage season Pages site
+        if: github.ref == 'refs/heads/main'
+        continue-on-error: true
+        env:
+          COVERAGE_MANAGER_PATH: ${{ github.workspace }}/coverage-manager
+        run: python scripts/build_season_page.py --scope core
+
       - name: Commit exports + Pages site if changed
         if: github.ref == 'refs/heads/main'
         run: |
@@ -538,6 +548,7 @@ jobs:
           [ -f exports/consensus_preview.json ] && git add exports/consensus_preview.json || true
           [ -f docs/index.html ] && git add docs/index.html docs/.nojekyll || true
           [ -f docs/season.html ] && git add docs/season.html || true
+          [ -f docs/core_season.html ] && git add docs/core_season.html || true
           if git diff --cached --quiet; then
             echo "no changes to exported JSON or Pages site"
             exit 0
