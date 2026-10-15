@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-10-15T15:54:35Z",
+  "generated_at": "2026-10-15T16:14:51Z",
   "window": {
     "start": "2026-10-13",
     "end": "2026-10-29"
   },
   "counts": {
-    "events": 183
+    "events": 176
   },
   "events": [
     {
@@ -27,15 +27,6 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Hepion Pharmaceuticals Inc"
-    },
-    {
-      "ticker": "SMMT",
-      "event_date": "2026-10-19",
-      "event_hour": "",
-      "tier": 2,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Summit Therapeutics Inc"
     },
     {
       "ticker": "ISRG",
@@ -362,15 +353,6 @@
       "company_name": "Alexandria Real Estate Equities Inc"
     },
     {
-      "ticker": "BMRN",
-      "event_date": "2026-10-26",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Biomarin Pharmaceutical Inc"
-    },
-    {
       "ticker": "BRO",
       "event_date": "2026-10-26",
       "event_hour": "amc",
@@ -522,15 +504,6 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Novartis AG"
-    },
-    {
-      "ticker": "RCUS",
-      "event_date": "2026-10-27",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Arcus Biosciences, Inc."
     },
     {
       "ticker": "RGEN",
@@ -947,15 +920,6 @@
       "company_name": "Viking Therapeutics Inc"
     },
     {
-      "ticker": "ACH",
-      "event_date": "2026-10-29",
-      "event_hour": "",
-      "tier": 2,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Accendra Health (fma Owens and Minor)"
-    },
-    {
       "ticker": "AKBA",
       "event_date": "2026-10-29",
       "event_hour": "",
@@ -1181,15 +1145,6 @@
       "company_name": "Corvus Pharmaceuticals Inc"
     },
     {
-      "ticker": "CTNM",
-      "event_date": "2026-10-29",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Contineum Therapeutics Inc"
-    },
-    {
       "ticker": "CYTK",
       "event_date": "2026-10-29",
       "event_hour": "",
@@ -1314,15 +1269,6 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Indivior Pharmaceuticals, Inc"
-    },
-    {
-      "ticker": "INMB",
-      "event_date": "2026-10-29",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "INmune Bio Inc"
     },
     {
       "ticker": "INSM",
@@ -1494,15 +1440,6 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Progyny Inc"
-    },
-    {
-      "ticker": "PHAT",
-      "event_date": "2026-10-29",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Phathom Pharmaceuticals Inc"
     },
     {
       "ticker": "PRTA",
