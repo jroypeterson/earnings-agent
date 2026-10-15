@@ -280,11 +280,11 @@ def render(p: SeasonProgress, *, generated_at: str, db_asof: str | None) -> str:
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Earnings Season Progress &mdash; {html.escape(p.season)}</title>
+<title>Portfolio &amp; Researching Companies &mdash; {html.escape(p.season)} Earnings Season</title>
 <style>{CSS}</style>
 </head>
 <body>
-<h1>Earnings Season Progress &mdash; {html.escape(p.season)}</h1>
+<h1>Portfolio &amp; Researching Companies &mdash; {html.escape(p.season)} Earnings Season</h1>
 <p class="updated">{html.escape(p.season)} &middot; regenerated {html.escape(generated_at)}
  &middot; <a href="./index.html">full earnings calendar &rarr;</a></p>
 {stale}

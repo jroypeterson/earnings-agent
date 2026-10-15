@@ -74,19 +74,32 @@ SESSION_LABEL = {
     "dmh": "During Market Hours (DMH)",
 }
 
-TIER_LABEL = {
-    1: "Tier 1 (core watchlist)",
-    2: "Tier 2 (Healthcare Services & MedTech)",
-    3: "Tier 3 (wider universe)",
+# The DB's `tier` integer is earnings_agent's internal service level (it decides
+# which names get a calendar event, a TickTick task, digest detail). Coverage
+# Manager has no tiers -- its vocabulary is Position lists, the Core flag and
+# Sector -- and the old "Tier 1 (core watchlist)" label was wrong twice over:
+# Tier 1 is the Position lists, not the ~310 Core=Y names, and the Tier 2 label
+# had dropped Core Biopharma (added to the tier 2026-08-06). So the page names
+# the group in Coverage Manager's own terms. JP 2026-10-15: "instead of saying
+# Tiers it would be good to just note what it is."
+GROUP_LABEL = {
+    1: "Positions",
+    2: "HC Services / MedTech / Core Biopharma",
+    3: "Rest of coverage",
+}
+GROUP_TITLE = {
+    1: "In a Position list: Portfolio, Researching (Core), Ready to Buy or Ready to Short",
+    2: "Healthcare Services or MedTech sector, or a Core-flagged Biopharma name",
+    3: "Everything else in the Coverage Manager universe",
 }
 
 
 class Row:
     __slots__ = ("ticker", "company", "date", "hour", "tier", "quarter", "status",
-                 "eps_est", "eps_act", "rev_est", "rev_act", "url")
+                 "eps_est", "eps_act", "rev_est", "rev_act", "url", "detail")
 
     def __init__(self, ticker, company, date, hour, tier, quarter, status,
-                 eps_est, eps_act, rev_est, rev_act, url):
+                 eps_est, eps_act, rev_est, rev_act, url, detail=""):
         self.ticker = ticker
         self.company = company
         self.date = date
@@ -99,6 +112,9 @@ class Row:
         self.rev_est = rev_est
         self.rev_act = rev_act
         self.url = url
+        # The specific Position (Portfolio, Researching, ...) or sector, when
+        # Coverage Manager is readable; blank falls back to GROUP_LABEL.
+        self.detail = detail
 
 
 def _status(date_locked, date_confirmed, reported, eps_actual, rev_actual) -> str:
@@ -236,7 +252,8 @@ def _row_html(r: Row) -> str:
     ticker = html.escape(r.ticker)
     if r.url:
         name = f'<a href="{html.escape(r.url, quote=True)}" rel="nofollow noopener">{name}</a>'
-    tier_title = TIER_LABEL.get(r.tier, "Tier unknown")
+    group_text = r.detail or GROUP_LABEL.get(r.tier, "Unknown")
+    group_title = GROUP_TITLE.get(r.tier, "Group unknown")
     return (
         f'<tr data-status="{r.status}" data-tier="{r.tier}" '
         f'data-q="{html.escape((r.ticker + " " + r.company).lower(), quote=True)}">'
@@ -247,7 +264,7 @@ def _row_html(r: Row) -> str:
         f'<td class="sess">{_session_cell(r.hour)}</td>'
         f'<td class="tick"><code>{ticker}</code></td>'
         f'<td class="name">{name}</td>'
-        f'<td class="tier"><abbr title="{html.escape(tier_title)}">T{r.tier or "?"}</abbr></td>'
+        f'<td class="tier"><abbr title="{html.escape(group_title)}">{html.escape(group_text)}</abbr></td>'
         f'<td class="qtr">{html.escape(r.quarter)}</td>'
         f'<td class="stat"><span class="badge {r.status}">{STATUS_LABEL[r.status]}</span></td>'
         f'<td class="act">{_actuals_cell(r)}</td>'
@@ -262,7 +279,7 @@ def _table(rows: list[Row], empty_msg: str) -> str:
     return (
         '<div class="tablewrap"><table>'
         '<thead><tr><th>Date</th><th>Session</th><th>Ticker</th><th>Company</th>'
-        '<th>Tier</th><th>Quarter</th><th>Status</th><th>Reported figures</th></tr></thead>'
+        '<th>Group</th><th>Quarter</th><th>Status</th><th>Reported figures</th></tr></thead>'
         f'<tbody>{body}</tbody></table></div>'
     )
 
@@ -401,12 +418,12 @@ def render(rows: list[Row], *, today: str, generated_at: str, db_asof: Optional[
 
 <div class="controls">
   <input type="search" id="q" placeholder="Filter by ticker or company name&hellip;" size="34">
-  <label>Tier
+  <label>Group
     <select id="tier">
-      <option value="all">All tiers</option>
-      <option value="1">Tier 1 &mdash; core watchlist</option>
-      <option value="2">Tier 2 &mdash; Healthcare Services &amp; MedTech</option>
-      <option value="3">Tier 3 &mdash; wider universe</option>
+      <option value="all">All companies</option>
+      <option value="1">Positions &mdash; Portfolio, Researching (Core), Ready to Buy / Short</option>
+      <option value="2">Healthcare Services, MedTech &amp; Core Biopharma</option>
+      <option value="3">Rest of the coverage universe</option>
     </select>
   </label>
   <label><input type="checkbox" id="showest"> Show estimated (unconfirmed) dates
@@ -446,8 +463,39 @@ def _strip_generated(html_text: str) -> str:
     return _GENERATED_LINE.sub('<p class="updated">Regenerated</p>', html_text)
 
 
-def build(db_path: Path, out_path: Path) -> dict:
+def _row_details() -> dict[str, tuple[int, str]]:
+    """{TICKER: (tier, Position or sector)} from Coverage Manager, or {} if unreadable.
+
+    Best-effort by design: the page is still correct with the group-level label,
+    so a Coverage Manager read failure degrades the cell text, never the build.
+    """
+    try:
+        sys.path.insert(0, str(REPO_ROOT))
+        from coverage import load_coverage
+        coverage = load_coverage()
+    except Exception as exc:  # noqa: BLE001 -- degrade to group labels, loudly
+        print(f"WARNING: Coverage Manager unreadable ({exc}); "
+              "using group-level labels", file=sys.stderr)
+        return {}
+    out = {}
+    for t in coverage:
+        if t.tier == 1 and t.position:
+            out[t.ticker.upper()] = (1, t.position)
+        elif t.tier == 2 and t.sector:
+            out[t.ticker.upper()] = (2, "Core Biopharma" if t.sector == "Biopharma" else t.sector)
+    return out
+
+
+def build(db_path: Path, out_path: Path, details: Optional[dict[str, tuple[int, str]]] = None) -> dict:
     rows = load_rows(db_path)
+    if details is None:
+        details = _row_details()
+    for r in rows:
+        # Only when the current tier matches the event's: a past event keeps
+        # the group it was tracked under, and its label must not contradict it.
+        tier, label = details.get(r.ticker, (None, ""))
+        if tier == r.tier:
+            r.detail = label
     now = datetime.now(timezone.utc)
     today = now.date().isoformat()
 

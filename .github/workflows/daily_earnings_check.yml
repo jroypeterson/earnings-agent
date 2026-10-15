@@ -509,6 +509,10 @@ jobs:
       # read-only consumer of earnings_events.db.
       - name: Build earnings calendar Pages site
         if: github.ref == 'refs/heads/main'
+        # Coverage Manager names each row's Group (Portfolio, MedTech, ...); if it
+        # is unreadable the page falls back to group-level labels, never fails.
+        env:
+          COVERAGE_MANAGER_PATH: ${{ github.workspace }}/coverage-manager
         run: python scripts/build_calendar_page.py
 
       # The portfolio season page (docs/season.html) — the browsable companion

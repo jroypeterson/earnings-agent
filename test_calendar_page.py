@@ -6,6 +6,8 @@ import sqlite3
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).parent / "scripts"))
 
 import build_calendar_page as bcp  # noqa: E402
@@ -31,6 +33,12 @@ def test_status_reported_from_flag_or_actuals():
 def test_status_estimated_when_no_evidence():
     # Empty Finnhub hour + no lock + no actuals = a cadence projection, NOT confirmed.
     assert bcp._status(0, 0, 0, None, None) == bcp.STATUS_ESTIMATED
+
+
+@pytest.fixture(autouse=True)
+def _no_coverage_manager_read(monkeypatch):
+    """build() reads Coverage Manager for the Group cell; keep tests hermetic."""
+    monkeypatch.setattr(bcp, "_row_details", lambda: {})
 
 
 def _mkdb(tmp_path, rows):
@@ -249,3 +257,44 @@ def test_season_page_h1_names_the_season():
     assert h1, "no <h1> found in the season page builder"
     assert any("p.season" in ln for ln in h1), (
         "the season page <h1> must interpolate the season; found: " + " | ".join(h1))
+
+
+# --- JP 2026-10-15: "instead of saying Tiers it would be good to just note what
+# it is." Coverage Manager has no tiers; the page names the group in its terms. ---
+
+def _row(ticker, tier, date="2099-01-02"):
+    return (ticker, ticker + " Co", date, "amc", tier, "2099Q1", 0, 1, 0,
+            None, None, None, None, None, "2026-01-01")
+
+
+def test_page_names_groups_not_tiers(tmp_path):
+    db = _mkdb(tmp_path, [_row("AAA", 1), _row("BBB", 2), _row("CCC", 3)])
+    out = tmp_path / "docs" / "index.html"
+    bcp.build(db, out, details={})
+    page = out.read_text(encoding="utf-8")
+    assert "Tier" not in page
+    assert ">T1<" not in page and ">T2<" not in page
+    assert "<th>Group</th>" in page
+    assert ">Positions<" in page
+    assert ">HC Services / MedTech / Core Biopharma<" in page
+    assert ">Rest of coverage<" in page
+
+
+def test_group_cell_names_the_position_or_sector_when_known(tmp_path):
+    db = _mkdb(tmp_path, [_row("AAA", 1), _row("BBB", 2), _row("CCC", 3)])
+    out = tmp_path / "docs" / "index.html"
+    bcp.build(db, out, details={"AAA": (1, "Portfolio"), "BBB": (2, "MedTech")})
+    page = out.read_text(encoding="utf-8")
+    assert ">Portfolio<" in page
+    assert ">MedTech<" in page
+
+
+def test_detail_from_a_different_tier_does_not_relabel_the_event(tmp_path):
+    """A past event keeps the group it was tracked under: a name that has since
+    moved into Portfolio must not show 'Portfolio' on its old Tier 3 row."""
+    db = _mkdb(tmp_path, [_row("AAA", 3)])
+    out = tmp_path / "docs" / "index.html"
+    bcp.build(db, out, details={"AAA": (1, "Portfolio")})
+    page = out.read_text(encoding="utf-8")
+    assert ">Portfolio<" not in page
+    assert ">Rest of coverage<" in page
