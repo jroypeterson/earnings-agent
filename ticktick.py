@@ -271,6 +271,57 @@ def build_task_title(
     return title
 
 
+def preview_url(ticker: str) -> str:
+    """The task's public preview page. Mirrors preview_pages.page_url without
+    importing it (that module pulls in yfinance)."""
+    import re
+    from config import PREVIEW_PAGES_BASE_URL
+    safe = re.sub(r"[^A-Za-z0-9.\-]", "_", ticker.upper()).lstrip(".") or "_"
+    return f"{PREVIEW_PAGES_BASE_URL}{safe}.html"
+
+
+def preview_line(ticker: str) -> str:
+    return f"Earnings preview: {preview_url(ticker)}"
+
+
+def ensure_note_line(token: str, list_id: str, task_id: str, line: str) -> bool | None:
+    """Append `line` to a task's note if it is not already there.
+
+    Appends to BOTH `content` and `desc`: a CHECKLIST-kind task shows `desc`,
+    and that is where JP's own typed notes live, so rebuilding it from
+    `content` would erase them. Returns None when nothing needed writing.
+    """
+    task = _find_task_in_project(token, list_id, task_id)
+    if task is None:
+        logger.warning(f"  Task {task_id} not found in project {list_id}; note not updated")
+        return False
+    if task.get("status") == 2:
+        return None
+    changed = False
+    for key in ("content", "desc"):
+        if key == "desc" and not task.get("items"):
+            continue
+        cur = task.get(key) or ""
+        if line not in cur:
+            task[key] = (cur.rstrip() + "\n\n" + line) if cur.strip() else line
+            changed = True
+    if not changed:
+        return None
+    task["id"] = task_id
+    task["projectId"] = list_id
+    try:
+        resp = requests.post(f"{TICKTICK_API_BASE}/task/{task_id}",
+                             headers=_headers(token), json=task, timeout=15)
+        if resp.status_code == 401:
+            raise TickTickTokenExpired("TickTick access token expired")
+        return resp.status_code == 200
+    except TickTickTokenExpired:
+        raise
+    except requests.RequestException as exc:
+        logger.warning(f"  Failed to add note line to {task_id}: {exc}")
+        return False
+
+
 def build_task_content(
     ticker: str,
     hour: str | None,
@@ -305,6 +356,12 @@ def build_task_content(
     if est_parts:
         lines.append(f"Consensus: {' | '.join(est_parts)}")
         lines.append("")
+
+    # JP 2026-10-15: the preview page is linked from the task note. It is in
+    # the BUILT body, not only appended once, because mark_task_reported
+    # rebuilds the body at report time and would otherwise drop it.
+    lines.append(preview_line(ticker))
+    lines.append("")
 
     # The review checklist itself lives in the task's TickTick `items` array
     # (SUBTASK_TITLES) so every line is actually tickable — JP 2026-07-28. Only

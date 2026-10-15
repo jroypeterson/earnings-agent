@@ -2100,6 +2100,62 @@ def run_season_progress(
 # while #street-account looked healthy.
 PREVIEW_DEST_STREET_ACCOUNT = "street_account"
 PREVIEW_DEST_PORTFOLIO = "portfolio"
+PREVIEW_DEST_CORE = "core_coverage"
+
+
+def _link_previews_in_ticktick(conn, rows) -> None:
+    """Put each row's preview-page link in its TickTick task note, once.
+
+    New tasks get the line from build_task_content; this backfills tasks that
+    existed before the line did. kv_store marks a task done so the 3x-a-day
+    runs do not re-read it. Best-effort: TickTick trouble never costs Slack.
+    """
+    import time
+    import ticktick as tt
+    cfg = tt.get_ticktick_config()
+    token = cfg["token"] if cfg else None
+    if not token:
+        logger.warning("Preview links: TICKTICK_ACCESS_TOKEN unset — task notes not linked")
+        return
+    todo = []
+    for r in rows:
+        if r.tier > 2:
+            continue
+        key = f"preview_note_linked:{r.ticker}:{r.event_date}"
+        if kv_get(conn, key):
+            continue
+        pointer = conn.execute(
+            f"SELECT ticktick_task_id FROM events WHERE ticker = ? AND event_date = ? "
+            f"AND {OPEN_EVENT_SQL}",
+            (r.ticker, r.event_date),
+        ).fetchone()
+        if pointer and pointer[0]:
+            todo.append((r, pointer[0], key))
+    if not todo:
+        return
+    try:
+        projects = tt._list_all_projects(token)
+    except Exception as exc:  # noqa: BLE001
+        logger.error("Preview links: TickTick project list failed (%s)", exc)
+        return
+    linked = 0
+    for r, task_id, key in todo:
+        q = tt._reporting_quarter(r.event_date)
+        for p in projects:
+            if not p.get("name", "").startswith(f"{q} Earnings"):
+                continue
+            try:
+                res = tt.ensure_note_line(token, p["id"], task_id, tt.preview_line(r.ticker))
+            except Exception as exc:  # noqa: BLE001
+                logger.error("Preview links: %s failed (%s); stopping", r.ticker, exc)
+                return
+            if res is False:
+                continue          # not in this list; try the sibling
+            kv_set(conn, key, date.today().isoformat())
+            linked += 1
+            time.sleep(1.0)       # TickTick: 100/min AND 300 per 5 min
+            break
+    logger.info("Preview links: %d of %d task note(s) linked", linked, len(todo))
 
 
 def _preview_kv_key(dest: str, ticker: str, event_date: str) -> str:
@@ -2374,8 +2430,10 @@ def run_consensus_preview(
 
     conn = init_db()
 
-    from config import SLACK_PORTFOLIO_CHANNEL_ID
+    from config import SLACK_CORE_COVERAGE_CHANNEL_ID, SLACK_PORTFOLIO_CHANNEL_ID
     from consensus_preview import PREVIEW_POSITIONS
+    from coverage import load_core_tickers
+    import preview_pages
 
     # Which destinations can actually receive a post this run. A destination
     # whose credentials are missing is logged loudly and skipped — never
@@ -2396,11 +2454,47 @@ def run_consensus_preview(
             "SLACK_BOT_TOKEN" if not SLACK_BOT_TOKEN
             else "SLACK_PORTFOLIO_CHANNEL_ID",
         )
+    if SLACK_BOT_TOKEN and SLACK_CORE_COVERAGE_CHANNEL_ID:
+        destinations.append(PREVIEW_DEST_CORE)
+    else:
+        logger.warning(
+            "Consensus preview: #earnings-core-coverage SKIPPED — %s unset.",
+            "SLACK_BOT_TOKEN" if not SLACK_BOT_TOKEN
+            else "SLACK_CORE_COVERAGE_CHANNEL_ID",
+        )
 
+    # The original scope (Tier 1 OR a preview Position) feeds #street-account,
+    # #portfolio and the sa-monitor export UNCHANGED. JP 2026-10-15 widened
+    # only two things: #earnings-core-coverage gets every Core=Y name, and every
+    # TickTick earnings task (Tier 1/2) gets a public preview page in its note.
     reporters = select_upcoming_reporters(
         conn, coverage, days_ahead=days_ahead, max_tier=1,
         positions=PREVIEW_POSITIONS, ticker=ticker,
     )
+    base_keys = {(r.ticker, r.event_date) for r in reporters}
+    core_set = load_core_tickers()
+    if not core_set:
+        logger.warning("Consensus preview: Core=Y set is EMPTY (Coverage Manager "
+                       "metadata unreadable?) — #earnings-core-coverage gets nothing")
+    if not ticker:
+        seen = set(base_keys)
+        for r in select_upcoming_reporters(conn, coverage, days_ahead=days_ahead,
+                                           max_tier=3):
+            key = (r.ticker, r.event_date)
+            if key in seen:
+                continue
+            if r.tier <= 2 or r.ticker.upper() in core_set:
+                reporters.append(r)
+                seen.add(key)
+        reporters.sort(key=lambda r: (r.event_date, r.ticker))
+
+    def _in_scope(dest: str, ticker_: str, event_date_: str) -> bool:
+        if dest == PREVIEW_DEST_CORE:
+            return ticker_.upper() in core_set
+        return (ticker_, event_date_) in base_keys
+
+    pages_dir = Path(__file__).parent / "docs" / "preview"
+    built_today = preview_pages.built_on(pages_dir, date.today().isoformat())
 
     # Dedup (live runs only — dry-run must never consult/mutate the ledger,
     # so a preview is re-previewable on demand). A reporter stays pending
@@ -2411,8 +2505,12 @@ def run_consensus_preview(
         for r in reporters:
             owed = [
                 d for d in destinations
-                if not kv_get(conn, _preview_kv_key(d, r.ticker, r.event_date))
+                if _in_scope(d, r.ticker, r.event_date)
+                and not kv_get(conn, _preview_kv_key(d, r.ticker, r.event_date))
             ]
+            # A page is rebuilt once a day so its price/setup is current.
+            if not owed and built_today.get(r.ticker.upper()) != r.event_date:
+                owed = ["page"]
             if not owed:
                 logger.info(
                     f"Preview already posted for {r.ticker} {r.event_date} "
@@ -2446,11 +2544,13 @@ def run_consensus_preview(
             "end": (as_of + timedelta(days=days_ahead)).isoformat(),
         }
     out_path = Path(__file__).parent / "exports" / "consensus_preview.json"
-    n = write_preview_export(rows, out_path, window)
+    # sa-monitor consumes this export; keep it to the original scope.
+    base_rows = [r for r in rows if (r.ticker, r.event_date) in base_keys]
+    n = write_preview_export(base_rows, out_path, window)
     logger.info(f"Wrote {n} consensus preview(s) to {out_path}")
 
-    blocks, n_included = build_preview_blocks(rows, as_of)
-    fallback = build_preview_fallback(rows, as_of)
+    blocks, n_included = build_preview_blocks(base_rows, as_of)
+    fallback = build_preview_fallback(base_rows, as_of)
 
     if dry_run:
         logger.info("=" * 50)
@@ -2469,6 +2569,15 @@ def run_consensus_preview(
         conn.close()
         return
 
+    # Public pages first: a Slack card may link to them. Never fatal — a page
+    # failure must not cost the Slack previews.
+    try:
+        written = preview_pages.write_preview_pages(rows, conn, pages_dir)
+        logger.info("Wrote %d preview page(s) to %s", len(written), pages_dir)
+    except Exception as exc:  # noqa: BLE001
+        logger.error("Preview pages FAILED (%s); Slack previews continue", exc)
+    _link_previews_in_ticktick(conn, rows)
+
     if not destinations:
         conn.close()
         raise NotificationError(
@@ -2483,7 +2592,8 @@ def run_consensus_preview(
         # it actually posted.
         owed = [
             r for r in rows
-            if not kv_get(conn, _preview_kv_key(dest, r.ticker, r.event_date))
+            if _in_scope(dest, r.ticker, r.event_date)
+            and not kv_get(conn, _preview_kv_key(dest, r.ticker, r.event_date))
         ]
         if not owed:
             logger.info("Consensus preview: %s is up to date; nothing to post.", dest)
@@ -2491,6 +2601,8 @@ def run_consensus_preview(
 
         d_blocks, d_included = build_preview_blocks(owed, as_of)
         d_fallback = build_preview_fallback(owed, as_of)
+        if dest == PREVIEW_DEST_CORE:
+            d_blocks.append(preview_pages.links_context_block(owed[:d_included]))
 
         try:
             if dest == PREVIEW_DEST_STREET_ACCOUNT:
@@ -2498,7 +2610,8 @@ def run_consensus_preview(
             else:
                 slack_post_message(
                     SLACK_BOT_TOKEN,
-                    SLACK_PORTFOLIO_CHANNEL_ID,
+                    SLACK_CORE_COVERAGE_CHANNEL_ID if dest == PREVIEW_DEST_CORE
+                    else SLACK_PORTFOLIO_CHANNEL_ID,
                     blocks=d_blocks,
                     text=d_fallback,
                 )

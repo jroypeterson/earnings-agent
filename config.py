@@ -71,6 +71,13 @@ SLACK_BOT_TOKEN = os.getenv("SLACK_BOT_TOKEN")
 # second channel needs the bot. ClaudeBot must stay a member of #portfolio.
 # Unset -> the ping is skipped and says so; the #earnings card is unaffected.
 SLACK_PORTFOLIO_CHANNEL_ID = os.getenv("SLACK_PORTFOLIO_CHANNEL_ID")
+# #earnings-core-coverage (JP 2026-10-15): previews and reviews for Coverage
+# Manager Core=Y names. Bot-token destination, like #portfolio.
+SLACK_CORE_COVERAGE_CHANNEL_ID = os.getenv("SLACK_CORE_COVERAGE_CHANNEL_ID")
+
+# Public per-company preview pages (docs/preview/, preview_pages.py). Every
+# TickTick earnings task note links here, so the URL is deterministic.
+PREVIEW_PAGES_BASE_URL = "https://jroypeterson.github.io/earnings-agent/preview/"
 SLACK_CHANNEL_ID = os.getenv("SLACK_CHANNEL_ID")
 EMAIL_TO = os.getenv("EMAIL_TO")
 

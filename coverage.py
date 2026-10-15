@@ -348,6 +348,18 @@ def _load_legacy_tickers() -> list[str]:
     return [t.strip().upper() for t in os.getenv("TICKERS", "").split(",") if t.strip()]
 
 
+def load_core_tickers() -> set[str]:
+    """Upper-cased Coverage Manager Core=Y tickers (empty when unreadable).
+
+    `Core` is the analytic-coverage flag (~345 names), distinct from the
+    Position lists that drive Tier 1. Read straight from universe_metadata
+    so it never inherits a tier rule.
+    """
+    meta = _read_universe_metadata(Path(COVERAGE_MANAGER_PATH) / "exports")
+    return {t.upper() for t, m in meta.items()
+            if (m.get("core") or "").strip().upper() == "Y"}
+
+
 def load_coverage() -> list[TickerInfo]:
     """
     Load tickers and tier assignments from Coverage Manager exports.

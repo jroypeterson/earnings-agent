@@ -493,6 +493,11 @@ jobs:
           # arm logs a loud SKIP and posts nothing.
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
           SLACK_PORTFOLIO_CHANNEL_ID: ${{ secrets.SLACK_PORTFOLIO_CHANNEL_ID }}
+          # Third destination (JP, 2026-10-15): every Core=Y name's preview to
+          # #earnings-core-coverage, plus a public page per name in docs/preview/
+          # linked from its TickTick task note (hence the TickTick token).
+          SLACK_CORE_COVERAGE_CHANNEL_ID: ${{ secrets.SLACK_CORE_COVERAGE_CHANNEL_ID }}
+          TICKTICK_ACCESS_TOKEN: ${{ secrets.TICKTICK_ACCESS_TOKEN }}
         run: python main.py --consensus-preview
 
       # Publish exports/upcoming_events.json for downstream consumers
@@ -549,6 +554,8 @@ jobs:
           [ -f docs/index.html ] && git add docs/index.html docs/.nojekyll || true
           [ -f docs/season.html ] && git add docs/season.html || true
           [ -f docs/core_season.html ] && git add docs/core_season.html || true
+          [ -d docs/preview ] && git add docs/preview || true
+          [ -f docs/404.html ] && git add docs/404.html || true
           if git diff --cached --quiet; then
             echo "no changes to exported JSON or Pages site"
             exit 0
