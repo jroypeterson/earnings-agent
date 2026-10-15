@@ -131,9 +131,13 @@ TIMING_LABELS = {
 # Tier definitions
 # ---------------------------------------------------------------------------
 
-TIER_1_LABEL = "Core Watchlist"
+# Named in Coverage Manager's terms. "Core Watchlist" was wrong: Tier 1 is the
+# Position lists, not the ~345 Core=Y names (JP 2026-10-15: "call them what
+# they are").
+TIER_1_LABEL = "Positions (Portfolio, Researching, Ready to Buy/Short)"
 TIER_2_LABEL = "HC Services + MedTech + Core Biopharma"
-TIER_3_LABEL = "Other"
+TRACKED_LABEL = "Positions + HC Services/MedTech/Core Biopharma"
+TIER_3_LABEL = "Rest of coverage"
 
 TIER_2_SECTORS = {"Healthcare Services", "MedTech"}
 

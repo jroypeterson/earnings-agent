@@ -249,7 +249,7 @@ def _slack_context_block(digest: DigestData) -> dict | None:
     if digest.peak_week_start and digest.peak_week_count > (len(digest.tier1_week) + len(digest.tier2_week)):
         parts.append(
             f":calendar: Peak tracked week begins {_fmt_date_safe(digest.peak_week_start.isoformat())} "
-            f"({digest.peak_week_count} Tier 1+2 names)"
+            f"({digest.peak_week_count} {config.TRACKED_LABEL} names)"
         )
     if not parts:
         return None
@@ -286,9 +286,9 @@ def build_slack_blocks(digest: DigestData) -> list[dict]:
     ]
 
     for block in (
-        _slack_tier_block("Core Watchlist", digest.tier1_week, show_company=True),
-        _slack_tier_block("HC Services + MedTech", digest.tier2_week, show_company=True),
-        _slack_tier_block("Other", digest.tier3_week, show_company=True),
+        _slack_tier_block(config.TIER_1_LABEL, digest.tier1_week, show_company=True),
+        _slack_tier_block(config.TIER_2_LABEL, digest.tier2_week, show_company=True),
+        _slack_tier_block(config.TIER_3_LABEL, digest.tier3_week, show_company=True),
     ):
         if block:
             blocks.append(block)
@@ -379,20 +379,20 @@ def build_email_html(digest: DigestData) -> str:
     if digest.peak_week_start and digest.peak_week_count > (len(digest.tier1_week) + len(digest.tier2_week)):
         parts.append(
             f"<p>Peak tracked week begins <b>{_fmt_date_safe(digest.peak_week_start.isoformat())}</b> "
-            f"({digest.peak_week_count} Tier 1+2 names reporting)</p>"
+            f"({digest.peak_week_count} {config.TRACKED_LABEL} names reporting)</p>"
         )
 
-    parts.append(f"<h3>Core Watchlist ({len(digest.tier1_week)})</h3>")
+    parts.append(f"<h3>{html.escape(config.TIER_1_LABEL)} ({len(digest.tier1_week)})</h3>")
     parts.append(_row_table_html(digest.tier1_week, show_estimates=True))
 
-    parts.append(f"<h3>HC Services + MedTech ({len(digest.tier2_week)})</h3>")
+    parts.append(f"<h3>{html.escape(config.TIER_2_LABEL)} ({len(digest.tier2_week)})</h3>")
     parts.append(_row_table_html(digest.tier2_week, show_estimates=True))
 
     if digest.tier3_week:
         ticker_list = ", ".join(
             f"<code>{html.escape(r.ticker)}</code>" for r in digest.tier3_week
         )
-        parts.append(f"<h3>Other ({len(digest.tier3_week)})</h3>")
+        parts.append(f"<h3>{html.escape(config.TIER_3_LABEL)} ({len(digest.tier3_week)})</h3>")
         parts.append(f"<p style='font-size:13px;line-height:1.6'>{ticker_list}</p>")
 
     parts.append("</div>")
@@ -415,7 +415,7 @@ def build_email_text(digest: DigestData) -> str:
     if digest.peak_week_start and digest.peak_week_count > (len(digest.tier1_week) + len(digest.tier2_week)):
         lines.append(
             f"Peak tracked week begins {_fmt_date_safe(digest.peak_week_start.isoformat())} "
-            f"({digest.peak_week_count} Tier 1+2 names reporting)"
+            f"({digest.peak_week_count} {config.TRACKED_LABEL} names reporting)"
         )
     lines.append("")
 
@@ -434,11 +434,11 @@ def build_email_text(digest: DigestData) -> str:
             )
         lines.append("")
 
-    _dump("Core Watchlist", digest.tier1_week, with_est=True)
-    _dump("HC Services + MedTech", digest.tier2_week, with_est=True)
+    _dump(config.TIER_1_LABEL, digest.tier1_week, with_est=True)
+    _dump(config.TIER_2_LABEL, digest.tier2_week, with_est=True)
 
     if digest.tier3_week:
-        lines.append(f"Other ({len(digest.tier3_week)})")
+        lines.append(f"{config.TIER_3_LABEL} ({len(digest.tier3_week)})")
         lines.append("  " + ", ".join(r.ticker for r in digest.tier3_week))
         lines.append("")
 
@@ -449,7 +449,7 @@ def build_slack_fallback_text(digest: DigestData) -> str:
     return (
         f"Earnings week of {_fmt_date_safe(digest.week_start.isoformat())}: "
         f"{digest.week_count} releases "
-        f"({len(digest.tier1_week)} Tier 1, {len(digest.tier2_week)} Tier 2)"
+        f"({len(digest.tier1_week)} Positions, {len(digest.tier2_week)} HC Services/MedTech/Core Biopharma)"
     )
 
 
