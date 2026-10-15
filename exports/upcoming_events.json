@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-10-15T16:14:51Z",
+  "generated_at": "2026-10-15T22:31:59Z",
   "window": {
     "start": "2026-10-13",
     "end": "2026-10-29"
   },
   "counts": {
-    "events": 176
+    "events": 175
   },
   "events": [
     {
@@ -524,15 +524,6 @@
       "company_name": "Rogers Corporation"
     },
     {
-      "ticker": "SKHY",
-      "event_date": "2026-10-27",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "SK hynix Inc."
-    },
-    {
       "ticker": "SPGI",
       "event_date": "2026-10-27",
       "event_hour": "bmo",
@@ -812,15 +803,6 @@
       "company_name": "Honeywell Aerospace Inc"
     },
     {
-      "ticker": "IRTC",
-      "event_date": "2026-10-28",
-      "event_hour": "",
-      "tier": 2,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "iRhythm Holdings, Inc"
-    },
-    {
       "ticker": "JMKE",
       "event_date": "2026-10-28",
       "event_hour": "",
@@ -873,6 +855,15 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Nuvalent Inc"
+    },
+    {
+      "ticker": "SKHY",
+      "event_date": "2026-10-28",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "SK hynix Inc."
     },
     {
       "ticker": "TALK",
