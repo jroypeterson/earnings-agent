@@ -1,0 +1,27 @@
+{
+ "ISRG": {
+  "company": "Intuitive Surgical Inc",
+  "event_date": "2026-10-20",
+  "generated": "2026-10-17 14:14 UTC"
+ },
+ "NFLX": {
+  "company": "Netflix Inc",
+  "event_date": "2026-10-20",
+  "generated": "2026-10-17 14:14 UTC"
+ },
+ "OSSFF": {
+  "company": "Embla Medical hf.",
+  "event_date": "2026-10-20",
+  "generated": "2026-10-17 14:14 UTC"
+ },
+ "SPCX": {
+  "company": "Space Exploration Technologies Corp.",
+  "event_date": "2026-10-20",
+  "generated": "2026-10-17 14:14 UTC"
+ },
+ "UCB": {
+  "company": "UCB SA",
+  "event_date": "2026-10-20",
+  "generated": "2026-10-17 14:14 UTC"
+ }
+}

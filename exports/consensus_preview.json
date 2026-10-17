@@ -1,13 +1,238 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-10-16T22:13:37Z",
+  "generated_at": "2026-10-17T14:14:56Z",
   "window": {
-    "start": "2026-10-16",
-    "end": "2026-10-19"
+    "start": "2026-10-17",
+    "end": "2026-10-20"
   },
   "counts": {
-    "previews": 0
+    "previews": 3
   },
-  "previews": []
+  "previews": [
+    {
+      "ticker": "ISRG",
+      "company_name": "Intuitive Surgical Inc",
+      "tier": 1,
+      "event_date": "2026-10-20",
+      "event_hour": "amc",
+      "call_datetime_utc": "2026-10-20T20:00:00+00:00",
+      "last_price": 426.70001220703125,
+      "day_change_pct": -0.27111045300909065,
+      "consensus": {
+        "eps": {
+          "mean": 2.6904,
+          "count": null,
+          "low": null,
+          "high": null
+        },
+        "revenue": {
+          "mean": 2963240229.0,
+          "count": null,
+          "low": null,
+          "high": null
+        }
+      },
+      "qtd": {
+        "since": "2026-09-30",
+        "ticker_pct": 4.93569266488408,
+        "spx_pct": 0.08129697405267576,
+        "sector_etf": "IHI",
+        "sector_etf_pct": 5.063538759187528
+      },
+      "implied_move": {
+        "pct": 7.9,
+        "expiry": "2026-10-23",
+        "method": "ATM straddle",
+        "notes": []
+      },
+      "post_earnings_moves": [
+        {
+          "event_date": "2026-07-16",
+          "move_pct": -14.145098561851594,
+          "window_label": "next-day close vs earnings-day close"
+        },
+        {
+          "event_date": "2026-04-21",
+          "move_pct": 7.163904797384289,
+          "window_label": "next-day close vs earnings-day close"
+        },
+        {
+          "event_date": "2026-01-22",
+          "move_pct": -0.3461340280080804,
+          "window_label": "next-day close vs earnings-day close"
+        },
+        {
+          "event_date": "2025-10-21",
+          "move_pct": 13.893339762992493,
+          "window_label": "next-day close vs earnings-day close"
+        }
+      ],
+      "beat_rates": {
+        "eps": {
+          "beats": 18,
+          "total": 20,
+          "source": "yfinance"
+        },
+        "revenue": {
+          "beats": 17,
+          "total": 20,
+          "source": "fmp"
+        }
+      },
+      "na_fields": [
+        {
+          "field": "consensus.eps.range",
+          "reason": "estimate range not available on FMP Starter plan"
+        }
+      ]
+    },
+    {
+      "ticker": "NFLX",
+      "company_name": "Netflix Inc",
+      "tier": 1,
+      "event_date": "2026-10-20",
+      "event_hour": "amc",
+      "call_datetime_utc": "2026-10-20T20:00:00+00:00",
+      "last_price": 70.52999877929688,
+      "day_change_pct": -2.864621696144366,
+      "consensus": {
+        "eps": {
+          "mean": 0.8379,
+          "count": null,
+          "low": null,
+          "high": null
+        },
+        "revenue": {
+          "mean": 13138294569.0,
+          "count": null,
+          "low": null,
+          "high": null
+        }
+      },
+      "qtd": {
+        "since": "2026-09-30",
+        "ticker_pct": 1.3653304444412768,
+        "spx_pct": 0.08129697405267576,
+        "sector_etf": null,
+        "sector_etf_pct": null
+      },
+      "implied_move": {
+        "pct": 9.5,
+        "expiry": "2026-10-23",
+        "method": "ATM straddle",
+        "notes": []
+      },
+      "post_earnings_moves": [
+        {
+          "event_date": "2026-07-16",
+          "move_pct": -7.262947729257154,
+          "window_label": "next-day close vs earnings-day close"
+        },
+        {
+          "event_date": "2026-04-16",
+          "move_pct": -9.722611808071644,
+          "window_label": "next-day close vs earnings-day close"
+        },
+        {
+          "event_date": "2026-01-20",
+          "move_pct": -2.1774025663128227,
+          "window_label": "next-day close vs earnings-day close"
+        },
+        {
+          "event_date": "2025-10-21",
+          "move_pct": -10.068071763447534,
+          "window_label": "next-day close vs earnings-day close"
+        }
+      ],
+      "beat_rates": {
+        "eps": {
+          "beats": 16,
+          "total": 20,
+          "source": "yfinance"
+        },
+        "revenue": {
+          "beats": 14,
+          "total": 20,
+          "source": "fmp"
+        }
+      },
+      "na_fields": [
+        {
+          "field": "qtd.sector_etf",
+          "reason": "no mapped ETF for sector 'Tech'"
+        },
+        {
+          "field": "consensus.eps.range",
+          "reason": "estimate range not available on FMP Starter plan"
+        }
+      ]
+    },
+    {
+      "ticker": "SPCX",
+      "company_name": "Space Exploration Technologies Corp.",
+      "tier": 1,
+      "event_date": "2026-10-20",
+      "event_hour": "amc",
+      "call_datetime_utc": "2026-10-20T20:00:00+00:00",
+      "last_price": 146.02999877929688,
+      "day_change_pct": -1.7426970952652783,
+      "consensus": {
+        "eps": {
+          "mean": 0.139,
+          "count": null,
+          "low": null,
+          "high": null
+        },
+        "revenue": {
+          "mean": 12962361246.0,
+          "count": null,
+          "low": null,
+          "high": null
+        }
+      },
+      "qtd": {
+        "since": "2026-09-30",
+        "ticker_pct": -3.201645109050376,
+        "spx_pct": 0.08129697405267576,
+        "sector_etf": null,
+        "sector_etf_pct": null
+      },
+      "implied_move": {
+        "pct": 7.8,
+        "expiry": "2026-10-21",
+        "method": "ATM straddle",
+        "notes": []
+      },
+      "post_earnings_moves": [
+        {
+          "event_date": "2026-08-04",
+          "move_pct": -13.612068091234239,
+          "window_label": "next-day close vs earnings-day close"
+        }
+      ],
+      "beat_rates": {
+        "eps": {
+          "beats": 1,
+          "total": 1,
+          "source": "yfinance"
+        },
+        "revenue": {
+          "beats": 1,
+          "total": 1,
+          "source": "fmp"
+        }
+      },
+      "na_fields": [
+        {
+          "field": "qtd.sector_etf",
+          "reason": "no mapped ETF for sector 'Tech'"
+        },
+        {
+          "field": "consensus.eps.range",
+          "reason": "estimate range not available on FMP Starter plan"
+        }
+      ]
+    }
+  ]
 }
