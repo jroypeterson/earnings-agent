@@ -240,6 +240,34 @@ jobs:
           SEC_EDGAR_USER_AGENT: ${{ secrets.SEC_EDGAR_USER_AGENT }}
         run: python main.py --check-missed-results --no-heartbeat
 
+      # Position calendar (JP 2026-10-18): mirror Portfolio / Researching /
+      # Ready to Buy / Ready to Short earnings events onto their own calendar
+      # (position_calendar_mirror.py). Placed after every calendar write in this
+      # job. continue-on-error so a mirror failure can never block the DB save
+      # below - the DB is read-only here - and the next step makes it loud.
+      - name: Mirror position-list events to the position calendar
+        id: position_mirror
+        if: github.ref == 'refs/heads/main'
+        continue-on-error: true
+        env:
+          GOOGLE_CALENDAR_ID: ${{ secrets.GOOGLE_CALENDAR_ID }}
+          GOOGLE_POSITION_CALENDAR_ID: ${{ secrets.GOOGLE_POSITION_CALENDAR_ID }}
+          GOOGLE_CREDENTIALS_PATH: credentials.json
+          COVERAGE_MANAGER_PATH: ${{ github.workspace }}/coverage-manager
+        run: python position_calendar_mirror.py
+
+      - name: Notify Slack on position-calendar mirror failure
+        if: always() && steps.position_mirror.outcome == 'failure'
+        env:
+          WEBHOOK_STATUS: ${{ secrets.SLACK_WEBHOOK_STATUS }}
+          WEBHOOK_EARNINGS: ${{ secrets.SLACK_WEBHOOK_EARNINGS }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          WEBHOOK="${WEBHOOK_STATUS:-$WEBHOOK_EARNINGS}"
+          if [ -n "$WEBHOOK" ]; then
+            curl -sS -X POST -H 'Content-Type: application/json'               --data "{\"text\":\":warning: *Position calendar mirror failed* - Portfolio/Researching/Ready-to-Buy/Short earnings calendar not updated this run. <${RUN_URL}|run details>\"}"               "$WEBHOOK"
+          fi
+
       # Only main-branch runs upload — otherwise a feature-branch test
       # could leave a tainted artifact for the next mainline restore.
       - name: Save earnings database

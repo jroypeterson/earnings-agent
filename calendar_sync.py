@@ -506,9 +506,7 @@ def find_calendar_event(
 # ---------------------------------------------------------------------------
 
 
-def create_calendar_event(
-    service,
-    calendar_id: str,
+def build_event_body(
     ticker: str,
     earnings_date: str,
     hour: str | None,
@@ -522,10 +520,11 @@ def create_calendar_event(
     source_fingerprint: str | None = None,
     hour_yf: str | None = None,
     call_datetime_utc: str | None = None,
-) -> str | None:
+) -> dict:
     """
-    Create an earnings event on Google Calendar.
-    Returns the created event's Google Calendar ID.
+    Render the Calendar event body for an earnings event (no API call).
+    `create_calendar_event` inserts it; `position_calendar_mirror` renders
+    Tier-3 Position names with it so both calendars present events identically.
 
     `hour_yf` provides a yfinance-inferred fallback used only when `hour`
     is empty. It drives the time block (BMO 7am, AMC 4:30pm) so the event
@@ -575,6 +574,24 @@ def create_calendar_event(
             "extendedProperties": extended_props,
         }
 
+    return event_body
+
+
+def create_calendar_event(
+    service,
+    calendar_id: str,
+    ticker: str,
+    earnings_date: str,
+    hour: str | None,
+    **kwargs,
+) -> str | None:
+    """
+    Create an earnings event on Google Calendar.
+    Returns the created event's Google Calendar ID. Keyword arguments are
+    those of `build_event_body`.
+    """
+    event_body = build_event_body(ticker, earnings_date, hour, **kwargs)
+    summary = event_body["summary"]
     request = service.events().insert(calendarId=calendar_id, body=event_body)
     created = _retry_calendar(request.execute)
     logger.info(f"Created calendar event: {summary} on {earnings_date}")
