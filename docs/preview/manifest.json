@@ -1,27 +1,82 @@
 {
+ "ABT": {
+  "company": "Abbott Laboratories",
+  "event_date": "2026-10-21",
+  "generated": "2026-10-18 14:37 UTC"
+ },
+ "DHR": {
+  "company": "Danaher Corp",
+  "event_date": "2026-10-21",
+  "generated": "2026-10-18 14:37 UTC"
+ },
+ "DOC": {
+  "company": "Healthpeak Properties Inc",
+  "event_date": "2026-10-21",
+  "generated": "2026-10-18 14:37 UTC"
+ },
+ "ELV": {
+  "company": "Elevance Health Inc",
+  "event_date": "2026-10-21",
+  "generated": "2026-10-18 14:37 UTC"
+ },
+ "HCSG": {
+  "company": "Healthcare Services Group Inc",
+  "event_date": "2026-10-21",
+  "generated": "2026-10-18 14:37 UTC"
+ },
+ "IART": {
+  "company": "Integra LifeSciences Holdings Corporation",
+  "event_date": "2026-10-21",
+  "generated": "2026-10-18 14:37 UTC"
+ },
  "ISRG": {
   "company": "Intuitive Surgical Inc",
   "event_date": "2026-10-20",
-  "generated": "2026-10-17 14:14 UTC"
+  "generated": "2026-10-18 14:37 UTC"
+ },
+ "MCO": {
+  "company": "Moody's Corp",
+  "event_date": "2026-10-21",
+  "generated": "2026-10-18 14:37 UTC"
+ },
+ "MEDP": {
+  "company": "Medpace Holdings, Inc.",
+  "event_date": "2026-10-21",
+  "generated": "2026-10-18 14:37 UTC"
+ },
+ "MOH": {
+  "company": "Molina Healthcare Inc",
+  "event_date": "2026-10-21",
+  "generated": "2026-10-18 14:37 UTC"
  },
  "NFLX": {
   "company": "Netflix Inc",
   "event_date": "2026-10-20",
-  "generated": "2026-10-17 14:14 UTC"
+  "generated": "2026-10-18 14:37 UTC"
  },
  "OSSFF": {
   "company": "Embla Medical hf.",
   "event_date": "2026-10-20",
-  "generated": "2026-10-17 14:14 UTC"
+  "generated": "2026-10-18 14:37 UTC"
  },
  "SPCX": {
   "company": "Space Exploration Technologies Corp.",
   "event_date": "2026-10-20",
-  "generated": "2026-10-17 14:14 UTC"
+  "generated": "2026-10-18 14:37 UTC"
+ },
+ "TMO": {
+  "company": "Thermo Fisher Scientific Inc",
+  "event_date": "2026-10-21",
+  "generated": "2026-10-18 14:37 UTC"
+ },
+ "TSLA": {
+  "company": "Tesla, Inc.",
+  "event_date": "2026-10-21",
+  "generated": "2026-10-18 14:37 UTC"
  },
  "UCB": {
   "company": "UCB SA",
   "event_date": "2026-10-20",
-  "generated": "2026-10-17 14:14 UTC"
+  "generated": "2026-10-18 14:37 UTC"
  }
 }
