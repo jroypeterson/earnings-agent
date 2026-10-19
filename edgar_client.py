@@ -324,6 +324,120 @@ def fetch_6k_filings(ticker: str, days_back: int = 400) -> list[Filing8K]:
     return out
 
 
+# A results release says so in its first lines: "TSMC Reports Third Quarter EPS of NT$29.43",
+# "X announces second quarter 2026 results". The monthly-revenue 6-K ("TSMC Reports September
+# 2026 Revenue") deliberately does not match: no quarter/results/earnings/EPS word.
+# The headline must name a FISCAL PERIOD (Codex r2): "BioCo Reports Positive Phase 3 Results"
+# is a results headline in English and not an earnings release.
+_FISCAL_PERIOD = (r"(?:(?:first|second|third|fourth)[- ]quarter|quarter(?:ly)?|q[1-4]|[1-4]q|"
+                  r"half[- ]year|first half|second half|h[12]|full[- ]year|fiscal(?: year)?|"
+                  r"interim|annual|nine[- ]months?|six[- ]months?)")
+_RESULTS_RELEASE_TEXT = re.compile(
+    r"\b(?:reports?|reported|announces?|announced|posts?)\b[^.\n]{0,120}?"
+    r"\b" + _FISCAL_PERIOD + r"\b[^.\n]{0,60}?\b(?:results|earnings|EPS|revenue|profit|financial)",
+    re.IGNORECASE,
+)
+
+
+# A NOTICE about results is not results (Codex 2026-10-18 r1): "Acme Announces Conference Call to
+# Discuss Third Quarter 2026 Results" matches the headline pattern, and grading it could publish a
+# square from a call notice. Judged on the head, where the headline is.
+_RESULTS_NOTICE_TEXT = re.compile(
+    r"conference call|webcast|to discuss|(?:will|to) (?:report|announce|release|host|present)|"
+    r"\bschedule[sd]?\b|date (?:of|for) (?:its|the)|notice of|invitation",
+    re.IGNORECASE,
+)
+# A results release states figures; a notice does not.
+_RESULTS_FIGURE = re.compile(
+    r"(?:\$|€|£|¥|NT\$|RMB|DKK|CHF)\s?[\d,.]+|\b[\d,.]+\s?(?:billion|million|bn|mn)\b|per (?:diluted )?share",
+    re.IGNORECASE,
+)
+
+
+# Either word order (Codex r3): "Acme Reports Financial Results for the Third Quarter of 2026".
+_RESULTS_RELEASE_TEXT_REV = re.compile(
+    r"\b(?:reports?|reported|announces?|announced|posts?)\b[^.\n]{0,60}?"
+    r"\b(?:results|earnings|EPS|revenue|profit)\b[^.\n]{0,40}?\b" + _FISCAL_PERIOD + r"\b",
+    re.IGNORECASE,
+)
+# Results that are not FINANCIAL results (Codex r5): "Third Quarter 2026 Production Results",
+# "Phase 3 trial results", "voting results". Vetoed on the headline only.
+_NON_FINANCIAL_RESULTS = re.compile(
+    r"\b(?:production|operating statistics|trial|study|phase\s*[1-4i]|clinical|topline|top-line|"
+    r"voting|vote|poll|tender|drilling|exploration|deliver(?:y|ies)|shipments?|traffic|"
+    r"general meeting|annual meeting|shareholders.? meeting|\bagm\b|"
+    r"sales volumes?)\b",
+    re.IGNORECASE,
+)
+_NOT_A_HEADLINE = re.compile(r"^(?:ex-?\d|exhibit\b|document$|\d+$|\S+\.html?$|page \d|"
+                             r"for immediate release|(?:press|news) release$|contacts?:|investor (?:relations|contact)|media (?:relations|contact))", re.IGNORECASE)
+
+
+def _headline(text: str) -> str:
+    """The release's title: the first substantive line, past the EDGAR exhibit labels
+    ("EX-99.1", "2", "a3q26e.htm", "Document") that head every fetched exhibit. One line only:
+    the second is the dateline paragraph, which is body text."""
+    lines = [ln.strip() for ln in (text or "").splitlines()]
+    keep = [ln for ln in lines if ln and not _NOT_A_HEADLINE.match(ln)]
+    return keep[0][:300] if keep else ""
+
+
+def looks_like_results_release(text: str) -> bool:
+    """Does a fetched release document read as a periodic RESULTS release?
+
+    Judged on the HEADLINE, not the body (Codex r3: a body sentence like "Acme reported second
+    quarter results" inside an acquisition release must not qualify it): a results headline
+    naming a fiscal period, in either word order; no scheduling/notice language in it; and at
+    least one stated figure in the document."""
+    head = _headline(text)
+    return bool((_RESULTS_RELEASE_TEXT.search(head) or _RESULTS_RELEASE_TEXT_REV.search(head))
+                and not _RESULTS_NOTICE_TEXT.search(head)
+                and not _NON_FINANCIAL_RESULTS.search(head)
+                and _RESULTS_FIGURE.search((text or "")[:6000]))
+
+
+def unlabelled_6ks(ticker: str, window_start: date, window_end: date) -> list[Filing8K]:
+    """6-Ks filed in the window whose filename/description says NOTHING either way.
+
+    Board #654, 2026-10-15: TSM's 3Q26 results 6-K is `tsm-20261015x6k.htm`, described
+    "6-K", so `is_likely_earnings_6k_doc` (a filename heuristic) rejects it and the FY
+    guide square reported "no release on EDGAR". These candidates carry no evidence of
+    being results; a caller must confirm from the DOCUMENT (`looks_like_results_release`)
+    before using one. Not used by date locking, which keeps its stricter filename rule."""
+    if window_end < window_start:
+        return []
+    cik = get_cik(ticker)
+    if not cik:
+        return []
+    data = _get_json(f"https://data.sec.gov/submissions/CIK{cik}.json")
+    if not data:
+        return []
+    recent = data.get("filings", {}).get("recent", {})
+    forms, dates = recent.get("form", []), recent.get("filingDate", [])
+    accs, docs = recent.get("accessionNumber", []), recent.get("primaryDocument", [])
+    descs = recent.get("primaryDocDescription", [])
+    out = []
+    for i, form in enumerate(forms):
+        if form != "6-K":
+            continue
+        try:
+            fd = date.fromisoformat(dates[i])
+        except (ValueError, IndexError):
+            continue
+        if not (window_start <= fd <= window_end):
+            continue
+        doc = docs[i] if i < len(docs) else ""
+        desc = descs[i] if i < len(descs) else ""
+        blob = f"{doc} {desc}"
+        if _RESULTS_6K_EXCLUDE.search(blob) or _RESULTS_6K_POSITIVE.search(blob):
+            continue  # excluded, or already found by find_results_6k
+        out.append(Filing8K(form=form, filing_date=dates[i],
+                            accession=accs[i] if i < len(accs) else "",
+                            primary_doc_title=doc or desc, items=()))
+    out.sort(key=lambda f: f.filing_date, reverse=True)
+    return out
+
+
 def find_results_6k(
     ticker: str, window_start: date, window_end: date
 ) -> Filing8K | None:

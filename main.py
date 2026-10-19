@@ -2759,16 +2759,35 @@ def _guidance_verdict_for(conn, r: ResultRow, cs, edgar_client, gc,
     evd = date.fromisoformat(r.event_date)
     lo, hi = evd - timedelta(days=1), evd + timedelta(days=2)
     filing = edgar_client.find_earnings_release_filing(r.ticker, lo, hi)
+    from_8k = bool(filing)
     if not filing:
         if out_of_time():
             return gc.could_not_check("budget")
         filing = edgar_client.find_results_6k(r.ticker, lo, hi)
+    doc = None
+    if filing:
+        if out_of_time():
+            return gc.could_not_check("budget")
+        doc = edgar_client.fetch_release_document(r.ticker, filing,
+                                                  should_stop=out_of_time)
+    if not from_8k and not (doc and doc.text):
+        # A foreign filer's results 6-K can carry a generic name (TSM: `tsm-20261015x6k.htm`,
+        # board #654), which the filename heuristic rejects -- and a filename hit can itself be
+        # unreadable (Codex r4), so this also runs when that hit yields nothing. Each unlabelled
+        # 6-K in the window is used only if its DOCUMENT reads as a results release.
+        finder = getattr(edgar_client, "unlabelled_6ks", None)
+        if finder and out_of_time():   # the lookup is itself an SEC call (Codex r1)
+            return gc.could_not_check("budget")
+        for cand in (finder(r.ticker, lo, hi) if finder else []):
+            if out_of_time():
+                return gc.could_not_check("budget")
+            got = edgar_client.fetch_release_document(r.ticker, cand,
+                                                      should_stop=out_of_time)
+            if got and got.text and edgar_client.looks_like_results_release(got.text):
+                filing, doc = cand, got
+                break
     if not filing:
         return gc.could_not_check("no release on EDGAR")
-    if out_of_time():
-        return gc.could_not_check("budget")
-    doc = edgar_client.fetch_release_document(r.ticker, filing,
-                                              should_stop=out_of_time)
     if not doc or not doc.text:
         if out_of_time():
             return gc.could_not_check("budget")

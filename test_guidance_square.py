@@ -891,3 +891,127 @@ def test_r4_a_fiscal_year_between_adjusted_and_eps_keeps_the_basis():
                      snap("2026-12-31", eps=18.0, taken_at="2025-04-29T12:00:00Z")),
                "2025-05-01T04:00:00Z")
     assert v.state == "green", (v.state, v.reason)
+
+
+# --- board #654: a foreign filer's results 6-K with a GENERIC name (TSM) ----------------
+
+_TSM_RESULTS = ("EX-99.1\nTSMC Reports Third Quarter EPS of NT$29.43\n\nHSINCHU, Taiwan, Oct. 15, 2026 "
+                "-- TSMC today announced consolidated revenue of NT$1,494.24 billion for the third "
+                "quarter ended September 30, 2026.\n" + "x" * 1500)
+_TSM_MONTHLY = "TSMC Reports September 2026 Revenue\nHSINCHU -- revenue for September 2026 was NT$..."
+
+
+def test_results_release_text_check():
+    import edgar_client
+    assert edgar_client.looks_like_results_release(_TSM_RESULTS)
+    assert edgar_client.looks_like_results_release(
+        "Acme Announces Second Quarter 2026 Results\nRevenue was $412.5 million, up 9%.")
+    assert not edgar_client.looks_like_results_release(_TSM_MONTHLY)
+    assert not edgar_client.looks_like_results_release("Notice of Annual General Meeting")
+    assert not edgar_client.looks_like_results_release("")
+    # Codex r1: a notice ABOUT results is not results, even with a figure later on.
+    assert not edgar_client.looks_like_results_release(
+        "Acme Announces Conference Call to Discuss Third Quarter 2026 Results\n"
+        "Acme expects revenue of $1.2 billion to $1.3 billion for fiscal 2026.")
+    assert not edgar_client.looks_like_results_release(
+        "Acme Will Report Third Quarter 2026 Results on November 5")
+    # Codex r2: trial or production "results" are not earnings; the headline must name a period.
+    assert not edgar_client.looks_like_results_release(
+        "BioCo Reports Positive Phase 3 Results\nThe study enrolled 1 million patients.")
+    # Codex r6: release boilerplate before the headline; annual-meeting voting results.
+    assert edgar_client.looks_like_results_release(
+        "FOR IMMEDIATE RELEASE\nAcme Reports Third Quarter 2026 Results\nRevenue was $412 million")
+    assert not edgar_client.looks_like_results_release(
+        "Acme Announces Annual General Meeting Results\nShareholders representing 1.2 million shares voted")
+    # Codex r5: periodic but non-financial results.
+    assert not edgar_client.looks_like_results_release(
+        "MinerCo Reports Third Quarter 2026 Production Results\nFull-year revenue is expected to be $1.20 billion.")
+    assert not edgar_client.looks_like_results_release(
+        "BioCo Announces Third Quarter Topline Results from Phase 3 Study\n$50 million milestone")
+    assert edgar_client.looks_like_results_release(
+        "Novo Nordisk reports first half 2026 results\nSales increased to DKK 152 billion.")
+    # Codex r3: the other common word order; and a BODY sentence must not qualify a document.
+    assert edgar_client.looks_like_results_release(
+        "EX-99.1\nAcme Reports Financial Results for the Third Quarter of 2026\nRevenue was $412.5 million")
+    assert not edgar_client.looks_like_results_release(
+        "Acme to Acquire Widget Co for $2.1 billion\nBOSTON -- Acme, which reported second quarter "
+        "2026 results with revenue of $412.5 million, today agreed to acquire Widget Co.")
+
+
+@pytest.mark.parametrize("docs,expect_reason", [
+    ([("monthly", _TSM_MONTHLY), ("results", _TSM_RESULTS)], None),   # skips the monthly, uses results
+    ([("monthly", _TSM_MONTHLY)], "no release on EDGAR"),              # never grades a non-results doc
+])
+def test_an_unlabelled_6k_is_used_only_when_its_document_reads_as_results(db, monkeypatch, docs,
+                                                                          expect_reason):
+    """TSM 2026-10-15: `tsm-20261015x6k.htm`, described "6-K", failed the filename heuristic
+    and the square said "no release on EDGAR" with the release sitting on EDGAR."""
+    from types import SimpleNamespace
+    import consensus_snapshot
+    import edgar_client
+    import main
+    texts = dict(docs)
+    graded = []
+    monkeypatch.setattr(consensus_snapshot, "pre_release_snapshot_set",
+                        lambda conn, t, cutoff: ("ok", {}))
+    monkeypatch.setattr(edgar_client, "get_request_stats", lambda: (0, 0))
+    monkeypatch.setattr(edgar_client, "find_earnings_release_filing", lambda t, a, b: None)
+    monkeypatch.setattr(edgar_client, "find_results_6k", lambda t, a, b: None)
+    monkeypatch.setattr(edgar_client, "unlabelled_6ks",
+                        lambda t, a, b: [SimpleNamespace(name=n) for n, _ in docs])
+    monkeypatch.setattr(edgar_client, "fetch_release_document",
+                        lambda t, f, should_stop=None: SimpleNamespace(text=texts[f.name]))
+    import guidance_compare
+    monkeypatch.setattr(guidance_compare, "assess",
+                        lambda text, *a, **k: graded.append(text) or guidance_compare.could_not_check("graded"))
+    r = _row("TSM", tier=1, position="Portfolio", event_date="2026-10-15")
+    main.attach_guidance_verdicts(db, [r], budget_s=150, clock=lambda: 0.0)
+    if expect_reason:
+        assert r.guidance_verdict.reason == expect_reason and not graded
+    else:
+        assert graded == [_TSM_RESULTS]
+
+
+def test_an_exhausted_budget_stops_before_the_unlabelled_6k_lookup(db, monkeypatch):
+    """Codex r1: the fallback lookup is itself an SEC call, so it must not start once the
+    budget is spent by the 8-K/6-K calls before it."""
+    import consensus_snapshot
+    import edgar_client
+    import main
+    now, calls = [0.0], []
+    monkeypatch.setattr(consensus_snapshot, "pre_release_snapshot_set",
+                        lambda conn, t, cutoff: ("ok", {}))
+    monkeypatch.setattr(edgar_client, "get_request_stats", lambda: (0, 0))
+    monkeypatch.setattr(edgar_client, "find_earnings_release_filing", lambda t, a, b: None)
+
+    def slow_6k(t, a, b):
+        now[0] = 1000.0
+        return None
+    monkeypatch.setattr(edgar_client, "find_results_6k", slow_6k)
+    monkeypatch.setattr(edgar_client, "unlabelled_6ks", lambda t, a, b: calls.append("lookup") or [])
+    r = _row("TSM", tier=1, position="Portfolio", event_date="2026-10-15")
+    main.attach_guidance_verdicts(db, [r], budget_s=150, clock=lambda: now[0])
+    assert calls == [] and r.guidance_verdict.reason == "budget"
+
+
+def test_an_unreadable_filename_6k_falls_through_to_the_unlabelled_search(db, monkeypatch):
+    """Codex r4: a filename-heuristic 6-K that yields no document must not hide the real one."""
+    from types import SimpleNamespace
+    import consensus_snapshot
+    import edgar_client
+    import guidance_compare
+    import main
+    graded = []
+    monkeypatch.setattr(consensus_snapshot, "pre_release_snapshot_set",
+                        lambda conn, t, cutoff: ("ok", {}))
+    monkeypatch.setattr(edgar_client, "get_request_stats", lambda: (0, 0))
+    monkeypatch.setattr(edgar_client, "find_earnings_release_filing", lambda t, a, b: None)
+    monkeypatch.setattr(edgar_client, "find_results_6k", lambda t, a, b: SimpleNamespace(name="bad"))
+    monkeypatch.setattr(edgar_client, "unlabelled_6ks", lambda t, a, b: [SimpleNamespace(name="real")])
+    monkeypatch.setattr(edgar_client, "fetch_release_document",
+                        lambda t, f, should_stop=None: None if f.name == "bad" else SimpleNamespace(text=_TSM_RESULTS))
+    monkeypatch.setattr(guidance_compare, "assess",
+                        lambda text, *a, **k: graded.append(text) or guidance_compare.could_not_check("graded"))
+    r = _row("TSM", tier=1, position="Portfolio", event_date="2026-10-15")
+    main.attach_guidance_verdicts(db, [r], budget_s=150, clock=lambda: 0.0)
+    assert graded == [_TSM_RESULTS]
