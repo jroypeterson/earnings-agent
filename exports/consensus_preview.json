@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-10-18T14:37:36Z",
+  "generated_at": "2026-10-19T17:33:02Z",
   "window": {
-    "start": "2026-10-18",
-    "end": "2026-10-21"
+    "start": "2026-10-19",
+    "end": "2026-10-22"
   },
   "counts": {
-    "previews": 5
+    "previews": 8
   },
   "previews": [
     {
@@ -17,8 +17,8 @@
       "event_date": "2026-10-20",
       "event_hour": "amc",
       "call_datetime_utc": "2026-10-20T20:00:00+00:00",
-      "last_price": 426.70001220703125,
-      "day_change_pct": -0.27111045300909065,
+      "last_price": 433.1499938964844,
+      "day_change_pct": 1.5115963217558215,
       "consensus": {
         "eps": {
           "mean": 2.6904,
@@ -35,13 +35,13 @@
       },
       "qtd": {
         "since": "2026-09-30",
-        "ticker_pct": 4.93569266488408,
-        "spx_pct": 0.08129697405267576,
+        "ticker_pct": 6.52189673541546,
+        "spx_pct": 0.6346414105561216,
         "sector_etf": "IHI",
-        "sector_etf_pct": 5.063538759187528
+        "sector_etf_pct": 5.083085819275385
       },
       "implied_move": {
-        "pct": 7.9,
+        "pct": 8.0,
         "expiry": "2026-10-23",
         "method": "ATM straddle",
         "notes": []
@@ -94,8 +94,8 @@
       "event_date": "2026-10-20",
       "event_hour": "amc",
       "call_datetime_utc": "2026-10-20T20:00:00+00:00",
-      "last_price": 70.52999877929688,
-      "day_change_pct": -2.864621696144366,
+      "last_price": 69.53500366210938,
+      "day_change_pct": -1.4107403011604296,
       "consensus": {
         "eps": {
           "mean": 0.8379,
@@ -112,13 +112,13 @@
       },
       "qtd": {
         "since": "2026-09-30",
-        "ticker_pct": 1.3653304444412768,
-        "spx_pct": 0.08129697405267576,
+        "ticker_pct": -0.03593205694304489,
+        "spx_pct": 0.6346414105561216,
         "sector_etf": null,
         "sector_etf_pct": null
       },
       "implied_move": {
-        "pct": 9.5,
+        "pct": 9.7,
         "expiry": "2026-10-23",
         "method": "ATM straddle",
         "notes": []
@@ -175,8 +175,8 @@
       "event_date": "2026-10-20",
       "event_hour": "amc",
       "call_datetime_utc": "2026-10-20T20:00:00+00:00",
-      "last_price": 146.02999877929688,
-      "day_change_pct": -1.7426970952652783,
+      "last_price": 148.22500610351562,
+      "day_change_pct": 1.5031208262462459,
       "consensus": {
         "eps": {
           "mean": 0.139,
@@ -193,13 +193,13 @@
       },
       "qtd": {
         "since": "2026-09-30",
-        "ticker_pct": -3.201645109050376,
-        "spx_pct": 0.08129697405267576,
+        "ticker_pct": -1.713513657303944,
+        "spx_pct": 0.6346414105561216,
         "sector_etf": null,
         "sector_etf_pct": null
       },
       "implied_move": {
-        "pct": 7.8,
+        "pct": 7.3,
         "expiry": "2026-10-21",
         "method": "ATM straddle",
         "notes": []
@@ -241,8 +241,8 @@
       "event_date": "2026-10-21",
       "event_hour": "bmo",
       "call_datetime_utc": "2026-10-21T20:00:00+00:00",
-      "last_price": 485.07000732421875,
-      "day_change_pct": 0.2853077127596146,
+      "last_price": 480.7799987792969,
+      "day_change_pct": -0.8844101841271854,
       "consensus": {
         "eps": {
           "mean": 4.2947,
@@ -259,13 +259,13 @@
       },
       "qtd": {
         "since": "2026-09-30",
-        "ticker_pct": 6.813027571122561,
-        "spx_pct": 0.08129697405267576,
+        "ticker_pct": 5.84193920111993,
+        "spx_pct": 0.6346414105561216,
         "sector_etf": null,
         "sector_etf_pct": null
       },
       "implied_move": {
-        "pct": 7.7,
+        "pct": 7.1,
         "expiry": "2026-11-20",
         "method": "ATM straddle",
         "notes": [
@@ -280,17 +280,17 @@
         },
         {
           "event_date": "2026-04-22",
-          "move_pct": 1.5513816980742063,
+          "move_pct": 1.5513884716379969,
           "window_label": "earnings-day close vs prior close"
         },
         {
           "event_date": "2026-02-18",
-          "move_pct": 6.5072578543580155,
+          "move_pct": 6.507265585659927,
           "window_label": "earnings-day close vs prior close"
         },
         {
           "event_date": "2025-10-22",
-          "move_pct": -2.5014441491961645,
+          "move_pct": -2.501450338314939,
           "window_label": "earnings-day close vs prior close"
         }
       ],
@@ -324,8 +324,8 @@
       "event_date": "2026-10-21",
       "event_hour": "amc",
       "call_datetime_utc": "2026-10-21T20:00:00+00:00",
-      "last_price": 354.7200012207031,
-      "day_change_pct": -2.1300080478702617,
+      "last_price": 368.19500732421875,
+      "day_change_pct": 3.798772569109125,
       "consensus": {
         "eps": {
           "mean": 0.4459,
@@ -342,13 +342,13 @@
       },
       "qtd": {
         "since": "2026-09-30",
-        "ticker_pct": -0.025364656720464278,
-        "spx_pct": 0.08129697405267576,
+        "ticker_pct": 3.7705005171844044,
+        "spx_pct": 0.6346414105561216,
         "sector_etf": null,
         "sector_etf_pct": null
       },
       "implied_move": {
-        "pct": 7.4,
+        "pct": 6.6,
         "expiry": "2026-10-23",
         "method": "ATM straddle",
         "notes": []
@@ -395,6 +395,256 @@
         {
           "field": "consensus.eps.range",
           "reason": "estimate range not available on FMP Starter plan"
+        }
+      ]
+    },
+    {
+      "ticker": "BE",
+      "company_name": "Bloom Energy Corporation",
+      "tier": 1,
+      "event_date": "2026-10-22",
+      "event_hour": "amc",
+      "call_datetime_utc": "2026-10-22T21:00:00+00:00",
+      "last_price": 226.69500732421875,
+      "day_change_pct": 2.4332428832995996,
+      "consensus": {
+        "eps": {
+          "mean": 0.6889,
+          "count": null,
+          "low": null,
+          "high": null
+        },
+        "revenue": {
+          "mean": 1079985251.0,
+          "count": null,
+          "low": null,
+          "high": null
+        }
+      },
+      "qtd": {
+        "since": "2026-09-30",
+        "ticker_pct": -18.17460090979796,
+        "spx_pct": 0.6346414105561216,
+        "sector_etf": null,
+        "sector_etf_pct": null
+      },
+      "implied_move": {
+        "pct": 11.2,
+        "expiry": "2026-10-23",
+        "method": "ATM straddle",
+        "notes": []
+      },
+      "post_earnings_moves": [
+        {
+          "event_date": "2026-07-28",
+          "move_pct": -1.8520716888728819,
+          "window_label": "next-day close vs earnings-day close"
+        },
+        {
+          "event_date": "2026-04-28",
+          "move_pct": 27.212089690432013,
+          "window_label": "next-day close vs earnings-day close"
+        },
+        {
+          "event_date": "2026-02-05",
+          "move_pct": 4.7071686592082544,
+          "window_label": "next-day close vs earnings-day close"
+        },
+        {
+          "event_date": "2025-10-28",
+          "move_pct": 18.034964825850714,
+          "window_label": "next-day close vs earnings-day close"
+        }
+      ],
+      "beat_rates": {
+        "eps": {
+          "beats": 9,
+          "total": 20,
+          "source": "yfinance"
+        },
+        "revenue": {
+          "beats": 13,
+          "total": 20,
+          "source": "fmp"
+        }
+      },
+      "na_fields": [
+        {
+          "field": "qtd.sector_etf",
+          "reason": "no mapped ETF for sector 'Energy'"
+        },
+        {
+          "field": "consensus.eps.range",
+          "reason": "estimate range not available on FMP Starter plan"
+        }
+      ]
+    },
+    {
+      "ticker": "KRC",
+      "company_name": "Kilroy Realty Corporation",
+      "tier": 1,
+      "event_date": "2026-10-22",
+      "event_hour": "amc",
+      "call_datetime_utc": "2026-10-23T20:00:00+00:00",
+      "last_price": 34.0,
+      "day_change_pct": -2.383008290038767,
+      "consensus": {
+        "eps": {
+          "mean": 0.8777,
+          "count": null,
+          "low": null,
+          "high": null
+        },
+        "revenue": {
+          "mean": 270086261.0,
+          "count": null,
+          "low": null,
+          "high": null
+        }
+      },
+      "qtd": {
+        "since": "2026-09-30",
+        "ticker_pct": 2.1941675148549034,
+        "spx_pct": 0.6346414105561216,
+        "sector_etf": null,
+        "sector_etf_pct": null
+      },
+      "implied_move": {
+        "pct": 10.9,
+        "expiry": "2026-11-20",
+        "method": "ATM straddle",
+        "notes": [
+          "wide market",
+          "(includes 28 extra days of time value)"
+        ]
+      },
+      "post_earnings_moves": [
+        {
+          "event_date": "2026-07-27",
+          "move_pct": -1.9030738708924453,
+          "window_label": "next-day close vs earnings-day close"
+        },
+        {
+          "event_date": "2026-04-27",
+          "move_pct": 4.278721452188443,
+          "window_label": "next-day close vs earnings-day close"
+        },
+        {
+          "event_date": "2026-02-09",
+          "move_pct": -3.734817511886438,
+          "window_label": "next-day close vs earnings-day close"
+        },
+        {
+          "event_date": "2025-10-27",
+          "move_pct": 1.7454663522058762,
+          "window_label": "next-day close vs earnings-day close"
+        }
+      ],
+      "beat_rates": {
+        "eps": {
+          "beats": 17,
+          "total": 20,
+          "source": "yfinance"
+        },
+        "revenue": {
+          "beats": 18,
+          "total": 20,
+          "source": "fmp"
+        }
+      },
+      "na_fields": [
+        {
+          "field": "qtd.sector_etf",
+          "reason": "no mapped ETF for sector 'Real Estate'"
+        },
+        {
+          "field": "consensus.eps.range",
+          "reason": "estimate range not available on FMP Starter plan"
+        }
+      ]
+    },
+    {
+      "ticker": "SPOT",
+      "company_name": "Spotify Technology SA",
+      "tier": 1,
+      "event_date": "2026-10-22",
+      "event_hour": "bmo",
+      "call_datetime_utc": "2026-10-22T12:00:00+00:00",
+      "last_price": 515.7999877929688,
+      "day_change_pct": -2.7636454346116937,
+      "consensus": {
+        "eps": {
+          "mean": 2.8785,
+          "count": null,
+          "low": null,
+          "high": null
+        },
+        "revenue": {
+          "mean": 5080562604.0,
+          "count": null,
+          "low": null,
+          "high": null
+        }
+      },
+      "qtd": {
+        "since": "2026-09-30",
+        "ticker_pct": 6.034300309796808,
+        "spx_pct": 0.6346414105561216,
+        "sector_etf": null,
+        "sector_etf_pct": null
+      },
+      "implied_move": {
+        "pct": 9.3,
+        "expiry": "2026-10-23",
+        "method": "ATM straddle",
+        "notes": []
+      },
+      "post_earnings_moves": [
+        {
+          "event_date": "2026-08-04",
+          "move_pct": -1.6778675734235706,
+          "window_label": "earnings-day close vs prior close"
+        },
+        {
+          "event_date": "2026-04-28",
+          "move_pct": -12.42789605238619,
+          "window_label": "earnings-day close vs prior close"
+        },
+        {
+          "event_date": "2026-02-10",
+          "move_pct": 14.74785295918035,
+          "window_label": "earnings-day close vs prior close"
+        },
+        {
+          "event_date": "2025-11-04",
+          "move_pct": -2.2496934691371586,
+          "window_label": "earnings-day close vs prior close"
+        }
+      ],
+      "beat_rates": {
+        "eps": {
+          "beats": 9,
+          "total": 20,
+          "source": "yfinance"
+        },
+        "revenue": {
+          "beats": 12,
+          "total": 20,
+          "source": "fmp"
+        }
+      },
+      "na_fields": [
+        {
+          "field": "qtd.sector_etf",
+          "reason": "no mapped ETF for sector 'Tech'"
+        },
+        {
+          "field": "consensus.eps.range",
+          "reason": "estimate range not available on FMP Starter plan"
+        },
+        {
+          "field": "guidance",
+          "reason": "no 8-K Item 2.02 for the 2026-08-04 print"
         }
       ]
     }
