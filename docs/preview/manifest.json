@@ -2,117 +2,122 @@
  "ABT": {
   "company": "Abbott Laboratories",
   "event_date": "2026-10-21",
-  "generated": "2026-10-19 17:33 UTC"
+  "generated": "2026-10-20 15:45 UTC"
  },
  "ARGX": {
   "company": "argenx SE - ADR",
   "event_date": "2026-10-22",
-  "generated": "2026-10-19 17:33 UTC"
+  "generated": "2026-10-20 15:45 UTC"
  },
  "BE": {
   "company": "Bloom Energy Corporation",
   "event_date": "2026-10-22",
-  "generated": "2026-10-19 17:33 UTC"
+  "generated": "2026-10-20 15:45 UTC"
  },
  "DGX": {
   "company": "Quest Diagnostics Inc",
   "event_date": "2026-10-22",
-  "generated": "2026-10-19 17:33 UTC"
+  "generated": "2026-10-20 15:45 UTC"
  },
  "DHR": {
   "company": "Danaher Corp",
   "event_date": "2026-10-21",
-  "generated": "2026-10-19 17:33 UTC"
+  "generated": "2026-10-20 15:45 UTC"
  },
  "DOC": {
   "company": "Healthpeak Properties Inc",
   "event_date": "2026-10-21",
-  "generated": "2026-10-19 17:33 UTC"
+  "generated": "2026-10-20 15:45 UTC"
+ },
+ "DVA": {
+  "company": "Davita Inc",
+  "event_date": "2026-10-23",
+  "generated": "2026-10-20 15:45 UTC"
  },
  "ELV": {
   "company": "Elevance Health Inc",
   "event_date": "2026-10-21",
-  "generated": "2026-10-19 17:33 UTC"
+  "generated": "2026-10-20 15:45 UTC"
  },
  "HCSG": {
   "company": "Healthcare Services Group Inc",
   "event_date": "2026-10-21",
-  "generated": "2026-10-19 17:33 UTC"
+  "generated": "2026-10-20 15:45 UTC"
  },
  "IART": {
   "company": "Integra LifeSciences Holdings Corporation",
   "event_date": "2026-10-21",
-  "generated": "2026-10-19 17:33 UTC"
+  "generated": "2026-10-20 15:45 UTC"
  },
  "ISRG": {
   "company": "Intuitive Surgical Inc",
   "event_date": "2026-10-20",
-  "generated": "2026-10-19 17:33 UTC"
+  "generated": "2026-10-20 15:45 UTC"
  },
  "ITGR": {
   "company": "Integer Holdings Corporation",
   "event_date": "2026-10-22",
-  "generated": "2026-10-19 17:33 UTC"
+  "generated": "2026-10-20 15:45 UTC"
  },
  "KRC": {
   "company": "Kilroy Realty Corporation",
   "event_date": "2026-10-22",
-  "generated": "2026-10-19 17:33 UTC"
+  "generated": "2026-10-20 15:45 UTC"
  },
  "MCO": {
   "company": "Moody's Corp",
   "event_date": "2026-10-21",
-  "generated": "2026-10-19 17:33 UTC"
+  "generated": "2026-10-20 15:45 UTC"
  },
  "MEDP": {
   "company": "Medpace Holdings, Inc.",
   "event_date": "2026-10-21",
-  "generated": "2026-10-19 17:33 UTC"
+  "generated": "2026-10-20 15:45 UTC"
  },
  "MOH": {
   "company": "Molina Healthcare Inc",
   "event_date": "2026-10-21",
-  "generated": "2026-10-19 17:33 UTC"
+  "generated": "2026-10-20 15:45 UTC"
  },
  "MPT": {
   "company": "Medical Properties Trust, Inc.",
   "event_date": "2026-10-22",
-  "generated": "2026-10-19 17:33 UTC"
+  "generated": "2026-10-20 15:45 UTC"
  },
  "NFLX": {
   "company": "Netflix Inc",
   "event_date": "2026-10-20",
-  "generated": "2026-10-19 17:33 UTC"
+  "generated": "2026-10-20 15:45 UTC"
  },
  "OSSFF": {
   "company": "Embla Medical hf.",
   "event_date": "2026-10-20",
-  "generated": "2026-10-19 17:33 UTC"
+  "generated": "2026-10-20 15:45 UTC"
  },
  "SPCX": {
   "company": "Space Exploration Technologies Corp.",
   "event_date": "2026-10-20",
-  "generated": "2026-10-19 17:33 UTC"
+  "generated": "2026-10-20 15:45 UTC"
  },
  "SPOT": {
   "company": "Spotify Technology SA",
   "event_date": "2026-10-22",
-  "generated": "2026-10-19 17:33 UTC"
+  "generated": "2026-10-20 15:45 UTC"
  },
  "TFX": {
   "company": "Teleflex Incorporated",
   "event_date": "2026-10-22",
-  "generated": "2026-10-19 17:33 UTC"
+  "generated": "2026-10-20 15:45 UTC"
  },
  "TMO": {
   "company": "Thermo Fisher Scientific Inc",
   "event_date": "2026-10-21",
-  "generated": "2026-10-19 17:33 UTC"
+  "generated": "2026-10-20 15:45 UTC"
  },
  "TSLA": {
   "company": "Tesla, Inc.",
   "event_date": "2026-10-21",
-  "generated": "2026-10-19 17:33 UTC"
+  "generated": "2026-10-20 15:45 UTC"
  },
  "UCB": {
   "company": "UCB SA",
