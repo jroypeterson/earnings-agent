@@ -15,7 +15,7 @@ An earnings review execution system that monitors upcoming earnings, syncs to Go
 - Queries Finnhub daily for upcoming earnings dates, timing (BMO/AMC), and consensus estimates
 - Creates **Google Calendar** events for Tier 1 + Tier 2 names (with deduplication)
 - Labels every event as **Confirmed vs Estimated** based on whether the company has announced timing
-- Creates **TickTick** review tasks in quarterly lists (e.g. "1Q26 Earnings - Core Watchlist - Positions/Researching")
+- Creates **TickTick** review tasks in quarterly lists (e.g. "1Q26 Earnings - Positions/Researching")
 - Stores consensus estimate snapshots for building revision trends over time
 - Tracks actuals (beat/miss) after earnings are reported and updates calendar events
 - **Multi-source date correctness**: cross-checks Finnhub against yfinance + SEC EDGAR historical cadence, scans IR RSS feeds for pre-release announcements, alerts on Tier 1 moves within 5 business days
@@ -204,7 +204,7 @@ earnings_agent/
 ## TickTick Integration
 
 Tasks are organized by **reporting quarter** and **tier** (one list per ticker per quarter — cross-list dedup blocks duplicates):
-- `1Q26 Earnings - Core Watchlist - Positions/Researching` (Tier 1 names — Portfolio + Researching consolidated)
+- `1Q26 Earnings - Positions/Researching` (Tier 1 names — Portfolio + Researching consolidated)
 - `1Q26 Earnings - HC Svcs & MedTech` (Tier 2 names)
 
 Each task includes consensus estimates, timing, and a review checklist (transcript, company docs, sell-side take, update model). Tasks auto-create in the **Earnings** TickTick folder (override via `TICKTICK_EARNINGS_GROUP_ID`).

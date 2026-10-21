@@ -70,7 +70,12 @@ def _headers(token: str) -> dict:
 
 
 TIER_LIST_LABELS = {
-    1: "Core Watchlist - Positions/Researching",  # all Tier 1 consolidated here
+    # All Tier 1 consolidated here. "Core Watchlist - " dropped 2026-10-21 (JP:
+    # "lets not call it Core Watchlist since it's really just
+    # Positions/Researching"); the existing 1Q26-4Q26 lists were renamed in
+    # TickTick the same day, so find_or_create_list finds them by this name.
+    # earnings_review_coverage/seasons.py parses this suffix and accepts both.
+    1: "Positions/Researching",
     2: "HC Svcs, MedTech & Biopharma",
 }
 
@@ -112,11 +117,11 @@ def _quarter_list_name(event_date: str, tier: int = 2, position: str = "") -> st
     calendar quarter of the release date.
 
     `position` is accepted for backwards compatibility with callers but is
-    no longer used — all Tier 1 names land in the same "Core Watchlist"
+    no longer used — all Tier 1 names land in the same "Positions/Researching"
     list regardless of Portfolio/Researching designation.
 
     Examples:
-      tier=1 -> "1Q26 Earnings - Core Watchlist"
+      tier=1 -> "1Q26 Earnings - Positions/Researching"
       tier=2 -> "1Q26 Earnings - HC Svcs, MedTech & Biopharma"
       tier=3 -> "1Q26 Earnings"
     """
@@ -735,6 +740,35 @@ def create_task(
         return None
 
 
+def move_task(token: str, task_id: str, from_list_id: str, to_list_id: str) -> bool:
+    """Move a task to another list, keeping its id, title, dates, tags, checklist
+    and ticks. Verified live 2026-10-21 (ISRG, then six more) via
+    `POST /open/v1/task/move` — the endpoint the CLAUDE.md note "projectId
+    updates are stripped" predates. Updating `projectId` in a task POST is still
+    silently ignored; this endpoint is the only Open API move.
+    """
+    try:
+        resp = requests.post(
+            f"{TICKTICK_API_BASE}/task/move",
+            headers=_headers(token),
+            json=[{"fromProjectId": from_list_id, "toProjectId": to_list_id,
+                   "taskId": task_id}],
+            timeout=30,
+        )
+    except requests.RequestException as exc:
+        logger.warning(f"  TickTick move failed for task {task_id}: {exc}")
+        return False
+    if resp.status_code == 401:
+        raise TickTickTokenExpired("TickTick access token expired")
+    if resp.status_code != 200:
+        logger.warning(f"  TickTick move of {task_id} -> HTTP {resp.status_code}: {resp.text}")
+        return False
+    try:
+        return any(r.get("id") == task_id for r in resp.json())
+    except (ValueError, AttributeError, TypeError):
+        return False
+
+
 def complete_task(token: str, task_id: str, ticker: str, event_date: str,
                   tier: int, list_id: str | None = None,
                   position: str | None = None) -> bool:
@@ -888,6 +922,19 @@ _SECTOR_TAGS = {"Healthcare Services", "MedTech", "Biopharma"}
 def sector_tag(sector: str | None) -> str | None:
     """Return the TickTick tag for a coverage sector, or None if not tagged."""
     return sector if sector in _SECTOR_TAGS else None
+
+
+# JP 2026-10-21: "Add a REIT tag". Keyed on the SUBSECTOR, the same field that
+# admits healthcare REITs to Tier 2 (config.TIER_2_SUBSECTORS): CM files them
+# under sector `Real Estate`, which carries no sector tag, so without this a
+# REIT task had nothing to sort on. (TickTick stores it lowercased: `reit`.)
+REIT_TAG = "REIT"
+_REIT_SUBSECTORS = {"Healthcare Real Estate"}
+
+
+def subsector_tag(subsector: str | None) -> str | None:
+    """Return the TickTick tag for a coverage subsector, or None if not tagged."""
+    return REIT_TAG if subsector in _REIT_SUBSECTORS else None
 
 
 # Position tags (JP 2026-08-12: "lets tag entries as portfolio or researching
@@ -1347,6 +1394,7 @@ def sync_ticktick_tasks(
             # `Reported` is deliberately NOT set here: the creation query is
             # forward-dated, so a task minted by this path has not reported yet.
             tags = [t for t in (sector_tag(event.get("sector")),
+                                subsector_tag(event.get("subsector")),
                                 position_tag(event.get("position"))) if t]
             try:
                 task_id = create_task(
@@ -1394,6 +1442,7 @@ def reconcile_ticktick_tasks(
     *,
     sector_by_ticker: dict | None = None,
     position_by_ticker: dict | None = None,
+    subsector_by_ticker: dict | None = None,
     lookback_days: int = 14,
     lookahead_days: int = 45,
     max_db_staleness_days: int = 4,
@@ -1439,6 +1488,7 @@ def reconcile_ticktick_tasks(
 
     stats = {
         "checked": 0,
+        "moved": 0,
         "date_fixed": 0,
         "title_fixed": 0,
         "marked_reported": 0,
@@ -1455,6 +1505,7 @@ def reconcile_ticktick_tasks(
     }
     sector_by_ticker = sector_by_ticker or {}
     position_by_ticker = position_by_ticker or {}
+    subsector_by_ticker = subsector_by_ticker or {}
     # (ticker, event_date, reported) for tracked rows with NO task and no
     # terminal reason to lack one. Named at the end rather than per-row so the
     # list reads as one finding instead of scrolling past in the per-task log.
@@ -1799,6 +1850,32 @@ def reconcile_ticktick_tasks(
                                f"task for a closed event — it will keep nagging")
             continue
 
+        # Put the task in the list its CURRENT tier maps to. A company whose
+        # tier changes mid-quarter (bought, added to Researching, a CM sector
+        # edit) keeps its old task — creation dedups across the quarter's lists
+        # — so it stayed in the old list for the rest of the season. JP
+        # 2026-10-21: "I definitely want portfolio companies to show on the
+        # positions/research list" (ISRG, ATEC, GRAL, KRC, VTR, NTRA were all in
+        # HC Svcs). Moves only into a list that already exists (never creates
+        # one) and only between this quarter's lists, which is where `pid` came
+        # from. A move keeps the task id, so the DB pointer stays valid.
+        want_name = _quarter_list_name(event_date, tier)
+        want_pid = next((p["id"] for p in projects if p.get("name") == want_name), None)
+        if want_pid and want_pid != pid:
+            logger.info(f"  {prefix}move {ticker}: '{pname}' -> '{want_name}'")
+            if not dry_run:
+                try:
+                    moved = move_task(token, task_id, pid, want_pid)
+                except TickTickTokenExpired:
+                    logger.error("TickTick access token expired mid-reconcile — stopping")
+                    stats["errors"] += 1
+                    break
+                if not moved:
+                    stats["errors"] += 1
+                    continue
+                pid, pname = want_pid, want_name
+            stats["moved"] += 1
+
         title = task.get("title", "") or ""
         # Tags to ensure (merged in without clobbering the user's own tags):
         # sector, Position, and — once the row has reported — `Reported`, which
@@ -1806,6 +1883,7 @@ def reconcile_ticktick_tasks(
         want_tags = [
             t for t in (
                 sector_tag(sector_by_ticker.get(ticker)),
+                subsector_tag(subsector_by_ticker.get(ticker)),
                 position_tag(position_by_ticker.get(ticker)),
                 REPORTED_TAG if reported else None,
             ) if t
@@ -2017,11 +2095,12 @@ def reconcile_ticktick_tasks(
             stats["errors"] += 1
 
     logger.info(
-        "TickTick reconcile%s: checked=%d date_fixed=%d title_fixed=%d "
+        "TickTick reconcile%s: checked=%d moved=%d date_fixed=%d title_fixed=%d "
         "marked_reported=%d tag_added=%d date_cleared=%d items_added=%d "
         "backfilled=%d skipped_done=%d skipped_phantom=%d skipped_stale=%d "
         "skipped_ambiguous=%d no_task=%d errors=%d"
-        % (" [dry-run]" if dry_run else "", stats["checked"], stats["date_fixed"],
+        % (" [dry-run]" if dry_run else "", stats["checked"], stats["moved"],
+           stats["date_fixed"],
            stats["title_fixed"], stats["marked_reported"], stats["tag_added"],
            stats["date_cleared"], stats["items_added"], stats["pointer_backfilled"],
            stats["skipped_done"], stats["skipped_phantom"], stats["skipped_stale"],

@@ -551,6 +551,11 @@ def _results_subcategory(r: ResultRow) -> str:
         return "Healthcare Services"
     if r.sector == "MedTech":
         return "MedTech"
+    # JP 2026-10-21: "Add HC REITs group". Keyed on the subsector, because CM
+    # files healthcare REITs under sector Real Estate (which falls to "Other").
+    # Position still wins above, as for every sector group.
+    if r.subsector == "Healthcare Real Estate":
+        return "Healthcare REITs"
     if r.subsector == "Large Pharma":
         return "Large Pharma"
     # Biopharma is checked AFTER Large Pharma on purpose: LLY is sector
@@ -573,6 +578,7 @@ _SUBCATEGORY_ORDER = (
     "Following for Interest",
     "Healthcare Services",
     "MedTech",
+    "Healthcare REITs",
     "Large Pharma",
     "Biopharma",
     "Other",

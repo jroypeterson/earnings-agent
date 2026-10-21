@@ -22,7 +22,7 @@ from test_ticktick_reconcile import _stub_api, _std_items
 TODAY = date(2026, 10, 21)
 OLD = "2026-08-28 03:38:42"          # BSX's real updated_at
 P_CORE = {"id": "P_CORE",
-          "name": "3Q26 Earnings - Core Watchlist - Positions/Researching"}
+          "name": "3Q26 Earnings - Positions/Researching"}
 
 
 def _iso(d):
@@ -175,8 +175,7 @@ def test_the_sync_and_the_reconcile_agree_on_the_counter(monkeypatch, tmp_path):
         conn = sqlite3.connect(db_path)
         try:
             rq = ticktick._reporting_quarter(ev_date)
-            project = {"id": "P", "name": f"{rq} Earnings - Core Watchlist - "
-                                          "Positions/Researching"}
+            project = {"id": "P", "name": f"{rq} Earnings - Positions/Researching"}
             monkeypatch.setenv("TICKTICK_ACCESS_TOKEN", "tok")
             posts = _stub_api(monkeypatch, {"P": [
                 _task("T_ARGX", "ARGX wrong-dated", wrong)]})
