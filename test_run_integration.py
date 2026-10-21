@@ -315,6 +315,9 @@ def test_reconcile_preserves_reported_and_does_not_flip_on_actuals(monkeypatch, 
     monkeypatch.setattr(main, "post_slack", lambda *a, **k: None)
     monkeypatch.setattr(main, "SLACK_WEBHOOK_STATUS", "https://example.invalid/wh")
     monkeypatch.setattr(main, "SLACK_WEBHOOK_EARNINGS", None)
+    # The coverage-freshness alert reads the real CM exports' age: fresh on the laptop, stale or
+    # absent on a CI runner, where it then posts to SLACK_WEBHOOK_STATUS (red in CI since 2026-10-19).
+    monkeypatch.setattr(main, "_alert_coverage_stale_if_needed", lambda *a, **k: None)
     monkeypatch.setattr(main, "get_calendar_service",
                         lambda: _ReconcileCal("WXYZ", "OLD", "2026-06-20"))
     monkeypatch.setattr(main, "get_finnhub_client", lambda: object())
