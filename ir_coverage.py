@@ -32,6 +32,8 @@ import sys
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
+import held_feed
+
 ROOT = Path(__file__).resolve().parent.parent
 UNIVERSE = ROOT / "Coverage Manager" / "exports" / "universe.csv"
 IR_ALIAS = "floridabusinessman+IR@gmail.com"
@@ -124,15 +126,46 @@ def _root(domain: str) -> str:
     return ".".join(parts[-2:])
 
 
+#: Which source produced the last `_portfolio_tickers()` answer, and its warnings, so the report
+#: says so: a scheduled run's stderr reaches no one (run_guarded posts output only on failure).
+OWNERSHIP = {"source": "not computed", "warnings": []}
+
+
 def _portfolio_tickers() -> set[str]:
-    """Held names, from CM's position export. Empty set on any failure -- never raises."""
-    p = ROOT / "Coverage Manager" / "exports" / "portfolio.json"
-    if not p.exists():
-        return set()
+    """Broker-held CM names, falling back to CM's portfolio with a warning."""
+    exports = ROOT / "Coverage Manager" / "exports"
+    p = exports / "portfolio.json"
     try:
-        return set(json.loads(p.read_text(encoding="utf-8")).keys())
-    except (ValueError, OSError):
-        return set()
+        portfolio = json.loads(p.read_text(encoding="utf-8-sig"))
+        if not isinstance(portfolio, dict):
+            raise ValueError("expected a ticker-keyed object")
+        cm_portfolio = set(portfolio)
+    except (ValueError, OSError) as exc:
+        print(f"warning: cannot read {p}: {exc}; continuing with an empty CM portfolio",
+              file=sys.stderr)
+        cm_portfolio = set()
+        OWNERSHIP["warnings"] = [f"cannot read {p.name}: {exc}"]
+    else:
+        OWNERSHIP["warnings"] = []
+
+    with open(UNIVERSE, encoding="utf-8-sig", newline="") as fh:
+        known = {(r.get("Ticker") or "").strip() for r in csv.DictReader(fh)}
+    known.discard("")
+    # repo_root derived from ROOT (not Path(__file__).parent) so tests redirect held.json by
+    # patching ROOT; held_feed resolves <repo_root>/../portfolio_daily/exports/held.json.
+    j = held_feed.join_ownership(
+        cm_portfolio, known, aliases_path=exports / "ticker_aliases.json",
+        repo_root=ROOT / "earnings_agent")
+    for note in j.notes:
+        print(f"note: {note}", file=sys.stderr)
+    for warning in j.warnings:
+        print(f"warning: {warning}", file=sys.stderr)
+    OWNERSHIP["warnings"] += list(j.warnings)
+    if not j.applied:
+        OWNERSHIP["source"] = "Coverage Manager portfolio.json (broker feed not usable)"
+        return cm_portfolio
+    OWNERSHIP["source"] = "brokers' held.json"
+    return set(j.promote) | (cm_portfolio - j.demote)
 
 
 def load_universe() -> tuple[dict, dict, list[dict]]:
@@ -237,6 +270,7 @@ def build(days: int = 365) -> dict:
         "unmatched": unmatched.most_common(30),
         "core_rows": {r["Ticker"]: r.get("Company Name", "") for r in core},
         "scopes": {r["Ticker"]: r.get("_scope", "core") for r in core},
+        "ownership": dict(OWNERSHIP),
     }
 
 
@@ -252,7 +286,11 @@ def render(j: dict) -> str:
     L += [f"- Core names: **{j['core_total']}**",
           f"- Receiving IR mail: **{len(j['covered'])}** ({pct:.0f}%)",
           f"- No mail in window: **{len(j['missing'])}**",
-          f"- Messages scanned: **{j['messages']}**", "",
+          f"- Messages scanned: **{j['messages']}**",
+          f"- Owned names from: **{j.get('ownership', {}).get('source', 'not recorded')}**", ""]
+    for w in j.get("ownership", {}).get("warnings", []):
+        L.append(f"> ownership warning: {w}")
+    L += ["",
           "**Receiving IR mail does not mean subscribed-and-current, and silence does "
           "not mean unsubscribed** — a company may simply not have sent anything in "
           "the window. The two are separated below rather than merged.", ""]

@@ -7,6 +7,10 @@ ticker) and matching too tightly (losing a covered name silently).
 
 from __future__ import annotations
 
+import json
+
+import pytest
+
 import ir_coverage as ic
 
 
@@ -107,3 +111,89 @@ def test_unmatched_senders_are_reported_not_dropped():
          "core_rows": {"AAA": "A Co"}}
     out = ic.render(j)
     assert "mystery.com" in out
+
+
+@pytest.fixture
+def ownership_files(tmp_path, monkeypatch):
+    """Exercise the canonical reader against a local miniature fleet, never live files."""
+    exports = tmp_path / "Coverage Manager" / "exports"
+    exports.mkdir(parents=True)
+    universe = exports / "universe.csv"
+    universe.write_text(
+        "Ticker,Company Name,Core,Website\n"
+        "HELD,Held Company,,\nNEW,New Company,,\n"
+        "SOLD,Sold Company,,\nCORE,Core Company,Y,\n", encoding="utf-8-sig")
+    (exports / "portfolio.json").write_text(
+        json.dumps({"HELD": {}, "SOLD": {}}), encoding="utf-8")
+    (exports / "ticker_aliases.json").write_text(
+        json.dumps({"alias_to_canonical": {"NEW.BROKER": "NEW"}}), encoding="utf-8")
+    (exports / "universe_metadata.json").write_text(
+        json.dumps({t: {} for t in ("HELD", "NEW", "SOLD", "CORE")}), encoding="utf-8")
+    held = tmp_path / "portfolio_daily" / "exports" / "held.json"
+    held.parent.mkdir(parents=True)
+    today = ic.date(2026, 10, 20)
+    held.write_text(json.dumps({
+        "schema": 1, "generated_at": today.isoformat(),
+        "brokers": [{"broker": "Test", "as_of": today.isoformat(), "age_source": "as_of"}],
+        "held": [{"ticker": t, "shares": 1, "brokers": ["Test"]}
+                 for t in ("HELD", "NEW.BROKER")],
+    }), encoding="utf-8")
+    monkeypatch.setattr(ic, "ROOT", tmp_path)
+    monkeypatch.setattr(ic, "UNIVERSE", universe)
+    monkeypatch.setattr(ic.held_feed, "today_et", lambda: today)
+    monkeypatch.delenv("PORTFOLIO_HELD_JSON", raising=False)
+    return exports, held
+
+
+def test_broker_held_name_absent_from_cm_portfolio_enters_scope(ownership_files):
+    _, _, rows = ic.load_universe()
+    assert {r["Ticker"]: r["_scope"] for r in rows} == {
+        "HELD": "portfolio", "NEW": "portfolio", "CORE": "core",
+    }
+
+
+def test_sold_non_core_cm_portfolio_name_leaves_scope(ownership_files):
+    assert ic._portfolio_tickers() == {"HELD", "NEW"}
+    _, _, rows = ic.load_universe()
+    assert "SOLD" not in {r["Ticker"] for r in rows}
+
+
+@pytest.mark.parametrize("bad_content", [None, "not json"])
+def test_unreadable_held_feed_falls_back_loudly(ownership_files, capsys, bad_content):
+    _, held = ownership_files
+    if bad_content is None:
+        held.unlink()
+    else:
+        held.write_text(bad_content, encoding="utf-8")
+    assert ic._portfolio_tickers() == {"HELD", "SOLD"}
+    err = capsys.readouterr().err
+    assert "warning:" in err and "held.json" in err
+    assert "Coverage Manager's copy stands" in err
+
+
+@pytest.mark.parametrize("bad_content", [None, "not json", "[]"])
+def test_unreadable_cm_portfolio_warns_and_still_promotes(ownership_files, capsys, bad_content):
+    exports, _ = ownership_files
+    portfolio = exports / "portfolio.json"
+    if bad_content is None:
+        portfolio.unlink()
+    else:
+        portfolio.write_text(bad_content, encoding="utf-8")
+    assert ic._portfolio_tickers() == {"HELD", "NEW"}
+    err = capsys.readouterr().err
+    assert "warning:" in err and str(portfolio) in err
+
+
+def test_the_report_names_the_ownership_source_and_its_fallback(ownership_files):
+    """A scheduled run's stderr reaches no one, so the report must say which source won."""
+    ic._portfolio_tickers()
+    assert ic.OWNERSHIP["source"] == "brokers' held.json" and ic.OWNERSHIP["warnings"] == []
+    _, held = ownership_files
+    held.unlink()
+    ic._portfolio_tickers()
+    assert ic.OWNERSHIP["source"].startswith("Coverage Manager") and ic.OWNERSHIP["warnings"]
+    j = {"generated": "2026-10-20", "window_days": 1, "error": None, "messages": 0, "core_total": 0,
+         "covered": [], "missing": [], "non_core_hits": [], "hits": {}, "matched_by_name": [],
+         "bulk": [], "unmatched": [], "core_rows": {}, "scopes": {}, "ownership": dict(ic.OWNERSHIP)}
+    out = ic.render(j)
+    assert "Owned names from: **Coverage Manager" in out and "ownership warning:" in out
