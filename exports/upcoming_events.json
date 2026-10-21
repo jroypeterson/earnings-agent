@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-10-21T16:01:00Z",
+  "generated_at": "2026-10-21T22:33:54Z",
   "window": {
     "start": "2026-10-19",
     "end": "2026-11-04"
   },
   "counts": {
-    "events": 361
+    "events": 368
   },
   "events": [
     {
@@ -27,15 +27,6 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Canton Strategic Holdings Inc"
-    },
-    {
-      "ticker": "DOC",
-      "event_date": "2026-10-21",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Healthpeak Properties Inc"
     },
     {
       "ticker": "HEPA",
@@ -72,15 +63,6 @@
       "date_confirmed": true,
       "call_datetime_utc": "2026-10-22T20:00:00+00:00",
       "company_name": "Molina Healthcare Inc"
-    },
-    {
-      "ticker": "SAP",
-      "event_date": "2026-10-21",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "SAP SE"
     },
     {
       "ticker": "TSLA",
@@ -140,7 +122,7 @@
       "ticker": "MPT",
       "event_date": "2026-10-22",
       "event_hour": "",
-      "tier": 3,
+      "tier": 2,
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Medical Properties Trust, Inc."
@@ -212,7 +194,7 @@
       "ticker": "ARE",
       "event_date": "2026-10-26",
       "event_hour": "amc",
-      "tier": 3,
+      "tier": 2,
       "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "Alexandria Real Estate Equities Inc"
@@ -252,15 +234,6 @@
       "date_confirmed": true,
       "call_datetime_utc": "2026-10-27T20:00:00+00:00",
       "company_name": "Welltower Inc"
-    },
-    {
-      "ticker": "ALKS",
-      "event_date": "2026-10-27",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Alkermes Plc"
     },
     {
       "ticker": "AMRN",
@@ -1157,7 +1130,7 @@
       "ticker": "HR",
       "event_date": "2026-10-29",
       "event_hour": "",
-      "tier": 3,
+      "tier": 2,
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Healthcare Realty Trust Inc"
@@ -1685,15 +1658,6 @@
       "company_name": "Axsome Therapeutics, Inc."
     },
     {
-      "ticker": "BRKR",
-      "event_date": "2026-11-02",
-      "event_hour": "",
-      "tier": 2,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Bruker Corp"
-    },
-    {
       "ticker": "CHKP",
       "event_date": "2026-11-02",
       "event_hour": "bmo",
@@ -1715,10 +1679,19 @@
       "ticker": "DHC",
       "event_date": "2026-11-02",
       "event_hour": "",
-      "tier": 3,
+      "tier": 2,
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Diversified Healthcare Trust"
+    },
+    {
+      "ticker": "DOC",
+      "event_date": "2026-11-02",
+      "event_hour": "",
+      "tier": 2,
+      "date_confirmed": false,
+      "call_datetime_utc": "2026-11-03T20:00:00+00:00",
+      "company_name": "Healthpeak Properties Inc"
     },
     {
       "ticker": "DTIL",
@@ -1737,6 +1710,15 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Emergent Biosolutions Inc"
+    },
+    {
+      "ticker": "FN",
+      "event_date": "2026-11-02",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Fabrinet"
     },
     {
       "ticker": "GNLX",
@@ -1796,10 +1778,19 @@
       "ticker": "JAN",
       "event_date": "2026-11-02",
       "event_hour": "",
-      "tier": 3,
+      "tier": 2,
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Janus Living Inc"
+    },
+    {
+      "ticker": "JAZZ",
+      "event_date": "2026-11-02",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Jazz Pharmaceuticals PLC"
     },
     {
       "ticker": "NBIX",
@@ -1832,10 +1823,19 @@
       "ticker": "SBRA",
       "event_date": "2026-11-02",
       "event_hour": "",
-      "tier": 3,
+      "tier": 2,
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Sabra Health Care REIT Inc"
+    },
+    {
+      "ticker": "SIBN",
+      "event_date": "2026-11-02",
+      "event_hour": "",
+      "tier": 2,
+      "date_confirmed": false,
+      "call_datetime_utc": "2026-11-02T21:30:00+00:00",
+      "company_name": "SI-BONE, Inc."
     },
     {
       "ticker": "SLDB",
@@ -1881,6 +1881,15 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Stoke Therapeutics Inc"
+    },
+    {
+      "ticker": "TCMD",
+      "event_date": "2026-11-02",
+      "event_hour": "",
+      "tier": 2,
+      "date_confirmed": false,
+      "call_datetime_utc": "2026-11-02T20:00:00+00:00",
+      "company_name": "Tactile Systems Technology Inc"
     },
     {
       "ticker": "TEM",
@@ -1944,6 +1953,15 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Astera Labs, Inc."
+    },
+    {
+      "ticker": "ALKS",
+      "event_date": "2026-11-03",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Alkermes Plc"
     },
     {
       "ticker": "ALMR",
@@ -2048,7 +2066,7 @@
       "ticker": "CHCT",
       "event_date": "2026-11-03",
       "event_hour": "amc",
-      "tier": 3,
+      "tier": 2,
       "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "Community Healthcare Trust Inc"
@@ -2070,6 +2088,15 @@
       "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "Cytosorbents Corp"
+    },
+    {
+      "ticker": "DOCN",
+      "event_date": "2026-11-03",
+      "event_hour": "bmo",
+      "tier": 3,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "DigitalOcean Holdings Inc"
     },
     {
       "ticker": "DT",
@@ -2153,15 +2180,6 @@
       "company_name": "Gossamer Bio Inc"
     },
     {
-      "ticker": "HRMY",
-      "event_date": "2026-11-03",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Harmony Biosciences Holdings Inc"
-    },
-    {
       "ticker": "HSIC",
       "event_date": "2026-11-03",
       "event_hour": "bmo",
@@ -2201,7 +2219,7 @@
       "ticker": "LTC",
       "event_date": "2026-11-03",
       "event_hour": "",
-      "tier": 3,
+      "tier": 2,
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "LTC Properties Inc"
@@ -2218,9 +2236,9 @@
     {
       "ticker": "MDGL",
       "event_date": "2026-11-03",
-      "event_hour": "",
+      "event_hour": "bmo",
       "tier": 2,
-      "date_confirmed": false,
+      "date_confirmed": true,
       "call_datetime_utc": "2026-11-03T20:00:00+00:00",
       "company_name": "Madrigal Pharmaceuticals Inc"
     },
@@ -2237,7 +2255,7 @@
       "ticker": "OHI",
       "event_date": "2026-11-03",
       "event_hour": "",
-      "tier": 3,
+      "tier": 2,
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Omega Healthcare Investors Inc"
@@ -2331,6 +2349,15 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Tyra Biosciences Inc"
+    },
+    {
+      "ticker": "ULS",
+      "event_date": "2026-11-03",
+      "event_hour": "",
+      "tier": 1,
+      "date_confirmed": false,
+      "call_datetime_utc": "2026-11-03T20:00:00+00:00",
+      "company_name": "UL Solutions Inc."
     },
     {
       "ticker": "VERA",
@@ -2520,6 +2547,15 @@
       "date_confirmed": false,
       "call_datetime_utc": "2026-11-04T21:30:00+00:00",
       "company_name": "BillionToOne, Inc."
+    },
+    {
+      "ticker": "BRKR",
+      "event_date": "2026-11-04",
+      "event_hour": "bmo",
+      "tier": 2,
+      "date_confirmed": true,
+      "call_datetime_utc": "2026-11-04T13:30:00+00:00",
+      "company_name": "Bruker Corp"
     },
     {
       "ticker": "CAI",
@@ -2727,6 +2763,15 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Haemonetics Corporation"
+    },
+    {
+      "ticker": "HRMY",
+      "event_date": "2026-11-04",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Harmony Biosciences Holdings Inc"
     },
     {
       "ticker": "IMCR",
@@ -3215,6 +3260,15 @@
       "company_name": "Vanda Pharmaceuticals Inc."
     },
     {
+      "ticker": "VRDN",
+      "event_date": "2026-11-04",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Viridian Therapeutics Inc"
+    },
+    {
       "ticker": "VTVT",
       "event_date": "2026-11-04",
       "event_hour": "",
@@ -3240,6 +3294,15 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Whitehawk Therapeutics Inc"
+    },
+    {
+      "ticker": "XRN",
+      "event_date": "2026-11-04",
+      "event_hour": "amc",
+      "tier": 2,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Chiron Real Estate Inc"
     },
     {
       "ticker": "YARW",
