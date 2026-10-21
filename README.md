@@ -207,7 +207,7 @@ Tasks are organized by **reporting quarter** and **tier** (one list per ticker p
 - `1Q26 Earnings - Core Watchlist - Positions/Researching` (Tier 1 names — Portfolio + Researching consolidated)
 - `1Q26 Earnings - HC Svcs & MedTech` (Tier 2 names)
 
-Each task includes consensus estimates, timing, and a review checklist (transcript, company docs, sell-side take, update model). Tasks auto-create in the **Work - Investing** TickTick folder (override via `TICKTICK_EARNINGS_GROUP_ID`).
+Each task includes consensus estimates, timing, and a review checklist (transcript, company docs, sell-side take, update model). Tasks auto-create in the **Earnings** TickTick folder (override via `TICKTICK_EARNINGS_GROUP_ID`).
 
 The TickTick access token expires ~every 180 days. When it expires, the system detects the 401 and logs instructions to re-authenticate.
 

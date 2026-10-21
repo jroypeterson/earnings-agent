@@ -131,7 +131,8 @@ def push(rows: list[dict], list_name: str, rep: dict, *, token: str,
              "existing": 0, "errors": 0}
     if dry_run:
         return stats
-    list_id = ticktick.find_or_create_list(token, list_name)
+    list_id = ticktick.find_or_create_list(
+        token, list_name, group_id=ticktick.WORK_INVESTING_GROUP_ID)
     if not list_id:
         stats["errors"] = len(rows)
         return stats
@@ -180,7 +181,8 @@ def reconcile(rep: dict, *, token: str, dry_run: bool = False) -> dict:
     stats = {"checked": 0, "completed": 0, "already": 0, "errors": 0, "names": []}
     covered = set(rep["covered"])
     for list_name in (PORTFOLIO_LIST, COVERAGE_LIST):
-        list_id = ticktick.find_or_create_list(token, list_name)
+        list_id = ticktick.find_or_create_list(
+            token, list_name, group_id=ticktick.WORK_INVESTING_GROUP_ID)
         if not list_id:
             continue
         for t in ticktick.list_tasks_in_project(token, list_id):
@@ -258,7 +260,8 @@ def main(argv=None) -> int:
         st = {"updated": 0, "skipped": 0, "errors": 0}
         rows = {r["ticker"]: r for r in port + cov}
         for list_name in (PORTFOLIO_LIST, COVERAGE_LIST):
-            lid = ticktick.find_or_create_list(token, list_name)
+            lid = ticktick.find_or_create_list(
+                token, list_name, group_id=ticktick.WORK_INVESTING_GROUP_ID)
             if not lid:
                 continue
             for t in ticktick.list_tasks_in_project(token, lid):

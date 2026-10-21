@@ -127,10 +127,21 @@ def _quarter_list_name(event_date: str, tier: int = 2, position: str = "") -> st
     return f"{rq} Earnings"
 
 
-def find_or_create_list(token: str, list_name: str) -> str | None:
+# TickTick folders ("project groups"). JP 2026-10-21: earnings lists live in the
+# "Earnings" folder; the IR-signup lists stay in "Work - Investing".
+EARNINGS_GROUP_ID = "6ad8d3ee3cd5b51cb6a204b6"
+WORK_INVESTING_GROUP_ID = "6887c72473800767fff51d51"
+
+
+def find_or_create_list(token: str, list_name: str,
+                        group_id: str | None = None) -> str | None:
     """
     Find an existing TickTick list by name, or create it.
     Returns the list/project ID, or None on failure.
+
+    A created list goes into `group_id`, defaulting to the Earnings folder
+    (override via TICKTICK_EARNINGS_GROUP_ID). A list that already exists is
+    returned wherever it sits -- this never moves one.
     """
     # First, try to find existing list
     try:
@@ -153,14 +164,12 @@ def find_or_create_list(token: str, list_name: str) -> str | None:
         logger.warning(f"Failed to list TickTick projects: {exc}")
 
     # List not found — try to create it
-    # Use the same groupId as existing earnings lists
-    earnings_group_id = os.environ.get(
-        "TICKTICK_EARNINGS_GROUP_ID", "6887c72473800767fff51d51"
-    )
+    if group_id is None:
+        group_id = os.environ.get("TICKTICK_EARNINGS_GROUP_ID", EARNINGS_GROUP_ID)
     try:
         payload = {"name": list_name}
-        if earnings_group_id:
-            payload["groupId"] = earnings_group_id
+        if group_id:
+            payload["groupId"] = group_id
         resp = requests.post(
             f"{TICKTICK_API_BASE}/project",
             headers=_headers(token),
