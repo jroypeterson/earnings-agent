@@ -6,6 +6,7 @@
 > well; section 2 status, and every count, version, path and line number here, is a
 > **hypothesis** until checked against the code -- and a disagreement between this file and
 > the repo is a defect worth reporting, not a documentation nit.
+> Last reconciled against the code 2026-10-20 (board #319), through `a40dd49`.
 
 This file exists so a reviewer can (1) judge how close the project is to its
 intended goal and (2) understand the key design decisions **before** giving
@@ -63,21 +64,21 @@ code and in `EARNINGS_CARD_FORMAT.md`, not in this repo's `CLAUDE.md`.)
 
 | # | Criterion | Status | Evidence |
 |---|---|---|---|
-| 1 | Universe + tiers come from Coverage Manager, not a manual list | ✅ Done | `coverage.py` loads CM `exports/` (read `utf-8-sig`, so a BOM cannot zero the join); CI sparse-checks out `jroypeterson/Coverage-Manager`; freshness check alerts at >7d staleness; `_assert_coverage_not_collapsed` hard-stops a run when a tier loses >20% AND ≥25 names |
-| 2 | Upcoming earnings → Calendar events for Tier 1+2, deduped, confirmed vs estimated labelled | ✅ Done | `calendar_sync.py` CRUD + dedup; `date_confirmed` from Finnhub `hour`; " (est.)" title suffix; 30-minute holds |
+| 1 | Universe + tiers come from Coverage Manager, not a manual list | ✅ Done | `coverage.py` loads CM `exports/` (read `utf-8-sig`, so a BOM cannot zero the join); CI checks out the now-**private** `jroypeterson/coverage-manager-private` with a read-only deploy key (`CM_DEPLOY_KEY`, board #517, `cadfee6`) in all five CM-reading workflows; freshness check alerts at >10d staleness (`COVERAGE_STALENESS_DAYS`). **Ownership for Tier 1 still comes from CM's `portfolio.json`**, not from portfolio_daily's `held.json` (board #549) — only the IR coverage audit moved (`ir_coverage.py` → vendored `held_feed.join_ownership`, `6b2b703`); see §5; `_assert_coverage_not_collapsed` hard-stops a run when a tier loses >20% AND ≥25 names |
+| 2 | Upcoming earnings → Calendar events for Tier 1+2, deduped, confirmed vs estimated labelled | ✅ Done | `calendar_sync.py` CRUD + dedup; `date_confirmed` from Finnhub `hour`; " (est.)" title suffix; 30-minute holds. Since 2026-10-18 (`db55f95`) `position_calendar_mirror.py` one-way-mirrors Portfolio/Researching/Ready to Buy/Ready to Short events onto a second calendar (`GOOGLE_POSITION_CALENDAR_ID`) after the last calendar write in daily/reconcile/post-earnings; Tier-3 Researching names are rendered from the DB. Interim: those names appear on **both** calendars |
 | 3 | Per-quarter TickTick review tasks for Tier 1+2, kept in step with the DB | ✅ Done | `ticktick.py`; two lists/quarter; cross-list dedup; reporting-quarter naming. `--reconcile-ticktick` runs with live writes on the reconcile cron and treats tasks as a **projection of DB truth**: a task is **dated only once the date is confirmed/locked/reported** (JP 2026-07-24), carries one uniform tickable review checklist, sector + Position tags, a `Reported` tag, and the one-day move in the title after the print |
 | 4 | Earnings **date** correct despite source disagreement | ✅ Mostly | Multi-layer stack: Finnhub+FMP merge → yfinance cross-check → web-search resolver for the company's own announced date (`web_resolver.py`; since board #515, 2026-10-01, a *source-verified* web date outranks vendors in the card's recommendation, precedence EDGAR > web > split-day > vendor/cadence, and open questions are re-resolved daily) → EDGAR 8-K 2.02 auto-correct (calendar-first, corroboration-gated lock) → foreign-filer **6-K fallback** (filename heuristic, same corroboration gate, never locks on a 6-K alone) → IR RSS/email → manual `--lock` (CLI, Slack reply, or the `reconcile_calendar.yml` operator lock input). **Gap:** the 6-K path is a filename heuristic, weaker than an item code |
 | 5 | Beat/miss + stock-move results posted after the print | ✅ Done | `run_check_results` + `post_earnings_check.yml` (and the daily sync); three squares per line — EPS, revenue, stock reaction — plus the guidance square of row 15; tiered/subgrouped Slack layout incl. a Biopharma subgroup and a generated marker legend; a capped card never drops a row it then marks reported; AMC stock-move deferral via `_should_defer_post()` |
-| 6 | Never silently miss a reporter | ✅ Mostly | EDGAR results backstop (`--check-missed-results`) runs a DB-candidate pass + a DB-independent Tier-1 blind sweep; unseen-ticker lane escalates in-thread on a backoff instead of re-alerting as "New"; `_run_safeguard` re-raises instead of `continue-on-error`. **Gap:** blind sweep is Tier-1 only |
+| 6 | Never silently miss a reporter | ✅ Mostly | EDGAR results backstop (`--check-missed-results`) runs a DB-candidate pass + a DB-independent Tier-1 blind sweep; unseen-ticker lane escalates in-thread on a backoff instead of re-alerting as "New", and since board #450 (`2a9a344`) first asks Finnhub **by symbol** (cap 10/run) so a name re-homed to a foreign primary listing (ARGX → ARGX.BR) is not called unseen; `_run_safeguard` re-raises instead of `continue-on-error`. **Gap:** blind sweep is Tier-1 only |
 | 7 | Never silently misdate or lose persisted state | ✅ Done, recently re-hardened | Create-first calendar moves (single chokepoint); non-destructive schema migrations (`storage.CURRENT_SCHEMA_VERSION`); `closed_reason` terminal state behind the single `OPEN_EVENT_SQL`; question state carried across a vendor date move. **The DB lives only as a CI artifact** — deterministic newest-artifact restore (`scripts/ci_restore_db_artifact.sh`) + a content-based rollback guard (`scripts/ci_db_rollback_guard.sh`). Two real rollbacks got through before these (a 28-day one in Aug 2026, a 3.6-day one 2026-09-08), and the guard's first design itself caused a 3-day outage (2026-09-11..14) — see §3.11 |
 | 8 | Loud, redundant failure delivery unattended | ✅ Done | Every workflow `if: failure()` → Slack **and** inline-SMTP email backup (no checkout dependency); critical alert-delivery failures *raise*; heartbeat renders abnormal zero counts as `partial`, not green |
 | 9 | Schedule-aware liveness monitoring | ✅ Done | `watchdog.yml` 3×/day computes each workflow's expected trigger from cadence (incl. the deliberately-silent weekday season card); auto-dispatches recovery |
 | 10 | Owner can override a wrong machine decision | ✅ Done | `--lock/--unlock/--list-locks`; Slack-native reply grammar (`--check-replies`, per-question threads); `reconcile_calendar.yml` operator lock input so a fix is not gated on JP typing in Slack. **Limit:** that input locks an event already on the date; it cannot *move* one (only the Slack reply path routes through `_apply_edgar_auto_correction`) |
-| 11 | Pre-earnings briefs / prediction accuracy tracking | 🟨 Partial | A **consensus preview** (`consensus_preview.py`, built 2026-07-12 to a StreetAccount-derived spec, not to PLAN.md Phase 5) posts daily from CI to `#street-account` + `#portfolio` in a fixed section order (`EARNINGS_CARD_FORMAT.md`). PLAN.md Phase 5 as written (8-quarter beat/miss history, T-1 brief) and Phase 6 (predictions) are unbuilt. Whether the preview retires Phase 5 is not stated anywhere |
+| 11 | Pre-earnings briefs / prediction accuracy tracking | 🟨 Partial | A **consensus preview** (`consensus_preview.py`, built 2026-07-12 to a StreetAccount-derived spec, not to PLAN.md Phase 5) posts daily from CI to `#street-account` + `#portfolio` in a fixed section order (`EARNINGS_CARD_FORMAT.md`); since 2026-10-15 (`02c880b`) a third destination, `#earnings-core-coverage`, gets every Core=Y name, each with a public page (`preview_pages.py` → `docs/preview/<TICKER>.html`, incl. the DB's reported history) linked from the TickTick task note. PLAN.md Phase 5 as written (8-quarter beat/miss history, T-1 brief) and Phase 6 (predictions) are unbuilt. Whether the preview retires Phase 5 is not stated anywhere |
 | 12 | Browsable public calendar of confirmed dates, past + future | ✅ Live | `scripts/build_calendar_page.py` → `docs/index.html`, rebuilt by `daily_earnings_check.yml` and committed back only when data changed; Pages enabled 2026-07-24 (per `PROJECTS.md`; URL returned HTTP 200, checked 2026-09-17). Estimated dates badged and hidden by default |
-| 13 | Owner's book: who has reported this season and what the stock did | ✅ Live (2026-08-09) | `season_progress.py` + `season_progress.yml` (weekday card, silent unless something is unsettled; Sunday card + forward calendar, unconditional) + `docs/season.html`. Scope = Portfolio + Researching (JP's choice). Reaction = move + sigma + vs SPY. Plus the once-per-season `#portfolio` "X reported" ping |
+| 13 | Owner's book: who has reported this season and what the stock did | ✅ Live (2026-08-09) | `season_progress.py` + `season_progress.yml` (weekday card, silent unless something is unsettled; Sunday card + forward calendar, unconditional) + `docs/season.html` (retitled "<season> Earnings Season Progress — Portfolio & Researching Companies", `cf91ac2`). Scope = Portfolio + Researching (JP's choice). A second page, `docs/core_season.html` (`d2ca3b1`), schedules every Core=Y name this season. Reaction = move + sigma + vs SPY. Plus the once-per-season `#portfolio` "X reported" ping |
 | 14 | Guidance / KPI / capital-allocation extraction from the release | 🟨 Built; consumed elsewhere | `guidance_parse.py` + `daily_summary.py` extract guidance ranges (with basis and prior-vs-new), year-ago figures, operating KPIs, puts/takes, buybacks — deterministic, no LLM. Rendered by the preview here, by the guidance square (row 15) and by `earnings_review`'s T+1 card. Verified against FIVE only (per the commit messages); `--daily-summary` itself is unscheduled |
-| 15 | FY guidance graded against what the Street expected **before** the print | ✅ Live (2026-10-01), first season unmeasured | Board #298. **Phase A:** `consensus_snapshot.py` snapshots FMP forward *annual* consensus for every open event still ahead (`--snapshot-consensus`, daily CI step; schema v14 `consensus_snapshot` table, persisted also in its own `consensus-snapshots` artifact and merged back before any results step via `--merge-consensus-snapshots`). **Phase B:** `guidance_compare.py` + `main.attach_guidance_verdicts` parse the FY range from the 8-K/6-K release (`guidance_parse`) and compare it, by level, to the snapshot taken before the release. Shown as a 4th square only when repo variable `GUIDANCE_SQUARE=1` (set 2026-10-01; rollback = delete it). Scope = Tier 1 ∪ Position lists; others render ⬛. Pipeline gaps alert to `#status-reports` after the card is delivered |
+| 15 | FY guidance graded against what the Street expected **before** the print | ✅ Live (2026-10-01), first season unmeasured | Board #298. **Phase A:** `consensus_snapshot.py` snapshots FMP forward *annual* consensus for every open event still ahead (`--snapshot-consensus`, daily CI step; schema v14 `consensus_snapshot` table, persisted also in its own `consensus-snapshots` artifact and merged back before any results step via `--merge-consensus-snapshots`). **Phase B:** `guidance_compare.py` + `main.attach_guidance_verdicts` parse the FY range from the 8-K/6-K release (`guidance_parse`; since board #654, `d11e6d1`, a generically named 6-K is graded only if its document reads as a results release) and compare it, by level, to the snapshot taken before the release. Shown as a 4th square only when repo variable `GUIDANCE_SQUARE=1` (set 2026-10-01; rollback = delete it). Scope = Tier 1 ∪ Position lists; others render ⬛. Pipeline gaps alert to `#status-reports` after the card is delivered |
 
 **Overall: the v1 goal is met and the system is live.** The date-correctness and
 no-silent-failure cores are mature and battle-tested against real incidents
@@ -88,7 +89,10 @@ link moved: the recent incidents were all in **persistence of the CI-artifact
 database**, not in date logic. Since 2026-10-01 the results card also grades FY guidance
 against pre-print consensus (row 15) — live, but with no completed season behind
 it yet. Open items are coverage-edge hardening (Tier-2 blind sweep), the guidance
-square's real-season hit rate, and the unbuilt Phase 5/6 work.
+square's real-season hit rate, the unbuilt Phase 5/6 work, and moving Tier 1
+ownership off CM's lagging `portfolio.json` onto `held.json` (§5). October 2026
+added surfaces, not new date logic: the Position calendar mirror, the
+`#earnings-core-coverage` preview with per-name public pages, and the Core season page.
 
 ## 3. Key design decisions (and why)
 
@@ -232,9 +236,19 @@ square's real-season hit rate, and the unbuilt Phase 5/6 work.
 - **EDGAR blind sweep is Tier-1 only.** A Tier-2 name that *both* Finnhub and FMP
   miss entirely would still go unreported. Extending the blind sweep to Tier 2 is
   the obvious next hardening (cost: more SEC requests/run).
-- **Foreign-filer detection is a filename heuristic.** `is_likely_earnings_6k_doc`
+- **Foreign-filer date detection is a filename heuristic.** `is_likely_earnings_6k_doc`
   keys on tokens in the 6-K's `primaryDocument`; an issuer with uninformative
-  filenames falls back to Finnhub/FMP/yfinance only.
+  filenames (TSM) falls back to Finnhub/FMP/yfinance for **dates**. The guidance
+  square alone reads the document (`looks_like_results_release`, board #654);
+  date locking deliberately does not.
+- **Tier 1 ownership lags the brokers.** `coverage.py` promotes held names from CM's
+  `portfolio.json`, which can trail a sale or buy by days (ZTS stayed "held" 14 days
+  after its sale, per `6b2b703`). Calendar, TickTick, season scope and the guidance
+  cohort all inherit that lag; moving them to `held_feed.join_ownership` (as
+  `ir_coverage.py` already does) is the open #549 work for this repo.
+- **Position calendar duplication is interim.** Position names sit on both the main
+  and the Position calendar; the end state (Position names only on the latter) is a
+  separate board row.
 - **Pre-earnings briefs (Phase 5) and prediction/accuracy tracking (Phase 6)** are
   unbuilt as PLAN.md specifies them; the consensus preview covers part of Phase 5's
   ground. Estimate-snapshot history is accumulating to support Phase 6.
@@ -289,10 +303,12 @@ square's real-season hit rate, and the unbuilt Phase 5/6 work.
     merge), `guidance_compare.py`, `main.attach_guidance_verdicts`; workflow wiring
     pinned by `test_guidance_square_ci.py`.
   - Web resolution of date disagreements: `web_resolver.py` + `notifications._xcheck_verdict`.
+  - Position calendar mirror: `position_calendar_mirror.py` (mass-delete guard,
+    instant-not-wall-clock comparison). Core preview pages: `preview_pages.py`.
 - **Tests (do not need network/Calendar/TickTick):** the `test_*.py` files at the
   repo root; `python -m pytest -q` is the authority on the count
   (`pip install -r requirements-dev.txt` first). `tests.yml` runs the same on
-  every push. Several regressions are source-scanning tests that pin query shape
+  every push. Since `05b79d8` the suite refuses live network (`conftest.py`). Several regressions are source-scanning tests that pin query shape
   or call order — read the failure message before "fixing" one.
 - **Most useful feedback:** (a) any silent-failure or silent-misdate path the
   safeguard stack still leaves open — that's the whole thesis — with **the

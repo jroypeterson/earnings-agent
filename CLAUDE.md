@@ -3,7 +3,7 @@
 ## Three systems of record
 
 - **Coverage Manager** = universe + tier assignment (source of truth for *which* names to track).
-  Consumed via sparse-checkout of `jroypeterson/Coverage-Manager/exports/` in CI, or a local Dropbox path via `COVERAGE_MANAGER_PATH`.
+  Consumed in CI via a checkout of the now-private `jroypeterson/coverage-manager-private` (read-only deploy key `CM_DEPLOY_KEY`, board #517), or a local Dropbox path via `COVERAGE_MANAGER_PATH`.
 - **Google Calendar** = published event state (source of truth for *when* it's happening).
 - **SQLite (`earnings_events.db`)** = workflow state + historical memory (reported flag, TickTick task IDs, estimate snapshots).
 
@@ -394,7 +394,7 @@ is untouched; the ping is purely additive.
 
 All crons offset off `:00` to avoid GitHub Actions top-of-hour delays/skips.
 
-All workflows sparse-checkout `jroypeterson/Coverage-Manager/exports/` (the repo is public). All DB-writing workflows share `concurrency: group: earnings-db-writer`. Every workflow has an `if: failure()` step that Slacks the run URL on non-zero exit.
+All CM-reading workflows check out `jroypeterson/coverage-manager-private` with the `CM_DEPLOY_KEY` deploy key (the repo went private, board #517). All DB-writing workflows share `concurrency: group: earnings-db-writer`. Every workflow has an `if: failure()` step that Slacks the run URL on non-zero exit.
 
 ## Required secrets (GitHub Actions)
 
