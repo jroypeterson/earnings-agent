@@ -7,17 +7,17 @@
  "ARGX": {
   "company": "argenx SE - ADR",
   "event_date": "2026-10-22",
-  "generated": "2026-10-20 15:45 UTC"
+  "generated": "2026-10-21 16:00 UTC"
  },
  "BE": {
   "company": "Bloom Energy Corporation",
   "event_date": "2026-10-22",
-  "generated": "2026-10-20 15:45 UTC"
+  "generated": "2026-10-21 16:00 UTC"
  },
  "DGX": {
   "company": "Quest Diagnostics Inc",
   "event_date": "2026-10-22",
-  "generated": "2026-10-20 15:45 UTC"
+  "generated": "2026-10-21 16:00 UTC"
  },
  "DHR": {
   "company": "Danaher Corp",
@@ -27,7 +27,7 @@
  "DOC": {
   "company": "Healthpeak Properties Inc",
   "event_date": "2026-10-21",
-  "generated": "2026-10-20 15:45 UTC"
+  "generated": "2026-10-21 16:00 UTC"
  },
  "DVA": {
   "company": "Davita Inc",
@@ -57,12 +57,12 @@
  "ITGR": {
   "company": "Integer Holdings Corporation",
   "event_date": "2026-10-22",
-  "generated": "2026-10-20 15:45 UTC"
+  "generated": "2026-10-21 16:00 UTC"
  },
  "KRC": {
   "company": "Kilroy Realty Corporation",
   "event_date": "2026-10-22",
-  "generated": "2026-10-20 15:45 UTC"
+  "generated": "2026-10-21 16:00 UTC"
  },
  "MCO": {
   "company": "Moody's Corp",
@@ -72,17 +72,17 @@
  "MEDP": {
   "company": "Medpace Holdings, Inc.",
   "event_date": "2026-10-21",
-  "generated": "2026-10-20 15:45 UTC"
+  "generated": "2026-10-21 16:00 UTC"
  },
  "MOH": {
   "company": "Molina Healthcare Inc",
   "event_date": "2026-10-21",
-  "generated": "2026-10-20 15:45 UTC"
+  "generated": "2026-10-21 16:00 UTC"
  },
  "MPT": {
   "company": "Medical Properties Trust, Inc.",
   "event_date": "2026-10-22",
-  "generated": "2026-10-20 15:45 UTC"
+  "generated": "2026-10-21 16:00 UTC"
  },
  "NFLX": {
   "company": "Netflix Inc",
@@ -102,12 +102,12 @@
  "SPOT": {
   "company": "Spotify Technology SA",
   "event_date": "2026-10-22",
-  "generated": "2026-10-20 15:45 UTC"
+  "generated": "2026-10-21 16:00 UTC"
  },
  "TFX": {
   "company": "Teleflex Incorporated",
   "event_date": "2026-10-22",
-  "generated": "2026-10-20 15:45 UTC"
+  "generated": "2026-10-21 16:00 UTC"
  },
  "TMO": {
   "company": "Thermo Fisher Scientific Inc",
@@ -117,7 +117,7 @@
  "TSLA": {
   "company": "Tesla, Inc.",
   "event_date": "2026-10-21",
-  "generated": "2026-10-20 15:45 UTC"
+  "generated": "2026-10-21 16:00 UTC"
  },
  "UCB": {
   "company": "UCB SA",
