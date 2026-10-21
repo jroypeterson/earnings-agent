@@ -167,7 +167,8 @@ def test_restamp_includes_a_row_dated_exactly_today():
 
 def test_restamp_skips_closed_rows():
     """A closed event is terminal; its tier decides nothing, and touching it
-    would churn `updated_at` on rows the reconcile reads for staleness."""
+    would churn `updated_at` for nothing. (Until 2026-10-21 the reconcile also
+    aged `updated_at` for per-row staleness; it now reads `unseen_run_count`.)"""
     from storage import restamp_tiers_from_coverage
     conn = _db_with([("APLS", "2026-10-29", 3, "delisted")])
 

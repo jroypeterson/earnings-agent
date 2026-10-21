@@ -76,6 +76,7 @@ from finnhub_client import (
 from fmp_client import fetch_fmp_earnings, merge_earnings
 from config import FMP_API_KEY
 from config import ANTHROPIC_API_KEY
+from config import UNSEEN_STALE_RUNS
 from web_resolver import WebVerdict, resolve_disagreement
 
 # Max web-search resolutions per cross-check run (cost bound; overflow rows
@@ -1616,7 +1617,7 @@ def run(
                 "WHERE ticker = ? AND event_date = ?",
                 (new_count, ticker, event_date),
             )
-            if new_count < 2:
+            if new_count < UNSEEN_STALE_RUNS:
                 continue
             # The counter above is unconditional telemetry. Whether to ALERT
             # is a separate decision that has to respect what the operator

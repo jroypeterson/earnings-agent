@@ -110,6 +110,13 @@ CHUNK_DAYS = 7          # Days per Finnhub earnings calendar query
 CHUNK_SLEEP = 1         # Seconds between Finnhub API chunks
 FINNHUB_MAX_RESULTS = 1500  # Finnhub's per-query result cap
 
+# Consecutive daily syncs an open Tier 1/2 event may be absent from the merged
+# provider fetch before it counts as "the providers stopped listing it"
+# (`events.unseen_run_count`). ONE definition, two readers: the B2 unseen alert
+# fires at it, and the TickTick reconcile stops trusting the row's date at it.
+# Kept in one place so "alerted" and "untrusted" cannot drift apart.
+UNSEEN_STALE_RUNS = 2
+
 # ---------------------------------------------------------------------------
 # Retry settings
 # ---------------------------------------------------------------------------

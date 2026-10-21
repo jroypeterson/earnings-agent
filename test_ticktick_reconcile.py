@@ -479,19 +479,23 @@ def test_reconcile_mark_reported_and_tag_is_single_write(monkeypatch):
     assert body["tags"] == ["Healthcare Services", "Reported"]
 
 
-def test_reconcile_skips_row_with_stale_updated_at(monkeypatch):
+def test_reconcile_skips_row_the_providers_stopped_listing(monkeypatch):
     """Finding 9: partial staleness — a fresh sibling passes the global guard, so
-    an individual stale unreported row must be skipped per-row, not pushed."""
+    an individual row the providers stopped listing must be skipped per-row.
+
+    Rewritten 2026-10-21: "stale" is now `unseen_run_count >= UNSEEN_STALE_RUNS`,
+    not an old `updated_at`. ABC's `updated_at` is deliberately TODAY, so on the
+    pre-fix code it was fresh and got pushed — this test would fail there."""
     monkeypatch.setenv("TICKTICK_ACCESS_TOKEN", "tok")
     conn = init_db(":memory:")
     upsert_event(conn, "ABC", "2026-07-27", "bmo", None,
                  quarter=date_to_quarter("2026-07-27"),
-                 reported=False, tier=2, company_name="ABC Inc")   # will be stale
+                 reported=False, tier=2, company_name="ABC Inc")   # unseen
     upsert_event(conn, "XYZ", "2026-07-28", "bmo", None,
                  quarter=date_to_quarter("2026-07-28"),
-                 reported=False, tier=2, company_name="XYZ Inc")   # fresh
-    conn.execute("UPDATE events SET updated_at='2026-06-05 03:00:00' WHERE ticker='ABC'")
-    conn.execute("UPDATE events SET updated_at='2026-07-22 03:00:00' WHERE ticker='XYZ'")
+                 reported=False, tier=2, company_name="XYZ Inc")   # seen
+    conn.execute("UPDATE events SET updated_at='2026-07-22 03:00:00'")
+    conn.execute("UPDATE events SET unseen_run_count=2 WHERE ticker='ABC'")
     conn.commit()
     project = {"id": "P_HC", "name": "2Q26 Earnings - HC Svcs, MedTech & Biopharma"}
     stale = "2026-08-01T09:00:00.000+0000"  # both tasks have a wrong date
@@ -584,9 +588,11 @@ def test_reconcile_locked_stale_row_does_not_abort(monkeypatch):
     upsert_event(conn, "ABC", "2026-08-20", "bmo", None,
                  quarter=date_to_quarter("2026-08-20"),
                  reported=False, tier=2, company_name="ABC Inc")
-    # Operator-pinned, and legitimately old.
-    conn.execute("UPDATE events SET date_locked=1, updated_at='2026-06-05 03:00:00' "
-                 "WHERE ticker='ABC'")
+    # Operator-pinned, legitimately old — and the B2 counter CLIMBS on a lock,
+    # because the sync never re-sees the pinned date. A predicate without the
+    # date_locked exemption skips this row; the count of 5 is what catches it.
+    conn.execute("UPDATE events SET date_locked=1, updated_at='2026-06-05 03:00:00', "
+                 "unseen_run_count=5 WHERE ticker='ABC'")
     conn.commit()
     project = {"id": "P_HC", "name": "2Q26 Earnings - HC Svcs, MedTech & Biopharma"}
     tasks = {"P_HC": [{"id": "T_ABC", "title": "ABC Q2 2026 Earnings (Aug 20 BMO)",

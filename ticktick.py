@@ -19,7 +19,7 @@ from datetime import datetime, timezone
 
 import requests
 
-from config import TIMEZONE, TIMING_LABELS
+from config import TIMEZONE, TIMING_LABELS, UNSEEN_STALE_RUNS
 from storage import date_to_quarter, get_last_sync_completed, OPEN_EVENT_SQL
 
 logger = logging.getLogger("earnings_agent")
@@ -1545,7 +1545,9 @@ def reconcile_ticktick_tasks(
         "SELECT ticker, event_date, event_hour, quarter, reported, "
         "eps_estimate, eps_actual, rev_estimate, rev_actual, tier, "
         "company_name, ticktick_task_id, updated_at, date_locked, "
-        "date_confirmed, closed_reason "
+        "date_confirmed, closed_reason, unseen_run_count "
+        # unseen_run_count is appended LAST on purpose: canonicalisation below
+        # indexes this tuple by position (r[1], r[4], r[15]).
         # This pass SEES closed rows on purpose, and `closed_reason` is
         # selected so it can act on them. Hiding them here (which is what the
         # first fix did) is worse than not filtering at all: an already-created
@@ -1611,27 +1613,44 @@ def reconcile_ticktick_tasks(
     for r in rows:
         (ticker, event_date, event_hour, quarter, reported,
          eps_est, eps_act, rev_est, rev_act, tier, company_name, db_task_id,
-         row_updated, date_locked, date_confirmed, closed_reason) = r
+         _row_updated, date_locked, date_confirmed, closed_reason,
+         unseen_count) = r
         stats["checked"] += 1
 
-
         # Per-row staleness flag. The wholesale-frozen-DB case aborts loudly
-        # above; this catches PARTIAL staleness the global MAX check can't — a
-        # single unreported row that stopped being synced (an unseen/dropped
-        # ticker) while its siblings stay fresh. Its projected date can't be
-        # trusted, so don't push it. Reported rows are exempt (their date is the
-        # real report date, correct however old the row); so are date_locked rows
-        # (operator-pinned, trusted regardless of age).
-        # NOT an immediate skip anymore (ENSG 2Q26): the task still needs its
-        # ' (est.)' annotation so the untrusted date can't look authoritative —
-        # the row is skipped for DATE pushes further below.
-        stale_row = False
-        if not reported and not date_locked and row_updated:
-            try:
-                if (today - date.fromisoformat(str(row_updated)[:10])).days > max_db_staleness_days:
-                    stale_row = True
-            except ValueError:
-                pass
+        # above; this catches PARTIAL staleness — a single unreported row the
+        # providers stopped listing (an unseen/dropped ticker, ENSG 2Q26) while
+        # its siblings stay fresh. Its date can't be trusted, so don't push it.
+        # Reported rows are exempt (their date is the real report date); so are
+        # date_locked rows (operator-pinned — and the counter CLIMBS on a lock,
+        # because the sync never re-sees the pinned date, so dropping this
+        # exemption would skip every locked row forever).
+        #
+        # CORRECTED 2026-10-21. This used to age `updated_at`, the same wrong
+        # question the global guard stopped asking on 2026-09-17: the sync
+        # skips an event the provider re-sends unchanged (main.py, `skip_count`)
+        # without writing it, so `updated_at` records when a row last CHANGED,
+        # not when it was last SEEN. A settled, company-confirmed date aged into
+        # "stale" and could never be pushed — BSX moved to Oct 28 on Aug 28,
+        # entered the 45-day window already >4 days old, and its task sat on
+        # Oct 20; 89 of 282 rows were skipped this way on 2026-10-21.
+        #
+        # `unseen_run_count` (the B2 counter) asks the right question: how many
+        # consecutive daily syncs has the merged provider fetch NOT contained
+        # this (ticker, date)? It is maintained only for open Tier 1/2 rows
+        # within 30 days, by non-dry syncs, for tickers in coverage. Beyond 30
+        # days it stays 0, so the row is treated as fresh by construction —
+        # acceptable because the sync's 90-day fetch window still lands any
+        # date CHANGE in the DB; only total provider silence goes undetected
+        # there, and the row then enters the 30-day horizon. If that gap ever
+        # bites, the upgrade path is a `last_seen_at` column stamped in both
+        # the upsert and the unchanged-skip branch.
+        # The row is skipped only for DATE pushes further below; unconfirmed
+        # rows are still stripped (freshness-independent).
+        stale_row = bool(
+            not reported and not date_locked
+            and (unseen_count or 0) >= UNSEEN_STALE_RUNS
+        )
 
         # DB-wide phantom guard. An unreported row whose quarter is ALREADY
         # reported at a different date is a Finnhub phantom forward-listing —
@@ -1861,6 +1880,12 @@ def reconcile_ticktick_tasks(
         # ensure the review sub-items (append-only, date-independent).
         if stale_row:
             stats["skipped_stale"] += 1
+            # Name it. 89 silent skips is how the updated_at version of this
+            # check hid for two months.
+            logger.info(
+                f"  {prefix}skip date push (providers stopped listing it for "
+                f"{unseen_count} syncs): {ticker} {event_date} (list='{pname}')"
+            )
             if items_missing:
                 logger.info(
                     f"  {prefix}add review sub-items: {ticker} (list='{pname}')"
