@@ -149,8 +149,8 @@ TIMING_LABELS = {
 # Position lists, not the ~345 Core=Y names (JP 2026-10-15: "call them what
 # they are").
 TIER_1_LABEL = "Positions (Portfolio, Researching, Ready to Buy/Short)"
-TIER_2_LABEL = "HC Services + MedTech + Core Biopharma"
-TRACKED_LABEL = "Positions + HC Services/MedTech/Core Biopharma"
+TIER_2_LABEL = "HC Services + MedTech + Healthcare REITs + Core Biopharma"
+TRACKED_LABEL = "Positions + HC Services/MedTech/Healthcare REITs/Core Biopharma"
 TIER_3_LABEL = "Rest of coverage"
 
 TIER_2_SECTORS = {"Healthcare Services", "MedTech"}
@@ -166,6 +166,17 @@ TIER_2_SECTORS = {"Healthcare Services", "MedTech"}
 # actually reads (JP 2026-08-06: tag biopharma "just like MedTech and
 # healthcare services").
 TIER_2_CORE_ONLY_SECTORS = {"Biopharma"}
+
+# Subsectors that join Tier 2 whatever their sector. JP 2026-10-21: "I want to
+# update Tier 2 to include healthcare REITs ... I want that to be the updated
+# general rule." Keyed on the SUBSECTOR because the sector moved: on 2026-09-02
+# Coverage Manager recategorised ARE/DOC/VTR/WELL from Healthcare Services to
+# Real Estate (GICS alignment, commit 922f9fe) and kept Subsector (JP) =
+# "Healthcare Real Estate" -- which silently dropped every healthcare REIT to
+# Tier 3 (no calendar event, no TickTick task). The subsector is the one CM
+# field that still says "healthcare REIT". 19 names on 2026-10-21, all Core=Y;
+# 3 are Portfolio (Tier 1 anyway), so 16 come back into Tier 2.
+TIER_2_SUBSECTORS = {"Healthcare Real Estate"}
 
 # ---------------------------------------------------------------------------
 # Logging

@@ -8,7 +8,7 @@ Tier 1 (Top priority — held + actively researched + trigger-ready):
     - Researching ∩ Core (active thesis work)
     - Ready to Buy + Ready to Short (trigger-ready; Core filter dropped
       because user explicitly committed by completing the thesis)
-Tier 2 (HC Services + MedTech): universe tickers in those sectors, excluding Tier 1
+Tier 2 (HC Services + MedTech + Healthcare REITs + Core Biopharma): see config.py, excluding Tier 1
 Tier 3 (Other): everything else in the universe
 
 The TickerInfo.position field carries the original Position state for any
@@ -32,7 +32,7 @@ from pathlib import Path
 from dataclasses import dataclass
 
 from config import (COVERAGE_MANAGER_PATH, TIER_2_CORE_ONLY_SECTORS,
-                    TIER_2_SECTORS, TICKERS_FILE)
+                    TIER_2_SECTORS, TIER_2_SUBSECTORS, TICKERS_FILE)
 
 logger = logging.getLogger("earnings_agent")
 
@@ -472,6 +472,10 @@ def load_coverage() -> list[TickerInfo]:
         if ticker in tier1_tickers:
             tier = 1
         elif sector in TIER_2_SECTORS:
+            tier = 2
+        elif subsector in TIER_2_SUBSECTORS:
+            # Healthcare REITs, whatever sector CM files them under. See the
+            # TIER_2_SUBSECTORS note in config.py.
             tier = 2
         elif sector in TIER_2_CORE_ONLY_SECTORS and is_core:
             # Core-gated: see the TIER_2_CORE_ONLY_SECTORS note in config.py.

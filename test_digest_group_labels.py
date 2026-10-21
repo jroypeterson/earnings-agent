@@ -40,5 +40,5 @@ def test_no_tier_jargon_or_core_watchlist_in_any_digest_rendering():
 def test_digest_names_the_groups():
     text = build_email_text(_digest())
     assert "Positions (Portfolio, Researching, Ready to Buy/Short) (1)" in text
-    assert "HC Services + MedTech + Core Biopharma (1)" in text
+    assert "HC Services + MedTech + Healthcare REITs + Core Biopharma (1)" in text
     assert "Rest of coverage (1)" in text
