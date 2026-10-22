@@ -5,7 +5,8 @@ resolves each ticker to a service tier.
 Tier 1 (Top priority — held + actively researched + trigger-ready):
     - Portfolio (any; Core filter dropped 2026-08-12 — owning it is the
       commitment, see the note on `portfolio_t1` in load_coverage)
-    - Researching ∩ Core (active thesis work)
+    - Researching (any; Core filter dropped 2026-10-22 — JP: "any researching
+      name" belongs on the earnings-review list)
     - Ready to Buy + Ready to Short (trigger-ready; Core filter dropped
       because user explicitly committed by completing the thesis)
 Tier 2 (HC Services + MedTech + Healthcare REITs + Core Biopharma): see config.py, excluding Tier 1
@@ -260,8 +261,8 @@ def _read_position_lists(exports_path: Path) -> dict[str, dict[str, dict]]:
     labels stay empty.
 
     Tier-1 promotion rules are applied by the caller, not here:
-      - Researching requires Core=Y for Tier 1; Portfolio does not
-        (gate dropped 2026-08-12 — owning it is the commitment).
+      - Portfolio and Researching are Tier 1 regardless of Core (gates
+        dropped 2026-08-12 and 2026-10-22).
       - Ready to Buy + Ready to Short are Tier 1 unconditionally
         (trigger-ready ⇒ user committed).
       - Following for Interest is NOT auto-promoted; falls through to
@@ -393,7 +394,7 @@ def load_coverage() -> list[TickerInfo]:
 
     # Tier 1 promotion rule (expanded 2026-05-11, Portfolio gate dropped 2026-08-12):
     #   - Portfolio     (any; see below)
-    #   - Researching ∩ Core
+    #   - Researching    (any; Core gate dropped 2026-10-22, see below)
     #   - Ready to Buy   (any; Core filter dropped — trigger-ready ⇒ committed)
     #   - Ready to Short (any; same reason)
     # Following for Interest is NOT auto-promoted — names land at their
@@ -420,11 +421,15 @@ def load_coverage() -> list[TickerInfo]:
     # the same 11 held-but-not-Core tickers, LLY among them. This makes the two
     # lanes agree instead of disagreeing by one editorial flag.
     #
-    # Researching KEEPS its Core gate — being interested in a name is a weaker
-    # signal than owning it, and dropping that one too would add 11 more names
-    # nobody asked for. Deliberately a separate decision.
+    # Researching dropped its Core gate on 2026-10-22, the decision deferred
+    # above. JP: "For researching I want any researching name to show up in the
+    # TickTick list for earnings review. I don't want researching or following
+    # for interest to be marked as core automatically, that is a separate view."
+    # So Core stays an editorial flag, and the Position list alone decides
+    # Tier 1. 11 Researching names were off the list (MNKD, TRUP, UBER, ...).
+    # Following for Interest is unchanged: not promoted.
     portfolio_t1 = set(portfolio.keys())
-    researching_t1 = {t for t, row in researching.items() if (row.get("Core") or "").strip().upper() == "Y"}
+    researching_t1 = set(researching.keys())
     ready_to_buy_t1 = set(ready_to_buy.keys())
     ready_to_short_t1 = set(ready_to_short.keys())
     tier1_tickers = portfolio_t1 | researching_t1 | ready_to_buy_t1 | ready_to_short_t1

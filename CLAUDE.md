@@ -40,8 +40,13 @@ python main.py --no-heartbeat      # Skip Slack success heartbeat at end of run
 
 - **Tier 1** (~58) — Coverage Manager Position lists, promoted as follows:
   - `Portfolio` — **any (Core filter dropped 2026-08-12; owning it IS the commitment)**
-  - `Researching` ∩ `Core=Y` (active thesis; this gate deliberately KEPT **for tier**, but
-    the consensus preview now reaches past it — see the `positions` note below)
+  - `Researching` — **any (Core filter dropped 2026-10-22).** JP: *"For researching I want any
+    researching name to show up in the TickTick list for earnings review. I don't want researching
+    or following for interest to be marked as core automatically, that is a separate view."* So the
+    gate moved here, in `coverage.py`, on purpose: the 11 non-Core Researching names (`2715.HK ARXS
+    KLRA MAIR MDA MICC MNKD MWH TRUP UBER XE`) now get Tier 1 everywhere — TickTick, calendar,
+    digest detail — exactly as Portfolio did on 2026-08-12. The collapse guard only fires on a
+    DROP, so the larger Tier 1 is fine.
   - `Ready to Buy` and `Ready to Short` — any (Core filter dropped 2026-05-11; trigger-ready ⇒ user committed)
   - Gets Calendar events, TickTick tasks, full digest detail.
 
@@ -50,8 +55,8 @@ python main.py --no-heartbeat      # Skip Slack success heartbeat at end of run
 - **Tier 3** (~842) — everything else. No Calendar, no TickTick. Shows in digest with YTD + timing.
 
 **The consensus preview selects by tier OR by Position (2026-09-09).** JP asked for previews on
-"held and researching and ready to buy names". Tier 1 gates `Researching` on `Core=Y`, so 10
-Researching names (`2715.HK ARXS KLRA MAIR MDA MICC MNKD MWH UBER XE`) never got one.
+"held and researching and ready to buy names". Tier 1 gated `Researching` on `Core=Y` until
+2026-10-22 (now dropped, see above), so 10 Researching names (`2715.HK ARXS KLRA MAIR MDA MICC MNKD MWH UBER XE`) never got one.
 `select_upcoming_reporters(..., positions=PREVIEW_POSITIONS)` adds a second qualifying arm that
 **only ever WIDENS** — a name qualifies by tier OR by Position list. ⚠ **Do not "simplify" this
 by relaxing the tier rule in `coverage.py` instead.** A dozen consumers read that rule (calendar

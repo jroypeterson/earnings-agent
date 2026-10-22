@@ -40,6 +40,7 @@ ROWS = [
     ("UNH",  "UnitedHealth", "Healthcare Services", "Mgd Care", "Y"),
     ("UBER", "Uber",       "Tech",      "Platforms",    ""),   # RESEARCHING, not Core
     ("XOMA", "Xoma Shell", "Biopharma", "Biotech",      ""),   # in neither list
+    ("WMT",  "Walmart",    "Consumer",  "Retail",       ""),   # FOLLOWING, not Core
 ]
 
 
@@ -69,8 +70,10 @@ def exports(tmp_path, monkeypatch):
     (ex / "researching.json").write_text(json.dumps({
         "UBER": {"position": "Researching", "Core": "", "Sector (JP)": "Tech"},
     }), encoding="utf-8")
-    for fname in ("following_for_interest.json", "ready_to_buy.json",
-                  "ready_to_short.json"):
+    (ex / "following_for_interest.json").write_text(json.dumps({
+        "WMT": {"position": "Following for Interest", "Core": "", "Sector (JP)": "Consumer"},
+    }), encoding="utf-8")
+    for fname in ("ready_to_buy.json", "ready_to_short.json"):
         (ex / fname).write_text("{}", encoding="utf-8")
 
     monkeypatch.setattr("config.COVERAGE_MANAGER_PATH", str(root), raising=False)
@@ -97,10 +100,17 @@ def test_a_held_name_outside_healthcare_is_also_tier_1(exports):
     assert _tiers(exports)["ADSK"] == 1
 
 
-def test_researching_keeps_its_core_gate(exports):
-    """Deliberately NOT changed. Being interested is weaker than owning, and
-    dropping this gate too would pull in 11 more names nobody asked for."""
-    assert _tiers(exports)["UBER"] != 1
+def test_a_researching_name_is_tier_1_even_when_not_core(exports):
+    """Gate dropped 2026-10-22. JP: "For researching I want any researching
+    name to show up in the TickTick list for earnings review." UBER is
+    Researching with Core blank and no sector path to Tier 2."""
+    assert _tiers(exports)["UBER"] == 1
+
+
+def test_following_for_interest_is_still_not_promoted(exports):
+    """Only Researching changed. A non-Core, non-healthcare Following name
+    stays at its sector tier."""
+    assert _tiers(exports)["WMT"] == 3
 
 
 def test_a_name_in_no_position_list_is_untouched(exports):
