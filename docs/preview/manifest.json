@@ -4,6 +4,11 @@
   "event_date": "2026-10-21",
   "generated": "2026-10-20 15:45 UTC"
  },
+ "ARE": {
+  "company": "Alexandria Real Estate Equities Inc",
+  "event_date": "2026-10-26",
+  "generated": "2026-10-23 15:49 UTC"
+ },
  "ARGX": {
   "company": "argenx SE - ADR",
   "event_date": "2026-10-22",
@@ -13,6 +18,11 @@
   "company": "Bloom Energy Corporation",
   "event_date": "2026-10-22",
   "generated": "2026-10-22 15:57 UTC"
+ },
+ "BRO": {
+  "company": "Brown & Brown Inc.",
+  "event_date": "2026-10-26",
+  "generated": "2026-10-23 15:49 UTC"
  },
  "DGX": {
   "company": "Quest Diagnostics Inc",
@@ -69,6 +79,11 @@
   "event_date": "2026-10-21",
   "generated": "2026-10-20 15:45 UTC"
  },
+ "MED": {
+  "company": "Medartis Holding AG",
+  "event_date": "2026-10-26",
+  "generated": "2026-10-23 15:49 UTC"
+ },
  "MEDP": {
   "company": "Medpace Holdings, Inc.",
   "event_date": "2026-10-21",
@@ -123,5 +138,10 @@
   "company": "UCB SA",
   "event_date": "2026-10-20",
   "generated": "2026-10-19 17:33 UTC"
+ },
+ "WELL": {
+  "company": "Welltower Inc",
+  "event_date": "2026-10-26",
+  "generated": "2026-10-23 15:49 UTC"
  }
 }
