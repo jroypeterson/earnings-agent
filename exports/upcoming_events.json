@@ -1,42 +1,15 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-10-24T14:36:35Z",
+  "generated_at": "2026-10-25T15:05:02Z",
   "window": {
-    "start": "2026-10-22",
-    "end": "2026-11-07"
+    "start": "2026-10-23",
+    "end": "2026-11-08"
   },
   "counts": {
-    "events": 514
+    "events": 518
   },
   "events": [
-    {
-      "ticker": "ARGX",
-      "event_date": "2026-10-22",
-      "event_hour": "",
-      "tier": 2,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "argenx SE - ADR"
-    },
-    {
-      "ticker": "ITGR",
-      "event_date": "2026-10-22",
-      "event_hour": "",
-      "tier": 2,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Integer Holdings Corporation"
-    },
-    {
-      "ticker": "TVTX",
-      "event_date": "2026-10-22",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Travere Therapeutics Inc"
-    },
     {
       "ticker": "ABOS",
       "event_date": "2026-10-26",
@@ -243,6 +216,15 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Novartis AG"
+    },
+    {
+      "ticker": "PHAR",
+      "event_date": "2026-10-27",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Pharming Group N V ADS each representing 10 Ord Shs"
     },
     {
       "ticker": "RGEN",
@@ -2063,6 +2045,15 @@
       "company_name": "NextCure, Inc."
     },
     {
+      "ticker": "OCS",
+      "event_date": "2026-11-03",
+      "event_hour": "bmo",
+      "tier": 3,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Oculis Holding AG"
+    },
+    {
       "ticker": "OHI",
       "event_date": "2026-11-03",
       "event_hour": "",
@@ -2268,15 +2259,6 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Aurora Cannabis Inc."
-    },
-    {
-      "ticker": "ACH",
-      "event_date": "2026-11-04",
-      "event_hour": "bmo",
-      "tier": 2,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Accendra Health (fma Owens and Minor)"
     },
     {
       "ticker": "ACHC",
@@ -3044,6 +3026,15 @@
       "company_name": "Ultragenyx Pharmaceutical Inc"
     },
     {
+      "ticker": "RCUS",
+      "event_date": "2026-11-04",
+      "event_hour": "amc",
+      "tier": 3,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Arcus Biosciences, Inc."
+    },
+    {
       "ticker": "REPL",
       "event_date": "2026-11-04",
       "event_hour": "",
@@ -3150,15 +3141,6 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Alpha Teknova, Inc."
-    },
-    {
-      "ticker": "TMDX",
-      "event_date": "2026-11-04",
-      "event_hour": "",
-      "tier": 2,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "TransMedics Group Inc"
     },
     {
       "ticker": "TPL",
@@ -3323,6 +3305,15 @@
       "company_name": "Applied Optoelectronics, Inc."
     },
     {
+      "ticker": "ACH",
+      "event_date": "2026-11-05",
+      "event_hour": "bmo",
+      "tier": 2,
+      "date_confirmed": true,
+      "call_datetime_utc": "2026-11-05T22:00:00+00:00",
+      "company_name": "Accendra Health (fma Owens and Minor)"
+    },
+    {
       "ticker": "ACHV",
       "event_date": "2026-11-05",
       "event_hour": "",
@@ -3460,11 +3451,20 @@
     {
       "ticker": "BL",
       "event_date": "2026-11-05",
-      "event_hour": "",
+      "event_hour": "amc",
       "tier": 3,
-      "date_confirmed": false,
+      "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "Blackline Inc"
+    },
+    {
+      "ticker": "BLND",
+      "event_date": "2026-11-05",
+      "event_hour": "amc",
+      "tier": 3,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Blend Labs Inc"
     },
     {
       "ticker": "BRNS",
@@ -3566,6 +3566,15 @@
       "company_name": "Castle Biosciences, Inc."
     },
     {
+      "ticker": "CTRE",
+      "event_date": "2026-11-05",
+      "event_hour": "",
+      "tier": 2,
+      "date_confirmed": false,
+      "call_datetime_utc": "2026-11-06T16:00:00+00:00",
+      "company_name": "Caretrust REIT Inc"
+    },
+    {
       "ticker": "DBX",
       "event_date": "2026-11-05",
       "event_hour": "amc",
@@ -3618,6 +3627,15 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Doximity, Inc."
+    },
+    {
+      "ticker": "ELUT",
+      "event_date": "2026-11-05",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Elutia Inc"
     },
     {
       "ticker": "ENOV",
@@ -3789,6 +3807,15 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Halozyme Therapeutics, Inc."
+    },
+    {
+      "ticker": "HCAT",
+      "event_date": "2026-11-05",
+      "event_hour": "",
+      "tier": 2,
+      "date_confirmed": false,
+      "call_datetime_utc": "2026-11-05T22:00:00+00:00",
+      "company_name": "Health Catalyst Inc"
     },
     {
       "ticker": "IBRX",
@@ -4052,15 +4079,6 @@
       "company_name": "Novavax Inc"
     },
     {
-      "ticker": "OCS",
-      "event_date": "2026-11-05",
-      "event_hour": "bmo",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Oculis Holding AG"
-    },
-    {
       "ticker": "OGEN",
       "event_date": "2026-11-05",
       "event_hour": "",
@@ -4133,15 +4151,6 @@
       "company_name": "Paylocity Holding Corp"
     },
     {
-      "ticker": "PHAR",
-      "event_date": "2026-11-05",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Pharming Group N V ADS each representing 10 Ord Shs"
-    },
-    {
       "ticker": "PLRX",
       "event_date": "2026-11-05",
       "event_hour": "",
@@ -4149,6 +4158,15 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Pliant Therapeutics Inc"
+    },
+    {
+      "ticker": "PLSE",
+      "event_date": "2026-11-05",
+      "event_hour": "",
+      "tier": 2,
+      "date_confirmed": false,
+      "call_datetime_utc": "2026-11-05T21:30:00+00:00",
+      "company_name": "Pulse Biosciences Inc"
     },
     {
       "ticker": "PMVP",
@@ -4185,6 +4203,15 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Pulmatrix Inc"
+    },
+    {
+      "ticker": "QNT",
+      "event_date": "2026-11-05",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Quantinuum Inc."
     },
     {
       "ticker": "QSI",
@@ -4401,6 +4428,15 @@
       "date_confirmed": true,
       "call_datetime_utc": "2026-11-05T13:00:00+00:00",
       "company_name": "Teleflex Incorporated"
+    },
+    {
+      "ticker": "TMDX",
+      "event_date": "2026-11-05",
+      "event_hour": "",
+      "tier": 2,
+      "date_confirmed": false,
+      "call_datetime_utc": "2026-11-05T21:30:00+00:00",
+      "company_name": "TransMedics Group Inc"
     },
     {
       "ticker": "TNDM",
