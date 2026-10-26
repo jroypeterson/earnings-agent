@@ -312,17 +312,17 @@
  "LLY": {
   "company": "Eli Lilly And Co",
   "event_date": "2026-10-29",
-  "generated": "2026-10-26 17:28 UTC"
+  "generated": "2026-10-26 23:17 UTC"
  },
  "LNTH": {
   "company": "Lantheus Holdings, Inc.",
   "event_date": "2026-10-29",
-  "generated": "2026-10-26 17:28 UTC"
+  "generated": "2026-10-26 23:17 UTC"
  },
  "MA": {
   "company": "Mastercard Inc",
   "event_date": "2026-10-29",
-  "generated": "2026-10-26 17:28 UTC"
+  "generated": "2026-10-26 23:17 UTC"
  },
  "MCO": {
   "company": "Moody's Corp",
@@ -332,7 +332,7 @@
  "MD": {
   "company": "Pediatrix Medical Group Inc",
   "event_date": "2026-10-29",
-  "generated": "2026-10-26 17:28 UTC"
+  "generated": "2026-10-26 23:17 UTC"
  },
  "MED": {
   "company": "Medartis Holding AG",
@@ -347,7 +347,7 @@
  "MMSI": {
   "company": "Merit Medical Systems, Inc.",
   "event_date": "2026-10-29",
-  "generated": "2026-10-26 17:28 UTC"
+  "generated": "2026-10-26 23:17 UTC"
  },
  "MOH": {
   "company": "Molina Healthcare Inc",
@@ -357,12 +357,12 @@
  "MPT": {
   "company": "Medical Properties Trust, Inc.",
   "event_date": "2026-10-29",
-  "generated": "2026-10-26 17:28 UTC"
+  "generated": "2026-10-26 23:17 UTC"
  },
  "MRK": {
   "company": "Merck & Co Inc",
   "event_date": "2026-10-29",
-  "generated": "2026-10-26 17:28 UTC"
+  "generated": "2026-10-26 23:17 UTC"
  },
  "MSFT": {
   "company": "Microsoft Corporation",
@@ -382,7 +382,7 @@
  "NVCR": {
   "company": "Novocure Limited",
   "event_date": "2026-10-29",
-  "generated": "2026-10-26 17:28 UTC"
+  "generated": "2026-10-26 23:17 UTC"
  },
  "NVS": {
   "company": "Novartis AG",
@@ -392,7 +392,7 @@
  "OMCL": {
   "company": "Omnicell, Inc.",
   "event_date": "2026-10-29",
-  "generated": "2026-10-26 17:28 UTC"
+  "generated": "2026-10-26 23:17 UTC"
  },
  "OSSFF": {
   "company": "Embla Medical hf.",
@@ -407,7 +407,7 @@
  "RMD": {
   "company": "Resmed Inc",
   "event_date": "2026-10-29",
-  "generated": "2026-10-26 17:28 UTC"
+  "generated": "2026-10-26 23:17 UTC"
  },
  "ROG": {
   "company": "Rogers Corporation",
@@ -437,12 +437,12 @@
  "SYK": {
   "company": "Stryker Corp",
   "event_date": "2026-10-29",
-  "generated": "2026-10-26 17:28 UTC"
+  "generated": "2026-10-26 23:17 UTC"
  },
  "TAK": {
   "company": "Takeda Pharmaceutical Co Ltd",
   "event_date": "2026-10-29",
-  "generated": "2026-10-26 17:28 UTC"
+  "generated": "2026-10-26 23:17 UTC"
  },
  "TALK": {
   "company": "Talkspace Inc",
@@ -462,7 +462,7 @@
  "THC": {
   "company": "Tenet Healthcare Corp",
   "event_date": "2026-10-29",
-  "generated": "2026-10-26 17:28 UTC"
+  "generated": "2026-10-26 23:17 UTC"
  },
  "TMO": {
   "company": "Thermo Fisher Scientific Inc",
@@ -497,7 +497,7 @@
  "VLTO": {
   "company": "Veralto Corp",
   "event_date": "2026-10-29",
-  "generated": "2026-10-26 17:28 UTC"
+  "generated": "2026-10-26 23:17 UTC"
  },
  "VTR": {
   "company": "Ventas Inc",
@@ -512,6 +512,6 @@
  "WST": {
   "company": "West Pharmaceutical Services Inc",
   "event_date": "2026-10-29",
-  "generated": "2026-10-26 17:28 UTC"
+  "generated": "2026-10-26 23:17 UTC"
  }
 }
