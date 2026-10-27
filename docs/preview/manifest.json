@@ -1,4 +1,9 @@
 {
+ "ABBV": {
+  "company": "AbbVie Common Stock",
+  "event_date": "2026-10-30",
+  "generated": "2026-10-27 16:44 UTC"
+ },
  "ABT": {
   "company": "Abbott Laboratories",
   "event_date": "2026-10-21",
@@ -7,22 +12,22 @@
  "ALGN": {
   "company": "Align Technology, Inc.",
   "event_date": "2026-10-28",
-  "generated": "2026-10-26 17:28 UTC"
+  "generated": "2026-10-27 16:44 UTC"
  },
  "ALHC": {
   "company": "Alignment Healthcare Inc",
   "event_date": "2026-10-29",
-  "generated": "2026-10-26 17:28 UTC"
+  "generated": "2026-10-27 16:44 UTC"
  },
  "ALNY": {
   "company": "Alnylam Pharmaceuticals, Inc.",
   "event_date": "2026-10-29",
-  "generated": "2026-10-26 17:28 UTC"
+  "generated": "2026-10-27 16:44 UTC"
  },
  "AMZN": {
   "company": "Amazon.com, Inc.",
   "event_date": "2026-10-29",
-  "generated": "2026-10-26 17:28 UTC"
+  "generated": "2026-10-27 16:44 UTC"
  },
  "ARE": {
   "company": "Alexandria Real Estate Equities Inc",
@@ -37,42 +42,47 @@
  "ARXS": {
   "company": "Arxis, Inc.",
   "event_date": "2026-10-28",
-  "generated": "2026-10-26 17:28 UTC"
+  "generated": "2026-10-27 16:44 UTC"
  },
  "ASX": {
   "company": "ASE Technology Holding Co., Ltd.",
   "event_date": "2026-10-29",
-  "generated": "2026-10-26 17:28 UTC"
+  "generated": "2026-10-27 16:44 UTC"
  },
  "ATEC": {
   "company": "Alphatec Holdings, Inc.",
   "event_date": "2026-10-29",
-  "generated": "2026-10-26 17:28 UTC"
+  "generated": "2026-10-27 16:44 UTC"
  },
  "ATR": {
   "company": "Aptargroup Inc",
   "event_date": "2026-10-29",
-  "generated": "2026-10-26 17:28 UTC"
+  "generated": "2026-10-27 16:44 UTC"
  },
  "AVTR": {
   "company": "Avantor, Inc.",
   "event_date": "2026-10-28",
-  "generated": "2026-10-26 17:28 UTC"
+  "generated": "2026-10-27 16:44 UTC"
+ },
+ "AZN": {
+  "company": "AstraZeneca PLC",
+  "event_date": "2026-10-30",
+  "generated": "2026-10-27 16:44 UTC"
  },
  "BAX": {
   "company": "Baxter International Inc.",
   "event_date": "2026-10-29",
-  "generated": "2026-10-26 17:28 UTC"
+  "generated": "2026-10-27 16:44 UTC"
  },
  "BBIO": {
   "company": "BridgeBio Pharma Inc",
   "event_date": "2026-10-29",
-  "generated": "2026-10-26 17:28 UTC"
+  "generated": "2026-10-27 16:44 UTC"
  },
  "BBNX": {
   "company": "Beta Bionics, Inc.",
   "event_date": "2026-10-27",
-  "generated": "2026-10-26 17:28 UTC"
+  "generated": "2026-10-27 16:44 UTC"
  },
  "BE": {
   "company": "Bloom Energy Corporation",
@@ -82,22 +92,22 @@
  "BFLY": {
   "company": "Butterfly Network, Inc.",
   "event_date": "2026-10-29",
-  "generated": "2026-10-26 17:28 UTC"
+  "generated": "2026-10-27 16:44 UTC"
  },
  "BIIB": {
   "company": "Biogen Inc",
   "event_date": "2026-10-28",
-  "generated": "2026-10-26 17:28 UTC"
+  "generated": "2026-10-27 16:44 UTC"
  },
  "BLCO": {
   "company": "Bausch + Lomb Corporation",
   "event_date": "2026-10-28",
-  "generated": "2026-10-26 17:28 UTC"
+  "generated": "2026-10-27 16:44 UTC"
  },
  "BMY": {
   "company": "Bristol-Myers Squibb Company",
   "event_date": "2026-10-29",
-  "generated": "2026-10-26 17:28 UTC"
+  "generated": "2026-10-27 16:44 UTC"
  },
  "BRO": {
   "company": "Brown & Brown Inc.",
@@ -107,47 +117,57 @@
  "BSX": {
   "company": "Boston Scientific Corp",
   "event_date": "2026-10-28",
-  "generated": "2026-10-26 17:28 UTC"
+  "generated": "2026-10-27 16:44 UTC"
+ },
+ "BTSG": {
+  "company": "Brightspring Health Services Inc",
+  "event_date": "2026-10-30",
+  "generated": "2026-10-27 16:44 UTC"
  },
  "CHE": {
   "company": "Chemed Corp",
   "event_date": "2026-10-27",
-  "generated": "2026-10-26 17:28 UTC"
+  "generated": "2026-10-27 16:44 UTC"
  },
  "CNC": {
   "company": "Centene Corp",
   "event_date": "2026-10-27",
   "generated": "2026-10-26 17:28 UTC"
  },
+ "CNI": {
+  "company": "Canadian National Railway Co",
+  "event_date": "2026-10-30",
+  "generated": "2026-10-27 16:44 UTC"
+ },
  "CNMD": {
   "company": "CONMED Corporation",
   "event_date": "2026-10-28",
-  "generated": "2026-10-26 17:28 UTC"
+  "generated": "2026-10-27 16:44 UTC"
  },
  "COIN": {
   "company": "Coinbase Global Inc",
   "event_date": "2026-10-29",
-  "generated": "2026-10-26 17:28 UTC"
+  "generated": "2026-10-27 16:44 UTC"
  },
  "CP": {
   "company": "Canadian Pacific Kansas City Ltd",
   "event_date": "2026-10-28",
-  "generated": "2026-10-26 17:28 UTC"
+  "generated": "2026-10-27 16:44 UTC"
  },
  "CROX": {
   "company": "Crocs Inc",
   "event_date": "2026-10-29",
-  "generated": "2026-10-26 17:28 UTC"
+  "generated": "2026-10-27 16:44 UTC"
  },
  "CSL": {
   "company": "CSL Ltd",
   "event_date": "2026-10-28",
-  "generated": "2026-10-26 17:28 UTC"
+  "generated": "2026-10-27 16:44 UTC"
  },
  "CYH": {
   "company": "Community Health Systems Inc",
   "event_date": "2026-10-28",
-  "generated": "2026-10-26 17:28 UTC"
+  "generated": "2026-10-27 16:44 UTC"
  },
  "DGX": {
   "company": "Quest Diagnostics Inc",
@@ -167,17 +187,17 @@
  "DVA": {
   "company": "Davita Inc",
   "event_date": "2026-10-29",
-  "generated": "2026-10-26 17:28 UTC"
+  "generated": "2026-10-27 16:44 UTC"
  },
  "DXCM": {
   "company": "DexCom, Inc.",
   "event_date": "2026-10-29",
-  "generated": "2026-10-26 17:28 UTC"
+  "generated": "2026-10-27 16:44 UTC"
  },
  "EHC": {
   "company": "Encompass Health Corp",
   "event_date": "2026-10-28",
-  "generated": "2026-10-26 17:28 UTC"
+  "generated": "2026-10-27 16:44 UTC"
  },
  "ELV": {
   "company": "Elevance Health Inc",
@@ -187,37 +207,37 @@
  "ENSG": {
   "company": "Ensign Group Inc",
   "event_date": "2026-10-27",
-  "generated": "2026-10-26 17:28 UTC"
+  "generated": "2026-10-27 16:44 UTC"
  },
  "ESTA": {
   "company": "Establishment Labs Holdings Inc.",
   "event_date": "2026-10-29",
-  "generated": "2026-10-26 17:28 UTC"
+  "generated": "2026-10-27 16:44 UTC"
  },
  "FTRE": {
   "company": "Fortrea Holdings Inc",
   "event_date": "2026-10-29",
-  "generated": "2026-10-26 17:28 UTC"
+  "generated": "2026-10-27 16:44 UTC"
  },
  "GEHC": {
   "company": "GE HealthCare Technologies Inc.",
   "event_date": "2026-10-28",
-  "generated": "2026-10-26 17:28 UTC"
+  "generated": "2026-10-27 16:44 UTC"
  },
  "GILD": {
   "company": "Gilead Sciences Inc",
   "event_date": "2026-10-29",
-  "generated": "2026-10-26 17:28 UTC"
+  "generated": "2026-10-27 16:44 UTC"
  },
  "GKOS": {
   "company": "Glaukos Corporation",
   "event_date": "2026-10-28",
-  "generated": "2026-10-26 17:28 UTC"
+  "generated": "2026-10-27 16:44 UTC"
  },
  "GSK": {
   "company": "GSK plc",
   "event_date": "2026-10-28",
-  "generated": "2026-10-26 17:28 UTC"
+  "generated": "2026-10-27 16:44 UTC"
  },
  "HCA": {
   "company": "HCA Healthcare Inc",
@@ -232,12 +252,12 @@
  "HOOD": {
   "company": "Robinhood Markets Inc",
   "event_date": "2026-10-27",
-  "generated": "2026-10-26 17:28 UTC"
+  "generated": "2026-10-27 16:44 UTC"
  },
  "HR": {
   "company": "Healthcare Realty Trust Inc",
   "event_date": "2026-10-29",
-  "generated": "2026-10-26 17:28 UTC"
+  "generated": "2026-10-27 16:44 UTC"
  },
  "IART": {
   "company": "Integra LifeSciences Holdings Corporation",
@@ -247,27 +267,27 @@
  "ICLR": {
   "company": "ICON PLC",
   "event_date": "2026-10-27",
-  "generated": "2026-10-26 17:28 UTC"
+  "generated": "2026-10-27 16:44 UTC"
  },
  "ILMN": {
   "company": "Illumina, Inc.",
   "event_date": "2026-10-29",
-  "generated": "2026-10-26 17:28 UTC"
+  "generated": "2026-10-27 16:44 UTC"
  },
  "INCY": {
   "company": "Incyte Corp",
   "event_date": "2026-10-29",
-  "generated": "2026-10-26 17:28 UTC"
+  "generated": "2026-10-27 16:44 UTC"
  },
  "INSM": {
   "company": "Insmed Inc",
   "event_date": "2026-10-29",
-  "generated": "2026-10-26 17:28 UTC"
+  "generated": "2026-10-27 16:44 UTC"
  },
  "IONS": {
   "company": "Ionis Pharmaceuticals Inc",
   "event_date": "2026-10-27",
-  "generated": "2026-10-26 17:28 UTC"
+  "generated": "2026-10-27 16:44 UTC"
  },
  "IQV": {
   "company": "IQVIA Holdings Inc.",
@@ -287,7 +307,7 @@
  "KIDS": {
   "company": "OrthoPediatrics Corp.",
   "event_date": "2026-10-27",
-  "generated": "2026-10-26 17:28 UTC"
+  "generated": "2026-10-27 16:44 UTC"
  },
  "KRC": {
   "company": "Kilroy Realty Corporation",
@@ -297,32 +317,32 @@
  "KYMR": {
   "company": "Kymera Therapeutics Inc",
   "event_date": "2026-10-29",
-  "generated": "2026-10-26 17:28 UTC"
+  "generated": "2026-10-27 16:44 UTC"
  },
  "LH": {
   "company": "Labcorp Holdings Inc",
   "event_date": "2026-10-28",
-  "generated": "2026-10-26 17:28 UTC"
+  "generated": "2026-10-27 16:44 UTC"
  },
  "LIN": {
   "company": "Linde plc",
   "event_date": "2026-10-29",
-  "generated": "2026-10-26 17:28 UTC"
+  "generated": "2026-10-27 16:44 UTC"
  },
  "LLY": {
   "company": "Eli Lilly And Co",
   "event_date": "2026-10-29",
-  "generated": "2026-10-26 23:17 UTC"
+  "generated": "2026-10-27 16:44 UTC"
  },
  "LNTH": {
   "company": "Lantheus Holdings, Inc.",
   "event_date": "2026-10-29",
-  "generated": "2026-10-26 23:17 UTC"
+  "generated": "2026-10-27 16:44 UTC"
  },
  "MA": {
   "company": "Mastercard Inc",
   "event_date": "2026-10-29",
-  "generated": "2026-10-26 23:17 UTC"
+  "generated": "2026-10-27 16:44 UTC"
  },
  "MCO": {
   "company": "Moody's Corp",
@@ -332,7 +352,7 @@
  "MD": {
   "company": "Pediatrix Medical Group Inc",
   "event_date": "2026-10-29",
-  "generated": "2026-10-26 23:17 UTC"
+  "generated": "2026-10-27 16:44 UTC"
  },
  "MED": {
   "company": "Medartis Holding AG",
@@ -347,7 +367,7 @@
  "MMSI": {
   "company": "Merit Medical Systems, Inc.",
   "event_date": "2026-10-29",
-  "generated": "2026-10-26 23:17 UTC"
+  "generated": "2026-10-27 16:44 UTC"
  },
  "MOH": {
   "company": "Molina Healthcare Inc",
@@ -357,22 +377,22 @@
  "MPT": {
   "company": "Medical Properties Trust, Inc.",
   "event_date": "2026-10-29",
-  "generated": "2026-10-26 23:17 UTC"
+  "generated": "2026-10-27 16:44 UTC"
  },
  "MRK": {
   "company": "Merck & Co Inc",
   "event_date": "2026-10-29",
-  "generated": "2026-10-26 23:17 UTC"
+  "generated": "2026-10-27 16:44 UTC"
  },
  "MSFT": {
   "company": "Microsoft Corporation",
   "event_date": "2026-10-28",
-  "generated": "2026-10-26 17:28 UTC"
+  "generated": "2026-10-27 16:44 UTC"
  },
  "NEO": {
   "company": "NeoGenomics, Inc.",
   "event_date": "2026-10-28",
-  "generated": "2026-10-26 17:28 UTC"
+  "generated": "2026-10-27 16:44 UTC"
  },
  "NFLX": {
   "company": "Netflix Inc",
@@ -382,7 +402,7 @@
  "NVCR": {
   "company": "Novocure Limited",
   "event_date": "2026-10-29",
-  "generated": "2026-10-26 23:17 UTC"
+  "generated": "2026-10-27 16:44 UTC"
  },
  "NVS": {
   "company": "Novartis AG",
@@ -392,12 +412,17 @@
  "OMCL": {
   "company": "Omnicell, Inc.",
   "event_date": "2026-10-29",
-  "generated": "2026-10-26 23:17 UTC"
+  "generated": "2026-10-27 16:44 UTC"
  },
  "OSSFF": {
   "company": "Embla Medical hf.",
   "event_date": "2026-10-20",
   "generated": "2026-10-20 15:45 UTC"
+ },
+ "REGN": {
+  "company": "Regeneron Pharmaceuticals Inc",
+  "event_date": "2026-10-30",
+  "generated": "2026-10-27 16:44 UTC"
  },
  "RGEN": {
   "company": "Repligen Corporation",
@@ -407,17 +432,22 @@
  "RMD": {
   "company": "Resmed Inc",
   "event_date": "2026-10-29",
-  "generated": "2026-10-26 23:17 UTC"
+  "generated": "2026-10-27 16:44 UTC"
  },
  "ROG": {
   "company": "Rogers Corporation",
   "event_date": "2026-10-27",
-  "generated": "2026-10-26 17:28 UTC"
+  "generated": "2026-10-27 16:44 UTC"
  },
  "SCI": {
   "company": "Service Corporation International",
   "event_date": "2026-10-28",
-  "generated": "2026-10-26 17:28 UTC"
+  "generated": "2026-10-27 16:44 UTC"
+ },
+ "SNY": {
+  "company": "Sanofi SA",
+  "event_date": "2026-10-30",
+  "generated": "2026-10-27 16:44 UTC"
  },
  "SPCX": {
   "company": "Space Exploration Technologies Corp.",
@@ -437,22 +467,22 @@
  "SYK": {
   "company": "Stryker Corp",
   "event_date": "2026-10-29",
-  "generated": "2026-10-26 23:17 UTC"
+  "generated": "2026-10-27 16:44 UTC"
  },
  "TAK": {
   "company": "Takeda Pharmaceutical Co Ltd",
   "event_date": "2026-10-29",
-  "generated": "2026-10-26 23:17 UTC"
+  "generated": "2026-10-27 16:44 UTC"
  },
  "TALK": {
   "company": "Talkspace Inc",
   "event_date": "2026-10-28",
-  "generated": "2026-10-26 17:28 UTC"
+  "generated": "2026-10-27 16:44 UTC"
  },
  "TDOC": {
   "company": "Teladoc Health Inc",
   "event_date": "2026-10-28",
-  "generated": "2026-10-26 17:28 UTC"
+  "generated": "2026-10-27 16:44 UTC"
  },
  "TFX": {
   "company": "Teleflex Incorporated",
@@ -462,7 +492,7 @@
  "THC": {
   "company": "Tenet Healthcare Corp",
   "event_date": "2026-10-29",
-  "generated": "2026-10-26 23:17 UTC"
+  "generated": "2026-10-27 16:44 UTC"
  },
  "TMO": {
   "company": "Thermo Fisher Scientific Inc",
@@ -482,7 +512,7 @@
  "UHS": {
   "company": "Universal Health Services Inc",
   "event_date": "2026-10-27",
-  "generated": "2026-10-26 17:28 UTC"
+  "generated": "2026-10-27 16:44 UTC"
  },
  "UPS": {
   "company": "United Parcel Service Inc",
@@ -492,17 +522,17 @@
  "V": {
   "company": "Visa Inc",
   "event_date": "2026-10-27",
-  "generated": "2026-10-26 17:28 UTC"
+  "generated": "2026-10-27 16:44 UTC"
  },
  "VLTO": {
   "company": "Veralto Corp",
   "event_date": "2026-10-29",
-  "generated": "2026-10-26 23:17 UTC"
+  "generated": "2026-10-27 16:44 UTC"
  },
  "VTR": {
   "company": "Ventas Inc",
   "event_date": "2026-10-27",
-  "generated": "2026-10-26 17:28 UTC"
+  "generated": "2026-10-27 16:44 UTC"
  },
  "WELL": {
   "company": "Welltower Inc",
@@ -512,6 +542,6 @@
  "WST": {
   "company": "West Pharmaceutical Services Inc",
   "event_date": "2026-10-29",
-  "generated": "2026-10-26 23:17 UTC"
+  "generated": "2026-10-27 16:44 UTC"
  }
 }
