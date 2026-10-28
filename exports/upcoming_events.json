@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-10-28T17:19:37Z",
+  "generated_at": "2026-10-28T23:26:20Z",
   "window": {
     "start": "2026-10-26",
     "end": "2026-11-11"
   },
   "counts": {
-    "events": 724
+    "events": 719
   },
   "events": [
     {
@@ -47,15 +47,6 @@
       "company_name": "Arxis, Inc."
     },
     {
-      "ticker": "BCTX",
-      "event_date": "2026-10-28",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "BriaCell Therapeutics Corp."
-    },
-    {
       "ticker": "BCYC",
       "event_date": "2026-10-28",
       "event_hour": "",
@@ -63,15 +54,6 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Bicycle Therapeutics PLC"
-    },
-    {
-      "ticker": "BHC",
-      "event_date": "2026-10-28",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Bausch Health Companies Inc"
     },
     {
       "ticker": "CNMD",
@@ -90,15 +72,6 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Cerenome, Inc."
-    },
-    {
-      "ticker": "CP",
-      "event_date": "2026-10-28",
-      "event_hour": "",
-      "tier": 1,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Canadian Pacific Kansas City Ltd"
     },
     {
       "ticker": "CSL",
@@ -126,15 +99,6 @@
       "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "Community Health Systems Inc"
-    },
-    {
-      "ticker": "DBVT",
-      "event_date": "2026-10-28",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "DBV Technologies SA - ADR"
     },
     {
       "ticker": "EHC",
@@ -189,15 +153,6 @@
       "date_confirmed": true,
       "call_datetime_utc": "2026-10-28T20:00:00+00:00",
       "company_name": "Glaukos Corporation"
-    },
-    {
-      "ticker": "GOOG",
-      "event_date": "2026-10-28",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Alphabet Inc Class C"
     },
     {
       "ticker": "HEPA",
