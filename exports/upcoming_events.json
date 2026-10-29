@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-10-29T17:33:26Z",
+  "generated_at": "2026-10-29T23:30:23Z",
   "window": {
     "start": "2026-10-27",
     "end": "2026-11-12"
   },
   "counts": {
-    "events": 747
+    "events": 743
   },
   "events": [
     {
@@ -164,15 +164,6 @@
       "company_name": "Davita Inc"
     },
     {
-      "ticker": "DXCM",
-      "event_date": "2026-10-29",
-      "event_hour": "",
-      "tier": 2,
-      "date_confirmed": false,
-      "call_datetime_utc": "2026-10-29T20:00:00+00:00",
-      "company_name": "DexCom, Inc."
-    },
-    {
       "ticker": "DYN",
       "event_date": "2026-10-29",
       "event_hour": "",
@@ -220,9 +211,9 @@
     {
       "ticker": "GILD",
       "event_date": "2026-10-29",
-      "event_hour": "",
+      "event_hour": "amc",
       "tier": 2,
-      "date_confirmed": false,
+      "date_confirmed": true,
       "call_datetime_utc": "2026-10-29T20:00:00+00:00",
       "company_name": "Gilead Sciences Inc"
     },
@@ -792,15 +783,6 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Seaport Therapeutics, Inc. Common Stock"
-    },
-    {
-      "ticker": "STOK",
-      "event_date": "2026-11-02",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Stoke Therapeutics Inc"
     },
     {
       "ticker": "TCMD",
@@ -3026,15 +3008,6 @@
       "company_name": "Immix Biopharma Inc"
     },
     {
-      "ticker": "IMRX",
-      "event_date": "2026-11-05",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Immuneering Corp"
-    },
-    {
       "ticker": "INTS",
       "event_date": "2026-11-05",
       "event_hour": "",
@@ -3204,6 +3177,15 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "MDA Space Ltd"
+    },
+    {
+      "ticker": "MNKD",
+      "event_date": "2026-11-05",
+      "event_hour": "amc",
+      "tier": 1,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "MannKind Corp"
     },
     {
       "ticker": "MOBI",
@@ -4835,6 +4817,15 @@
       "company_name": "Legend Biotech Corp"
     },
     {
+      "ticker": "LMRI",
+      "event_date": "2026-11-10",
+      "event_hour": "",
+      "tier": 2,
+      "date_confirmed": false,
+      "call_datetime_utc": "2026-11-10T22:00:00+00:00",
+      "company_name": "Lumexa Imaging Holdings Inc"
+    },
+    {
       "ticker": "LQDA",
       "event_date": "2026-11-10",
       "event_hour": "bmo",
@@ -4851,15 +4842,6 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Veradermics, Incorporated"
-    },
-    {
-      "ticker": "MNKD",
-      "event_date": "2026-11-10",
-      "event_hour": "amc",
-      "tier": 1,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "MannKind Corp"
     },
     {
       "ticker": "MXCT",
@@ -5526,15 +5508,6 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Lakefront Biotherapeutics NV - ADR"
-    },
-    {
-      "ticker": "LMRI",
-      "event_date": "2026-11-11",
-      "event_hour": "",
-      "tier": 2,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Lumexa Imaging Holdings Inc"
     },
     {
       "ticker": "LTRN",
@@ -6480,15 +6453,6 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Mangoceuticals Inc"
-    },
-    {
-      "ticker": "MOVE",
-      "event_date": "2026-11-12",
-      "event_hour": "",
-      "tier": 2,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Medacta Group SA"
     },
     {
       "ticker": "MWH",
