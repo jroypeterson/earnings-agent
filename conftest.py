@@ -164,3 +164,14 @@ def _no_production_ticker_owners(monkeypatch):
     Tests of the rule pass owners to `coverage.find_symbol_collisions` directly."""
     import edgar_client
     monkeypatch.setattr(edgar_client, "load_ticker_owners", lambda: {})
+
+
+@pytest.fixture(autouse=True)
+def _no_production_home_listing(monkeypatch, tmp_path):
+    """#712 follow-up: the refused-name state is module-global, so a test that sets it must not
+    leak into a later run() test (which would then ask Yahoo and write the committed export)."""
+    import coverage
+    import home_listing
+    monkeypatch.setattr(coverage, "LAST_SYMBOL_COLLISIONS", None)
+    monkeypatch.setattr(coverage, "LAST_REFUSED_INFO", {})
+    monkeypatch.setattr(home_listing, "EXPORT", tmp_path / "home_listing_dates.json")

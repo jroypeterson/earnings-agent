@@ -372,6 +372,9 @@ _NAME_NOISE = {"THE", "INC", "CORP", "CO", "LTD", "PLC", "SA", "AG", "NV", "HOLD
 
 # {ticker: reason} from the last load_coverage(); None = could not check (SEC unread).
 LAST_SYMBOL_COLLISIONS: dict[str, str] | None = None
+# {ticker: {company, exchange, tier, sector, position, reason}} for the refused names, so
+# home_listing.py can still date them by their home-exchange symbol.
+LAST_REFUSED_INFO: dict[str, dict] = {}
 
 
 def _first_word(name: str) -> str:
@@ -521,11 +524,13 @@ def load_coverage() -> list[TickerInfo]:
     all_tickers = universe_tickers | set(position_lookup.keys())
 
     # Refused, never silently: logged every run, and run() closes their events.
-    global LAST_SYMBOL_COLLISIONS
+    global LAST_SYMBOL_COLLISIONS, LAST_REFUSED_INFO
     LAST_SYMBOL_COLLISIONS = _load_symbol_collisions(exports_path)
+    LAST_REFUSED_INFO = {}
     for ticker, reason in sorted((LAST_SYMBOL_COLLISIONS or {}).items()):
         logger.warning(f"Refusing {ticker}: vendors answer for another issuer. {reason}")
-    all_tickers -= set(LAST_SYMBOL_COLLISIONS or ())
+    exchange_of = {(r.get("Ticker") or "").strip().upper(): (r.get("Exchange") or "").strip()
+                   for r in _read_universe_identity(exports_path)} if LAST_SYMBOL_COLLISIONS else {}
 
     result = []
     tier_counts = {1: 0, 2: 0, 3: 0}
@@ -572,6 +577,14 @@ def load_coverage() -> list[TickerInfo]:
         # at Tier 3 still gets position="Following for Interest" so the
         # digest can route it to its own subgroup).
         position = position_entry[0] if position_entry is not None else ""
+
+        if ticker in (LAST_SYMBOL_COLLISIONS or {}):
+            # Kept out of coverage; dated only by home_listing.py.
+            LAST_REFUSED_INFO[ticker] = {
+                "company": company_name, "exchange": exchange_of.get(ticker, ""), "tier": tier,
+                "sector": sector, "position": position,
+                "reason": LAST_SYMBOL_COLLISIONS[ticker]}
+            continue
 
         tier_counts[tier] += 1
         result.append(TickerInfo(

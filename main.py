@@ -877,6 +877,33 @@ def _close_symbol_collisions(conn, cal_service, dry_run: bool) -> list:
     return closed
 
 
+def _date_refused_by_home_listing(conn, cal_service, dry_run: bool, skip_ticktick: bool) -> None:
+    """#712 follow-up: refused names (CSL Ltd, UCB SA, ...) get their next date from Yahoo by the
+    home-exchange symbol, outside the events DB. Never raises: a missing date must not cost the sync."""
+    import json as _json
+    import coverage as _cov
+    import home_listing
+    if not _cov.LAST_REFUSED_INFO:
+        return
+    try:
+        found = home_listing.lookup(_cov.LAST_REFUSED_INFO, date.today())
+        if dry_run:
+            for t, rec in found.items():
+                logger.info(f"[dry-run] home listing: {t} ({rec['home_symbol']}) next {rec['next_date']}")
+            return
+        try:
+            prior = _json.loads(home_listing.EXPORT.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            prior = None
+        home_listing.write_export(found, prior)
+        tt_cfg = None if skip_ticktick else get_ticktick_config()
+        stats = home_listing.sync(conn, found, cal_service=cal_service, calendar_id=GOOGLE_CALENDAR_ID,
+                                  ticktick_token=(tt_cfg or {}).get("token"))
+        logger.info(f"Home-listing dates: {stats} for {', '.join(sorted(found))}")
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(f"Home-listing dates failed (sync continues): {exc}")
+
+
 def run(
     dry_run: bool = False,
     backfill: bool = False,
@@ -956,6 +983,7 @@ def run(
     # BEFORE close_departed_events would label the past ones "delisted". Needs cal_service:
     # a future row's calendar event goes too, or it reminds JP of another company's print.
     _close_symbol_collisions(conn, cal_service, dry_run)
+    _date_refused_by_home_listing(conn, cal_service, dry_run, skip_ticktick)
 
     # --- Determine date range ---
     today = date.today()
