@@ -70,7 +70,8 @@ def _normalize(row: dict) -> dict | None:
 
 
 def fetch_fmp_earnings(
-    tickers, from_iso: str, to_iso: str, *, timeout: int = 30
+    tickers, from_iso: str, to_iso: str, *, timeout: int = 30,
+    match_all: bool = False,
 ) -> FMPFetch:
     """Fetch the FMP earnings calendar over [from_iso, to_iso], filtered to
     `tickers`, normalized to Finnhub's event shape. Chunked weekly.
@@ -120,7 +121,7 @@ def fetch_fmp_earnings(
             # FMP returns an {"Error Message": ...} dict on plan/endpoint issues.
             raise RuntimeError(f"FMP returned error payload: {str(data)[:160]}")
         for row in data:
-            if (row.get("symbol") or "").upper() not in universe:
+            if not match_all and (row.get("symbol") or "").upper() not in universe:
                 continue
             ev = _normalize(row)
             if ev:
@@ -130,7 +131,7 @@ def fetch_fmp_earnings(
 
     level = logger.warning if failed_chunks else logger.info
     level(
-        f"FMP earnings: {len(out)} universe events over "
+        f"FMP earnings: {len(out)} {'(unfiltered) ' if match_all else 'universe '}events over "
         f"{total_chunks - failed_chunks}/{total_chunks} chunk(s)"
         + (f" ({failed_chunks} FAILED)" if failed_chunks else "")
     )

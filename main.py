@@ -15,6 +15,7 @@ import sys
 import time
 import argparse
 import logging
+import sqlite3
 from datetime import date, timedelta
 
 from config import (
@@ -51,6 +52,7 @@ from storage import (
     find_task_pointer_for_quarter,
     upsert_event,
     record_estimate_snapshot,
+    record_wide_estimate_snapshots,
     date_to_quarter,
     compute_season_stats,
     set_date_lock,
@@ -288,7 +290,8 @@ def _alert_fmp_degraded(message: str, dry_run: bool) -> None:
 
 
 def _fetch_earnings_source(
-    fh_client, tickers, from_iso: str, to_iso: str, *, dry_run: bool = False
+    fh_client, tickers, from_iso: str, to_iso: str, *, dry_run: bool = False,
+    match_all: bool = False,
 ) -> list[dict]:
     """Earnings calendar = Finnhub merged with FMP (co-primary).
 
@@ -298,7 +301,7 @@ def _fetch_earnings_source(
     loudly (log + #status-reports) and merge whatever we got — never a silent
     coverage drop. Provider counts are logged every run for observability.
     """
-    fh = fetch_earnings(fh_client, tickers, from_iso, to_iso)
+    fh = fetch_earnings(fh_client, tickers, from_iso, to_iso, match_all=match_all)
     if not FMP_API_KEY:
         logger.warning(
             "FMP_API_KEY not set — earnings source is Finnhub-only "
@@ -306,7 +309,7 @@ def _fetch_earnings_source(
         )
         return fh
     try:
-        res = fetch_fmp_earnings(tickers, from_iso, to_iso)
+        res = fetch_fmp_earnings(tickers, from_iso, to_iso, match_all=match_all)
     except Exception as exc:
         logger.error(
             f"FMP earnings fetch failed ({exc}) — degrading to Finnhub-only this run"
@@ -953,9 +956,36 @@ def run(
             logger.warning(f"Calendar preflight failed; drift detection disabled: {exc}")
 
     # --- Fetch earnings (Finnhub + FMP merged) ---
-    earnings = _fetch_earnings_source(
-        fh_client, all_tickers, from_date, to_date, dry_run=dry_run
+    # Fetched UNFILTERED (same requests either way: both calendars are
+    # date-ranged), then split. Everything below sees only the coverage
+    # universe, exactly as before; names outside it only get a consensus
+    # snapshot (board #380 - the pre-print record a miss streak needs).
+    _all_events = _fetch_earnings_source(
+        fh_client, all_tickers, from_date, to_date, dry_run=dry_run,
+        match_all=True,
     )
+    _universe = {t.upper() for t in all_tickers}
+    earnings = [e for e in _all_events if e["symbol"].upper() in _universe]
+    _wide = [e for e in _all_events if e["symbol"].upper() not in _universe]
+    # The provider counts logged above now describe the whole market, so
+    # restate them for the universe: a provider silently dropping TRACKED
+    # names must stay visible here.
+    _by_src: dict[str, int] = {}
+    for e in earnings:
+        _by_src[e.get("source", "?")] = _by_src.get(e.get("source", "?"), 0) + 1
+    logger.info(
+        f"Universe events after split: {len(earnings)} "
+        f"(by winning source: {dict(sorted(_by_src.items()))})"
+    )
+    try:
+        _n = record_wide_estimate_snapshots(conn, _wide, today.isoformat())
+        logger.info(
+            f"Wide estimate capture: {len(_wide)} non-universe events, "
+            f"{_n} changed snapshot(s) written"
+        )
+    except sqlite3.Error as exc:
+        # Additive lane: never cost the sync. Logged loudly, not swallowed.
+        logger.error(f"Wide estimate capture FAILED (sync continues): {exc}")
 
     new_count = 0
     updated_count = 0

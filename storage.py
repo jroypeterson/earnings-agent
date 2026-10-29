@@ -973,6 +973,74 @@ def record_estimate_snapshot(
     conn.commit()
 
 
+WIDE_SNAPSHOT_HEARTBEAT_DAYS = 7
+
+
+def record_wide_estimate_snapshots(
+    conn: sqlite3.Connection,
+    events: list[dict],
+    snapshot_date: str,
+) -> int:
+    """Snapshot consensus for names OUTSIDE the coverage universe (board #380).
+
+    Why: "first earnings miss in N quarters" needs consensus as it stood
+    BEFORE each print, and the vendors' history is restated afterwards, so a
+    quarter not captured at the time is lost for good. The universe capture
+    covered ~22% of the Russell 3000 on 2026-10-28; this widens it to every
+    event the calendars return, at no extra API cost.
+
+    CHANGE-ONLY PLUS A WEEKLY HEARTBEAT, unlike `record_estimate_snapshot`:
+    a row is written when (eps, revenue) differs from the newest stored
+    snapshot for that (ticker, event_date), or when that snapshot is at
+    least WIDE_SNAPSHOT_HEARTBEAT_DAYS old. Daily rows for ~3,800 names would
+    grow the shared CI artifact ~11 MB a month for no information. Readers
+    that take "the newest snapshot strictly before the report date"
+    (pointintime, the attribution drift lane) get the identical answer. The
+    heartbeat exists for readers that need observations AFTER a date even
+    when nothing changed - screens_equity followthrough.consensus_revision
+    wants two post-print rows, and pure change-only would starve it of the
+    "no revision" answer (Codex review 2026-10-29). Returns rows written.
+    """
+    from datetime import date as _date
+    stale_before = (
+        _date.fromisoformat(snapshot_date).toordinal()
+        - WIDE_SNAPSHOT_HEARTBEAT_DAYS
+    )
+    written = 0
+    for e in events:
+        eps, rev = e.get("epsEstimate"), e.get("revenueEstimate")
+        if eps is None and rev is None:
+            continue
+        ticker = (e.get("symbol") or "").upper()
+        event_date = e.get("date")
+        if not ticker or not event_date:
+            continue
+        last = conn.execute(
+            "SELECT eps_estimate, revenue_estimate, snapshot_date "
+            "FROM estimate_history "
+            "WHERE ticker = ? AND event_date = ? AND snapshot_date <= ? "
+            "ORDER BY snapshot_date DESC LIMIT 1",
+            (ticker, event_date, snapshot_date),
+        ).fetchone()
+        if (last is not None and (last[0], last[1]) == (eps, rev)
+                and _date.fromisoformat(last[2][:10]).toordinal() > stale_before):
+            continue
+        conn.execute(
+            """
+            INSERT INTO estimate_history (ticker, event_date, snapshot_date,
+                                           eps_estimate, revenue_estimate)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(ticker, event_date, snapshot_date) DO UPDATE SET
+                eps_estimate     = excluded.eps_estimate,
+                revenue_estimate = excluded.revenue_estimate
+            """,
+            (ticker, event_date, snapshot_date, eps, rev),
+        )
+        written += 1
+    conn.commit()
+    return written
+
+
 # ---------------------------------------------------------------------------
 # Date-lock helpers (D2: human override when Finnhub is wrong)
 # ---------------------------------------------------------------------------

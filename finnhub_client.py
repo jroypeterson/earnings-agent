@@ -78,11 +78,20 @@ def get_client() -> finnhub.Client:
     return finnhub.Client(api_key=FINNHUB_API_KEY)
 
 
+def _usable(e: dict) -> bool:
+    """A row merge_earnings can key on: a symbol and an ISO date."""
+    try:
+        date.fromisoformat(e.get("date") or "")
+    except (TypeError, ValueError):
+        return False
+    return bool(e.get("symbol"))
+
+
 def _fetch_chunk(
     client: finnhub.Client,
     start: date,
     end: date,
-    ticker_set: set[str],
+    ticker_set: set[str] | None,
     depth: int = 0,
 ) -> tuple[list[dict], int]:
     """
@@ -107,9 +116,13 @@ def _fetch_chunk(
         international=False,
     )
     all_earnings = result.get("earningsCalendar", [])
+    # ticker_set None = keep every event (fetch_earnings(match_all=True)) -
+    # but only rows the merge can key on: a malformed row outside the
+    # universe must never abort the universe sync.
     chunk_matches = [
         e for e in all_earnings
-        if e.get("symbol", "").upper() in ticker_set
+        if (e.get("symbol", "").upper() in ticker_set if ticker_set is not None
+            else _usable(e))
     ]
     indent = "  " * (depth + 1)
     logger.info(
@@ -145,10 +158,14 @@ def fetch_earnings(
     tickers: list[str],
     from_date: str,
     to_date: str,
+    *,
+    match_all: bool = False,
 ) -> list[dict]:
     """
     Query Finnhub earnings calendar in date-range chunks, filtering
-    client-side for our watchlist.
+    client-side for our watchlist — or keeping every event when
+    `match_all`, which costs no extra requests (the calendar call is
+    date-ranged, never per-ticker).
 
     Chunks that hit Finnhub's 1500-result cap are adaptively split until
     they clear or bottom out at 1-day granularity. If a 1-day chunk still
@@ -158,7 +175,7 @@ def fetch_earnings(
     """
     logger.info(f"Querying Finnhub earnings calendar: {from_date} -> {to_date}")
 
-    ticker_set = {t.upper() for t in tickers}
+    ticker_set = None if match_all else {t.upper() for t in tickers}
     start = date.fromisoformat(from_date)
     end = date.fromisoformat(to_date)
     matched: list[dict] = []
