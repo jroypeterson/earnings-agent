@@ -155,3 +155,12 @@ def _no_live_network(request):
         f"this test tried to reach the live network {len(mine)} time(s), first "
         f"{mine[0]!r} -- the code under test swallowed the refusal, so only this "
         f"teardown check can see it. Stub the collaborator that made the call.")
+
+
+@pytest.fixture(autouse=True)
+def _no_production_ticker_owners(monkeypatch):
+    """Board #712: load_coverage() now reads SEC's ticker owners. A test must neither reach
+    SEC nor read the developer's `.ticker_owner_cache.json`; an empty map refuses nothing.
+    Tests of the rule pass owners to `coverage.find_symbol_collisions` directly."""
+    import edgar_client
+    monkeypatch.setattr(edgar_client, "load_ticker_owners", lambda: {})

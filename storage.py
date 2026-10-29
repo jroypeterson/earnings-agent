@@ -44,6 +44,9 @@ OPEN_EVENT_SQL = "reported = 0 AND closed_reason IS NULL"
 # Terminal states other than reporting. `reported` stays a flag and keeps its
 # exact meaning — "the numbers came out" — so nothing that reads it changes.
 CLOSED_DELISTED = "delisted"
+# Board #712: the row holds another issuer's print (a US company owns the symbol of a
+# foreign Coverage Manager name). Closed at ANY date and even when reported.
+CLOSED_SYMBOL_COLLISION = "symbol_collision"
 
 _MIGRATIONS = {
     # Version 13 → 14: pre-print ANNUAL Street consensus snapshots (board #298
@@ -550,6 +553,53 @@ def close_departed_events(
         + (" ..." if len(departed) > 10 else ""),
     )
     return departed
+
+
+def close_symbol_collision_events(
+    conn: sqlite3.Connection,
+    collisions: dict[str, str] | None,
+) -> list[tuple[str, str, str | None]]:
+    """Close every row filed under a refused symbol; reopen rows whose symbol is no longer refused.
+
+    Returns the newly closed `(ticker, event_date, gcal_id)`, so the caller can report them and
+    remove future calendar events. Closing, not deleting: the row stays inspectable and comes back
+    if the rule stops matching (a CM ticker edit to `CSL.AX`, say). Unlike `close_departed_events`
+    this takes REPORTED and future rows too -- those are exactly the wrong cards and the wrong
+    reminders. `closed_reason IS NULL` is what every consumer (OPEN_EVENT_SQL, earnings_review's
+    reader) already filters on, and the TickTick reconcile completes a closed row's task.
+
+    `collisions` None means the check could not run: change nothing, because an unknown set
+    read as empty would reopen every refused row.
+    """
+    if collisions is None:
+        return []
+    refused = sorted(collisions)
+    keep = f"AND ticker NOT IN ({','.join('?' * len(refused))})" if refused else ""
+    reopened = conn.execute(
+        "UPDATE events SET closed_reason = NULL, closed_at = NULL, updated_at = datetime('now') "
+        f"WHERE closed_reason = ? {keep}",
+        (CLOSED_SYMBOL_COLLISION, *refused),
+    ).rowcount
+    closed = []
+    if refused:
+        closed = conn.execute(
+            # `delisted` too: run() calls close_departed_events first, and a refused ticker has
+            # left coverage, so its past unreported rows arrive here already labelled delisted.
+            "SELECT ticker, event_date, gcal_id FROM events "
+            "WHERE (closed_reason IS NULL OR closed_reason = ?) "
+            f"AND ticker IN ({','.join('?' * len(refused))}) ORDER BY ticker, event_date",
+            (CLOSED_DELISTED, *refused),
+        ).fetchall()
+        conn.executemany(
+            "UPDATE events SET closed_reason = ?, closed_at = datetime('now'), "
+            "updated_at = datetime('now') WHERE ticker = ? AND event_date = ?",
+            [(CLOSED_SYMBOL_COLLISION, t, d) for t, d, _ in closed],
+        )
+    if reopened or closed:
+        conn.commit()
+    if reopened:
+        logger.info("Reopened %d event(s) whose symbol is no longer refused", reopened)
+    return [(t, d, g) for t, d, g in closed]
 
 
 def restamp_tiers_from_coverage(

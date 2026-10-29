@@ -150,6 +150,40 @@ def get_cik(ticker: str) -> str | None:
     return _load_cik_map().get(ticker.upper())
 
 
+_OWNER_CACHE_PATH = Path(__file__).parent / ".ticker_owner_cache.json"
+
+
+def load_ticker_owners() -> dict[str, tuple[str, str]] | None:
+    """{ticker: (10-digit CIK, SEC company name)} -- WHO owns each symbol in the US.
+
+    Board #712: `coverage.find_symbol_collisions` needs the name, which the CIK map drops.
+    Returns None when SEC cannot be read and no cache exists at any age, so the caller can
+    tell "no collisions" from "could not look". A stale cache beats none: symbol ownership
+    changes rarely, and an empty answer would re-admit the US namesakes' prints.
+    """
+    cached = None
+    if _OWNER_CACHE_PATH.exists():
+        try:
+            cached = {t: tuple(v) for t, v in json.loads(_OWNER_CACHE_PATH.read_text()).items()}
+        except (OSError, ValueError):
+            cached = None
+        if cached is not None and (time.time() - _OWNER_CACHE_PATH.stat().st_mtime) / 86400 < _CIK_CACHE_MAX_AGE_DAYS:
+            return cached
+    raw = _get_json("https://www.sec.gov/files/company_tickers.json")
+    if not raw:
+        return cached
+    owners = {}
+    for entry in raw.values():
+        ticker = str(entry.get("ticker", "")).upper()
+        if ticker and entry.get("cik_str") is not None:
+            owners[ticker] = (str(entry["cik_str"]).zfill(10), str(entry.get("title", "")))
+    try:
+        _OWNER_CACHE_PATH.write_text(json.dumps(owners))
+    except OSError as exc:
+        logger.debug(f"Could not write ticker-owner cache: {exc}")
+    return owners
+
+
 # ---------------------------------------------------------------------------
 # 8-K fetch
 # ---------------------------------------------------------------------------

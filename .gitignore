@@ -11,6 +11,7 @@ logs/
 last_digest.html
 last_digest.txt
 .ticker_cik_cache.json
+.ticker_owner_cache.json
 *.tmp.*
 
 # Codex review output — kept on disk as proof-of-run, but untracked.

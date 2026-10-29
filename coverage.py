@@ -361,6 +361,77 @@ def load_core_tickers() -> set[str]:
             if (m.get("core") or "").strip().upper() == "Y"}
 
 
+# --- Symbol collisions (board #712) ------------------------------------------
+# Every vendor this agent reads (Finnhub, FMP, EDGAR) answers a bare symbol for the
+# US issuer that owns it. CSL Ltd (ASX), UCB SA (Brussels), Medartis and Medacta (SIX)
+# are Core names whose CM ticker is a US company's: the events DB carried Carlisle,
+# United Community Banks, Medifast and Corvex prints under them, and earnings_review
+# posted cards for two (UCB 2026-10-21, MED 2026-10-27). A rule, not a list: a hand
+# list rots the first time CM adds a foreign name whose symbol a US issuer owns.
+_NAME_NOISE = {"THE", "INC", "CORP", "CO", "LTD", "PLC", "SA", "AG", "NV", "HOLDINGS", "GROUP"}
+
+# {ticker: reason} from the last load_coverage(); None = could not check (SEC unread).
+LAST_SYMBOL_COLLISIONS: dict[str, str] | None = None
+
+
+def _first_word(name: str) -> str:
+    words = [w for w in "".join(c if c.isalnum() else " " for c in (name or "").upper()).split()
+             if w not in _NAME_NOISE]
+    return words[0] if words else ""
+
+
+def _read_universe_identity(exports_path: Path) -> list[dict]:
+    """universe.csv rows: Ticker, CIK, Company Name, Country (Listing)."""
+    path = exports_path / "universe.csv"
+    if not path.exists():
+        return []
+    with open(path, newline="", encoding="utf-8-sig") as f:
+        return list(csv.DictReader(f))
+
+
+def find_symbol_collisions(rows: list[dict], owners: dict[str, tuple[str, str]]) -> dict[str, str]:
+    """{ticker: reason} for CM names whose symbol SEC gives to a DIFFERENT company.
+
+    All three must hold: (1) CM lists the company outside the US -- a US listing owns
+    its own symbol, and CM's CIK can be wrong (DIA.MI carries the SPDR Dow ETF's), so a
+    US row is never refused on a CIK disagreement; (2) SEC's owner has another CIK, or CM
+    has none; (3) SEC's company name does not share CM's first word. Measured 2026-10-29
+    over all 216 non-US CM rows: exactly CSL, UCB, MED, MOVE. BCLI, HEPA and VXRT carry a
+    non-US listing country but SEC's CIK matches CM's, so they pass on (2).
+    """
+    out = {}
+    for r in rows:
+        ticker = (r.get("Ticker") or "").strip().upper()
+        if not ticker or ticker not in owners:
+            continue
+        if (r.get("Country (Listing)") or "").strip() in ("", "United States"):
+            continue
+        sec_cik, sec_name = owners[ticker]
+        try:
+            cm_cik = int(float(r.get("CIK") or ""))
+        except ValueError:
+            cm_cik = None
+        if cm_cik is not None and cm_cik == int(sec_cik):
+            continue
+        cm_name = r.get("Company Name") or ""
+        if _first_word(cm_name) and _first_word(cm_name) == _first_word(sec_name):
+            continue
+        out[ticker] = (f"{cm_name or ticker} is listed in {r['Country (Listing)'].strip()}; "
+                       f"SEC gives {ticker} to {sec_name} (CIK {int(sec_cik)})")
+    return out
+
+
+def _load_symbol_collisions(exports_path: Path) -> dict[str, str] | None:
+    import edgar_client
+    owners = edgar_client.load_ticker_owners()
+    if owners is None:
+        logger.error("Symbol-collision check SKIPPED: SEC's ticker list could not be read and no "
+                     "cache exists. Vendor prints for a foreign name whose symbol a US issuer owns "
+                     "(CSL, UCB, MED, MOVE) are NOT refused this run (board #712).")
+        return None
+    return find_symbol_collisions(_read_universe_identity(exports_path), owners)
+
+
 def load_coverage() -> list[TickerInfo]:
     """
     Load tickers and tier assignments from Coverage Manager exports.
@@ -448,6 +519,13 @@ def load_coverage() -> list[TickerInfo]:
             position_lookup[t] = (label, row)  # later wins => Portfolio top priority
 
     all_tickers = universe_tickers | set(position_lookup.keys())
+
+    # Refused, never silently: logged every run, and run() closes their events.
+    global LAST_SYMBOL_COLLISIONS
+    LAST_SYMBOL_COLLISIONS = _load_symbol_collisions(exports_path)
+    for ticker, reason in sorted((LAST_SYMBOL_COLLISIONS or {}).items()):
+        logger.warning(f"Refusing {ticker}: vendors answer for another issuer. {reason}")
+    all_tickers -= set(LAST_SYMBOL_COLLISIONS or ())
 
     result = []
     tier_counts = {1: 0, 2: 0, 3: 0}

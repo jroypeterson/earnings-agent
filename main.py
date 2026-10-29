@@ -68,6 +68,7 @@ from storage import (
     kv_set,
     kv_delete,
     close_departed_events,
+    close_symbol_collision_events,
     restamp_tiers_from_coverage,
     OPEN_EVENT_SQL,
 )
@@ -745,10 +746,15 @@ def _alert_coverage_changes_if_needed(conn, coverage) -> None:
 
     if removed:
         lines.append(f"*Removed* ({len(removed)}):")
+        import coverage as _cov
+        refused = _cov.LAST_SYMBOL_COLLISIONS or {}
         for tk, info in removed:
             tag = f"was {_fmt_tier(info['tier'])}{_fmt_pos(info.get('position',''))}"
             name = info.get("name") or ""
             suffix = f" — {name}" if name else ""
+            if tk in refused:
+                # Still in Coverage Manager: refused because vendors answer for a US namesake (#712).
+                suffix += f" — still in Coverage Manager; refused: {refused[tk]}"
             lines.append(f"  • `{tk}` ({tag}){suffix}")
 
     if tier_changed:
@@ -841,6 +847,36 @@ def _post_urgent_alert(rows: list[UrgentMoveRow], as_of: date, conn=None) -> boo
     return True
 
 
+def _close_symbol_collisions(conn, cal_service, dry_run: bool) -> list:
+    """Close events under a refused symbol (coverage.LAST_SYMBOL_COLLISIONS) and delete the
+    calendar event of any that is still to come. Returns the closed rows."""
+    import coverage as _cov
+    collisions = _cov.LAST_SYMBOL_COLLISIONS
+    if dry_run:
+        if collisions:
+            logger.info("[dry-run] would close events filed under: %s", ", ".join(sorted(collisions)))
+        return []
+    closed = close_symbol_collision_events(conn, collisions)
+    if closed:
+        logger.warning("Closed %d event(s) holding another issuer's print (#712): %s", len(closed),
+                       ", ".join(f"{t}@{d}" for t, d, _ in closed))
+    today_iso = date.today().isoformat()
+    for ticker, event_date, gcal_id in closed:
+        if not gcal_id or event_date < today_iso or cal_service is None:
+            continue
+        try:
+            delete_calendar_event(cal_service, GOOGLE_CALENDAR_ID, gcal_id)
+        except Exception as exc:  # noqa: BLE001 - one event must not stop the sync
+            logger.warning(f"{ticker} {event_date}: closed, but its calendar event could not be "
+                           f"deleted: {exc}")
+            continue
+        conn.execute("UPDATE events SET gcal_id = NULL, updated_at = datetime('now') "
+                     "WHERE ticker = ? AND event_date = ?", (ticker, event_date))
+        conn.commit()
+        logger.info(f"{ticker} {event_date}: calendar event deleted (another issuer's print)")
+    return closed
+
+
 def run(
     dry_run: bool = False,
     backfill: bool = False,
@@ -915,6 +951,11 @@ def run(
         except Exception as exc:
             logger.error(f"Failed to initialize Google Calendar service: {exc}")
             sys.exit(1)
+
+    # Board #712: close rows filed under a symbol a US issuer owns (CSL, UCB, MED, MOVE),
+    # BEFORE close_departed_events would label the past ones "delisted". Needs cal_service:
+    # a future row's calendar event goes too, or it reminds JP of another company's print.
+    _close_symbol_collisions(conn, cal_service, dry_run)
 
     # --- Determine date range ---
     today = date.today()
