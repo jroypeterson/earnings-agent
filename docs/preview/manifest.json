@@ -1,4 +1,9 @@
 {
+ "AAPL": {
+  "company": "Apple Inc.",
+  "event_date": "2026-11-02",
+  "generated": "2026-10-30 23:10 UTC"
+ },
  "ABBV": {
   "company": "AbbVie Common Stock",
   "event_date": "2026-10-30",
@@ -23,6 +28,11 @@
   "company": "Alnylam Pharmaceuticals, Inc.",
   "event_date": "2026-10-29",
   "generated": "2026-10-28 17:19 UTC"
+ },
+ "AMWL": {
+  "company": "American Well Corp",
+  "event_date": "2026-11-02",
+  "generated": "2026-10-30 23:10 UTC"
  },
  "AMZN": {
   "company": "Amazon.com, Inc.",
@@ -174,6 +184,11 @@
   "event_date": "2026-10-22",
   "generated": "2026-10-21 16:00 UTC"
  },
+ "DHC": {
+  "company": "Diversified Healthcare Trust",
+  "event_date": "2026-11-02",
+  "generated": "2026-10-30 23:10 UTC"
+ },
  "DHR": {
   "company": "Danaher Corp",
   "event_date": "2026-10-21",
@@ -181,8 +196,8 @@
  },
  "DOC": {
   "company": "Healthpeak Properties Inc",
-  "event_date": "2026-10-21",
-  "generated": "2026-10-21 16:00 UTC"
+  "event_date": "2026-11-02",
+  "generated": "2026-10-30 23:10 UTC"
  },
  "DVA": {
   "company": "Davita Inc",
@@ -249,6 +264,11 @@
   "event_date": "2026-10-21",
   "generated": "2026-10-20 15:45 UTC"
  },
+ "HNGE": {
+  "company": "Hinge Health Inc",
+  "event_date": "2026-11-02",
+  "generated": "2026-10-30 23:10 UTC"
+ },
  "HOOD": {
   "company": "Robinhood Markets Inc",
   "event_date": "2026-10-27",
@@ -269,6 +289,11 @@
   "event_date": "2026-10-27",
   "generated": "2026-10-27 16:44 UTC"
  },
+ "IDXX": {
+  "company": "IDEXX Laboratories Inc",
+  "event_date": "2026-11-02",
+  "generated": "2026-10-30 23:10 UTC"
+ },
  "ILMN": {
   "company": "Illumina, Inc.",
   "event_date": "2026-10-29",
@@ -283,6 +308,11 @@
   "company": "Insmed Inc",
   "event_date": "2026-10-29",
   "generated": "2026-10-28 17:19 UTC"
+ },
+ "INSP": {
+  "company": "Inspire Medical Systems, Inc.",
+  "event_date": "2026-11-02",
+  "generated": "2026-10-30 23:10 UTC"
  },
  "IONS": {
   "company": "Ionis Pharmaceuticals Inc",
@@ -303,6 +333,11 @@
   "company": "Integer Holdings Corporation",
   "event_date": "2026-10-22",
   "generated": "2026-10-22 15:57 UTC"
+ },
+ "JAN": {
+  "company": "Janus Living Inc",
+  "event_date": "2026-11-02",
+  "generated": "2026-10-30 23:10 UTC"
  },
  "KIDS": {
   "company": "OrthoPediatrics Corp.",
@@ -439,10 +474,20 @@
   "event_date": "2026-10-27",
   "generated": "2026-10-27 16:44 UTC"
  },
+ "SBRA": {
+  "company": "Sabra Health Care REIT Inc",
+  "event_date": "2026-11-02",
+  "generated": "2026-10-30 23:10 UTC"
+ },
  "SCI": {
   "company": "Service Corporation International",
   "event_date": "2026-10-28",
   "generated": "2026-10-28 17:19 UTC"
+ },
+ "SIBN": {
+  "company": "SI-BONE, Inc.",
+  "event_date": "2026-11-02",
+  "generated": "2026-10-30 23:10 UTC"
  },
  "SNY": {
   "company": "Sanofi SA",
@@ -479,10 +524,20 @@
   "event_date": "2026-10-28",
   "generated": "2026-10-28 17:19 UTC"
  },
+ "TCMD": {
+  "company": "Tactile Systems Technology Inc",
+  "event_date": "2026-11-02",
+  "generated": "2026-10-30 23:10 UTC"
+ },
  "TDOC": {
   "company": "Teladoc Health Inc",
   "event_date": "2026-10-28",
   "generated": "2026-10-28 17:19 UTC"
+ },
+ "TEM": {
+  "company": "Tempus AI, Inc.",
+  "event_date": "2026-11-02",
+  "generated": "2026-10-30 23:10 UTC"
  },
  "TFX": {
   "company": "Teleflex Incorporated",
@@ -529,10 +584,20 @@
   "event_date": "2026-10-29",
   "generated": "2026-10-29 17:33 UTC"
  },
+ "VRTX": {
+  "company": "Vertex Pharmaceuticals Inc",
+  "event_date": "2026-11-02",
+  "generated": "2026-10-30 23:10 UTC"
+ },
  "VTR": {
   "company": "Ventas Inc",
   "event_date": "2026-10-27",
   "generated": "2026-10-27 16:44 UTC"
+ },
+ "WAY": {
+  "company": "Waystar Holding Corp",
+  "event_date": "2026-11-02",
+  "generated": "2026-10-30 23:10 UTC"
  },
  "WELL": {
   "company": "Welltower Inc",

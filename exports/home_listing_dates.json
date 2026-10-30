@@ -1,25 +1,25 @@
 {
  "names": {
   "CSL": {
-   "checked": "2026-10-29T23:24:10+00:00",
+   "checked": "2026-10-30T23:03:31+00:00",
    "company": "CSL Ltd",
    "home_symbol": "CSL.AX",
    "next_date": "2027-02-09"
   },
   "MED": {
-   "checked": "2026-10-29T23:24:10+00:00",
+   "checked": "2026-10-30T23:03:31+00:00",
    "company": "Medartis Holding AG",
    "home_symbol": "MED.SW",
    "next_date": "2027-03-16"
   },
   "MOVE": {
-   "checked": "2026-10-29T23:24:10+00:00",
+   "checked": "2026-10-30T23:03:31+00:00",
    "company": "Medacta Group SA",
    "home_symbol": "MOVE.SW",
    "next_date": "2027-03-10"
   },
   "UCB": {
-   "checked": "2026-10-29T23:24:10+00:00",
+   "checked": "2026-10-30T23:03:31+00:00",
    "company": "UCB SA",
    "home_symbol": "UCB.BR",
    "next_date": "2027-02-25"

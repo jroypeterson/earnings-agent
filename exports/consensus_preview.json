@@ -1,13 +1,254 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-10-29T23:30:23Z",
+  "generated_at": "2026-10-30T23:10:28Z",
   "window": {
-    "start": "2026-10-29",
-    "end": "2026-11-01"
+    "start": "2026-10-30",
+    "end": "2026-11-02"
   },
   "counts": {
-    "previews": 0
+    "previews": 3
   },
-  "previews": []
+  "previews": [
+    {
+      "ticker": "AAPL",
+      "company_name": "Apple Inc.",
+      "tier": 1,
+      "event_date": "2026-11-02",
+      "event_hour": "amc",
+      "call_datetime_utc": "2026-11-02T22:00:00+00:00",
+      "last_price": 344.6300048828125,
+      "day_change_pct": -1.2266770039192403,
+      "consensus": {
+        "eps": {
+          "mean": 2.0214,
+          "count": null,
+          "low": null,
+          "high": null
+        },
+        "revenue": {
+          "mean": 115327453620.0,
+          "count": null,
+          "low": null,
+          "high": null
+        }
+      },
+      "qtd": {
+        "since": "2026-09-30",
+        "ticker_pct": 3.486281980708367,
+        "spx_pct": -0.9060795058475717,
+        "sector_etf": null,
+        "sector_etf_pct": null
+      },
+      "implied_move": {
+        "pct": 4.3,
+        "expiry": "2026-11-04",
+        "method": "ATM straddle",
+        "notes": []
+      },
+      "post_earnings_moves": [
+        {
+          "event_date": "2026-07-30",
+          "move_pct": -7.353858440208278,
+          "window_label": "next-day close vs earnings-day close"
+        },
+        {
+          "event_date": "2026-04-30",
+          "move_pct": 3.2393515010210963,
+          "window_label": "next-day close vs earnings-day close"
+        },
+        {
+          "event_date": "2026-01-29",
+          "move_pct": 0.4646137095106894,
+          "window_label": "next-day close vs earnings-day close"
+        },
+        {
+          "event_date": "2025-10-30",
+          "move_pct": -0.37951561451632837,
+          "window_label": "next-day close vs earnings-day close"
+        }
+      ],
+      "beat_rates": {
+        "eps": {
+          "beats": 19,
+          "total": 20,
+          "source": "yfinance"
+        },
+        "revenue": {
+          "beats": 18,
+          "total": 20,
+          "source": "fmp"
+        }
+      },
+      "na_fields": [
+        {
+          "field": "qtd.sector_etf",
+          "reason": "no mapped ETF for sector 'Tech'"
+        },
+        {
+          "field": "consensus.eps.range",
+          "reason": "estimate range not available on FMP Starter plan"
+        }
+      ]
+    },
+    {
+      "ticker": "IDXX",
+      "company_name": "IDEXX Laboratories Inc",
+      "tier": 1,
+      "event_date": "2026-11-02",
+      "event_hour": "bmo",
+      "call_datetime_utc": null,
+      "last_price": 551.2100219726562,
+      "day_change_pct": -4.300489485057311,
+      "consensus": {
+        "eps": {
+          "mean": 3.8486,
+          "count": null,
+          "low": null,
+          "high": null
+        },
+        "revenue": {
+          "mean": 1215401400.0,
+          "count": null,
+          "low": null,
+          "high": null
+        }
+      },
+      "qtd": {
+        "since": "2026-09-30",
+        "ticker_pct": 5.557367892064588,
+        "spx_pct": -0.9060795058475717,
+        "sector_etf": "XLV",
+        "sector_etf_pct": 9.767246839499952
+      },
+      "implied_move": {
+        "pct": 10.2,
+        "expiry": "2026-11-20",
+        "method": "ATM straddle",
+        "notes": [
+          "(includes 18 extra days of time value)"
+        ]
+      },
+      "post_earnings_moves": [
+        {
+          "event_date": "2026-08-04",
+          "move_pct": 3.566145224410923,
+          "window_label": "earnings-day close vs prior close"
+        },
+        {
+          "event_date": "2026-05-05",
+          "move_pct": -0.026641642165677194,
+          "window_label": "earnings-day close vs prior close"
+        },
+        {
+          "event_date": "2026-02-02",
+          "move_pct": -4.602816778832092,
+          "window_label": "earnings-day close vs prior close"
+        },
+        {
+          "event_date": "2025-11-03",
+          "move_pct": 14.841700882654191,
+          "window_label": "earnings-day close vs prior close"
+        }
+      ],
+      "beat_rates": {
+        "eps": {
+          "beats": 19,
+          "total": 20,
+          "source": "yfinance"
+        },
+        "revenue": {
+          "beats": 14,
+          "total": 20,
+          "source": "fmp"
+        }
+      },
+      "na_fields": [
+        {
+          "field": "consensus.eps.range",
+          "reason": "estimate range not available on FMP Starter plan"
+        }
+      ]
+    },
+    {
+      "ticker": "WAY",
+      "company_name": "Waystar Holding Corp",
+      "tier": 1,
+      "event_date": "2026-11-02",
+      "event_hour": "amc",
+      "call_datetime_utc": "2026-11-02T21:30:00+00:00",
+      "last_price": 28.0,
+      "day_change_pct": -0.744413652208319,
+      "consensus": {
+        "eps": {
+          "mean": 0.4114,
+          "count": null,
+          "low": null,
+          "high": null
+        },
+        "revenue": {
+          "mean": 326634808.0,
+          "count": null,
+          "low": null,
+          "high": null
+        }
+      },
+      "qtd": {
+        "since": "2026-09-30",
+        "ticker_pct": 10.49723690368823,
+        "spx_pct": -0.9060795058475717,
+        "sector_etf": "XLV",
+        "sector_etf_pct": 9.767246839499952
+      },
+      "implied_move": {
+        "pct": 11.8,
+        "expiry": "2026-11-20",
+        "method": "ATM straddle",
+        "notes": [
+          "wide market",
+          "(includes 17 extra days of time value)"
+        ]
+      },
+      "post_earnings_moves": [
+        {
+          "event_date": "2026-07-29",
+          "move_pct": -14.600325680550846,
+          "window_label": "next-day close vs earnings-day close"
+        },
+        {
+          "event_date": "2026-04-29",
+          "move_pct": -15.413535366862313,
+          "window_label": "next-day close vs earnings-day close"
+        },
+        {
+          "event_date": "2026-02-17",
+          "move_pct": 8.478356231446757,
+          "window_label": "earnings-day close vs prior close"
+        },
+        {
+          "event_date": "2025-10-29",
+          "move_pct": -6.461377151965431,
+          "window_label": "next-day close vs earnings-day close"
+        }
+      ],
+      "beat_rates": {
+        "eps": {
+          "beats": 8,
+          "total": 9,
+          "source": "yfinance"
+        },
+        "revenue": {
+          "beats": 8,
+          "total": 10,
+          "source": "fmp"
+        }
+      },
+      "na_fields": [
+        {
+          "field": "consensus.eps.range",
+          "reason": "estimate range not available on FMP Starter plan"
+        }
+      ]
+    }
+  ]
 }
