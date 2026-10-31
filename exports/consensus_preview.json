@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-10-30T23:10:28Z",
+  "generated_at": "2026-10-31T16:11:41Z",
   "window": {
-    "start": "2026-10-30",
-    "end": "2026-11-02"
+    "start": "2026-10-31",
+    "end": "2026-11-03"
   },
   "counts": {
-    "previews": 3
+    "previews": 7
   },
   "previews": [
     {
@@ -59,12 +59,12 @@
         },
         {
           "event_date": "2026-01-29",
-          "move_pct": 0.4646137095106894,
+          "move_pct": 0.46462555736761946,
           "window_label": "next-day close vs earnings-day close"
         },
         {
           "event_date": "2025-10-30",
-          "move_pct": -0.37951561451632837,
+          "move_pct": -0.37950437130890075,
           "window_label": "next-day close vs earnings-day close"
         }
       ],
@@ -244,6 +244,322 @@
         }
       },
       "na_fields": [
+        {
+          "field": "consensus.eps.range",
+          "reason": "estimate range not available on FMP Starter plan"
+        }
+      ]
+    },
+    {
+      "ticker": "ALMR",
+      "company_name": "Alamar Biosciences, Inc.",
+      "tier": 1,
+      "event_date": "2026-11-03",
+      "event_hour": "amc",
+      "call_datetime_utc": "2026-11-03T20:00:00+00:00",
+      "last_price": 30.600000381469727,
+      "day_change_pct": -10.105759228956018,
+      "consensus": {
+        "eps": {
+          "mean": -0.2183,
+          "count": null,
+          "low": null,
+          "high": null
+        },
+        "revenue": {
+          "mean": 30791148.0,
+          "count": null,
+          "low": null,
+          "high": null
+        }
+      },
+      "qtd": {
+        "since": "2026-09-30",
+        "ticker_pct": -10.18491148939353,
+        "spx_pct": -0.9060795058475717,
+        "sector_etf": "IHI",
+        "sector_etf_pct": 6.725314807602785
+      },
+      "implied_move": {
+        "pct": null,
+        "expiry": null,
+        "method": "ATM straddle",
+        "notes": [
+          "n/a (no listed options)"
+        ]
+      },
+      "post_earnings_moves": [
+        {
+          "event_date": "2026-08-10",
+          "move_pct": 30.65380490842103,
+          "window_label": "next-day close vs earnings-day close"
+        }
+      ],
+      "beat_rates": {
+        "eps": {
+          "beats": 1,
+          "total": 1,
+          "source": "yfinance"
+        },
+        "revenue": {
+          "beats": 2,
+          "total": 2,
+          "source": "fmp"
+        }
+      },
+      "na_fields": [
+        {
+          "field": "implied_move",
+          "reason": "n/a (no listed options)"
+        },
+        {
+          "field": "consensus.eps.range",
+          "reason": "estimate range not available on FMP Starter plan"
+        }
+      ]
+    },
+    {
+      "ticker": "FMS",
+      "company_name": "Fresenius Medical Care AG",
+      "tier": 1,
+      "event_date": "2026-11-03",
+      "event_hour": null,
+      "call_datetime_utc": null,
+      "last_price": 22.469999313354492,
+      "day_change_pct": -2.8534365385175176,
+      "consensus": {
+        "eps": {
+          "mean": 0.618,
+          "count": null,
+          "low": null,
+          "high": null
+        },
+        "revenue": {
+          "mean": 5714342000.0,
+          "count": null,
+          "low": null,
+          "high": null
+        }
+      },
+      "qtd": {
+        "since": "2026-09-30",
+        "ticker_pct": 0.40214546900281367,
+        "spx_pct": -0.9060795058475717,
+        "sector_etf": "XLV",
+        "sector_etf_pct": 9.767246839499952
+      },
+      "implied_move": {
+        "pct": 9.3,
+        "expiry": "2026-11-20",
+        "method": "ATM straddle",
+        "notes": [
+          "stale quote",
+          "wide market",
+          "(includes 16 extra days of time value)"
+        ]
+      },
+      "post_earnings_moves": [
+        {
+          "event_date": "2026-08-03",
+          "move_pct": -1.558844976262206,
+          "window_label": "earnings-day close vs prior close"
+        },
+        {
+          "event_date": "2026-05-03",
+          "move_pct": 0.7114270617202126,
+          "window_label": "next-day close vs earnings-day close"
+        },
+        {
+          "event_date": "2026-02-24",
+          "move_pct": -7.848718702683441,
+          "window_label": "earnings-day close vs prior close"
+        },
+        {
+          "event_date": "2025-11-04",
+          "move_pct": -7.817836434911881,
+          "window_label": "earnings-day close vs prior close"
+        }
+      ],
+      "beat_rates": {
+        "eps": {
+          "beats": 14,
+          "total": 20,
+          "source": "yfinance"
+        },
+        "revenue": {
+          "beats": 13,
+          "total": 20,
+          "source": "fmp"
+        }
+      },
+      "na_fields": [
+        {
+          "field": "consensus.eps.range",
+          "reason": "estimate range not available on FMP Starter plan"
+        },
+        {
+          "field": "guidance",
+          "reason": "no 8-K Item 2.02 for the 2026-08-03 print"
+        }
+      ]
+    },
+    {
+      "ticker": "PACS",
+      "company_name": "PACS Group Inc",
+      "tier": 1,
+      "event_date": "2026-11-03",
+      "event_hour": "amc",
+      "call_datetime_utc": "2026-11-04T16:30:00+00:00",
+      "last_price": 47.810001373291016,
+      "day_change_pct": -3.764088004021096,
+      "consensus": {
+        "eps": {
+          "mean": 0.5998,
+          "count": null,
+          "low": null,
+          "high": null
+        },
+        "revenue": {
+          "mean": 1488498066.0,
+          "count": null,
+          "low": null,
+          "high": null
+        }
+      },
+      "qtd": {
+        "since": "2026-09-30",
+        "ticker_pct": 15.0661907368866,
+        "spx_pct": -0.9060795058475717,
+        "sector_etf": "XLV",
+        "sector_etf_pct": 9.767246839499952
+      },
+      "implied_move": {
+        "pct": 18.3,
+        "expiry": "2026-11-20",
+        "method": "ATM straddle",
+        "notes": [
+          "(includes 16 extra days of time value)"
+        ]
+      },
+      "post_earnings_moves": [
+        {
+          "event_date": "2026-08-04",
+          "move_pct": 1.8522606358413143,
+          "window_label": "next-day close vs earnings-day close"
+        },
+        {
+          "event_date": "2026-05-11",
+          "move_pct": 28.55799000609096,
+          "window_label": "next-day close vs earnings-day close"
+        },
+        {
+          "event_date": "2026-02-26",
+          "move_pct": -12.38300953720131,
+          "window_label": "next-day close vs earnings-day close"
+        },
+        {
+          "event_date": "2025-11-19",
+          "move_pct": 55.3178818071692,
+          "window_label": "next-day close vs earnings-day close"
+        }
+      ],
+      "beat_rates": {
+        "eps": {
+          "beats": 5,
+          "total": 10,
+          "source": "yfinance"
+        },
+        "revenue": {
+          "beats": 8,
+          "total": 10,
+          "source": "fmp"
+        }
+      },
+      "na_fields": [
+        {
+          "field": "consensus.eps.range",
+          "reason": "estimate range not available on FMP Starter plan"
+        }
+      ]
+    },
+    {
+      "ticker": "ULS",
+      "company_name": "UL Solutions Inc.",
+      "tier": 1,
+      "event_date": "2026-11-03",
+      "event_hour": "bmo",
+      "call_datetime_utc": "2026-11-03T20:00:00+00:00",
+      "last_price": 74.76000213623047,
+      "day_change_pct": -0.927639751835387,
+      "consensus": {
+        "eps": {
+          "mean": 0.6208,
+          "count": null,
+          "low": null,
+          "high": null
+        },
+        "revenue": {
+          "mean": 823875685.0,
+          "count": null,
+          "low": null,
+          "high": null
+        }
+      },
+      "qtd": {
+        "since": "2026-09-30",
+        "ticker_pct": 13.92867876727499,
+        "spx_pct": -0.9060795058475717,
+        "sector_etf": null,
+        "sector_etf_pct": null
+      },
+      "implied_move": {
+        "pct": 9.4,
+        "expiry": "2026-11-20",
+        "method": "ATM straddle",
+        "notes": [
+          "wide market",
+          "(includes 17 extra days of time value)"
+        ]
+      },
+      "post_earnings_moves": [
+        {
+          "event_date": "2026-08-04",
+          "move_pct": -13.959373368347885,
+          "window_label": "earnings-day close vs prior close"
+        },
+        {
+          "event_date": "2026-05-05",
+          "move_pct": 16.248604327640017,
+          "window_label": "earnings-day close vs prior close"
+        },
+        {
+          "event_date": "2026-02-19",
+          "move_pct": 15.9859679893816,
+          "window_label": "earnings-day close vs prior close"
+        },
+        {
+          "event_date": "2025-11-04",
+          "move_pct": 10.622049021054101,
+          "window_label": "earnings-day close vs prior close"
+        }
+      ],
+      "beat_rates": {
+        "eps": {
+          "beats": 9,
+          "total": 10,
+          "source": "yfinance"
+        },
+        "revenue": {
+          "beats": 10,
+          "total": 10,
+          "source": "fmp"
+        }
+      },
+      "na_fields": [
+        {
+          "field": "qtd.sector_etf",
+          "reason": "no mapped ETF for sector 'Industrials'"
+        },
         {
           "field": "consensus.eps.range",
           "reason": "estimate range not available on FMP Starter plan"
