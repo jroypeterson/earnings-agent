@@ -192,6 +192,9 @@ class SeasonRow:
             return None
         if self.rev_estimate <= 0:
             return None
+        from surprise import rev_period_mismatch
+        if rev_period_mismatch(self.rev_actual, self.rev_estimate):
+            return None   # #661: a half-year actual against a quarterly estimate
         return (self.rev_actual - self.rev_estimate) / self.rev_estimate * 100
 
 
@@ -320,7 +323,9 @@ def collect_season(
             company_name=(raw["company_name"] or info.company_name or ticker),
             position=info.position,
             event_date=raw["event_date"],
-            event_hour=raw["event_hour"],
+            # #661: Finnhub's session when it has one, else the yfinance-inferred one. An AMC print
+            # read as before-open takes its reaction from the day BEFORE the news.
+            event_hour=raw["event_hour"] or raw["event_hour_yf"],
             reported=_is_reported(raw),
             date_confirmed=bool(raw["date_confirmed"]),
             date_locked=bool(raw["date_locked"]),

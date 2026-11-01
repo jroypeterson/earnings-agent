@@ -25,6 +25,7 @@ import requests
 import config
 from digest import DigestData, EventRow
 from market_data import PostEarningsMove
+from surprise import rev_period_mismatch
 
 
 @dataclass
@@ -486,6 +487,8 @@ def _fmt_actual_vs_estimate_rev(actual: float | None, estimate: float | None) ->
         return "Rev –"
     a = _fmt_estimate_rev(actual) if actual is not None else "–"
     e = _fmt_estimate_rev(estimate) if estimate is not None else "–"
+    if rev_period_mismatch(actual, estimate):
+        return f"Rev {a} vs {e} est · not compared (period mismatch)"
     return f"Rev {a} vs {e} est · {_fmt_beat_miss(actual, estimate)}"
 
 
@@ -641,6 +644,9 @@ def _fmt_eps_compact(actual: float | None, estimate: float | None) -> str:
 def _fmt_rev_compact(actual: float | None, estimate: float | None) -> str:
     a = _fmt_estimate_rev(actual) if actual is not None else "–"
     e = _fmt_estimate_rev(estimate) if estimate is not None else "–"
+    if rev_period_mismatch(actual, estimate):
+        # #661: SNN's half-year $3.13B against a quarterly $1.64B is not a +90.8% beat.
+        return f"Rev {a}/{e} not compared (period mismatch)"
     return f"Rev {a}/{e} {_signed_pct(actual, estimate)}"
 
 
@@ -688,7 +694,8 @@ GUIDANCE_SLOT_LABEL = "FY guide vs Street (pre-print)"
 
 _RESULT_MARKER_SLOTS: tuple[tuple[str, object], ...] = (
     ("EPS vs est.", lambda r: _beat_marker(r.eps_actual, r.eps_estimate)),
-    ("Revenue vs est.", lambda r: _beat_marker(r.rev_actual, r.rev_estimate)),
+    ("Revenue vs est.", lambda r: "⬜" if rev_period_mismatch(r.rev_actual, r.rev_estimate)
+                                  else _beat_marker(r.rev_actual, r.rev_estimate)),
     ("Stock reaction", lambda r: _move_marker(r.move)),
     (GUIDANCE_SLOT_LABEL, _guidance_marker),
 )

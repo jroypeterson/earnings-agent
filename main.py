@@ -401,7 +401,8 @@ def _record_actuals(
     instead of being silently marked reported. Returns True if queued for
     Slack, False if deferred (stock-move data not yet available).
     """
-    move = None if dry_run else fetch_post_earnings_move(ticker, earnings_date, hour)
+    # #661: an AMC print Finnhub left untimed (ALC, CP, NHP, SHMZF, OSSFF) was scored before-open.
+    move = None if dry_run else fetch_post_earnings_move(ticker, earnings_date, hour or hour_yf)
     defer_post = _should_defer_post(move, earnings_date, today)
     upsert_event(
         conn, ticker, earnings_date, hour, gcal_id,
@@ -3274,7 +3275,8 @@ def run_check_results(
         )
         source_fingerprint = f"{ticker}:{record_date}"
 
-        move = fetch_post_earnings_move(ticker, record_date, hour)
+        move = fetch_post_earnings_move(
+            ticker, record_date, hour or (existing.get("event_hour_yf") if existing else None))
 
         result = ResultRow(
             ticker=ticker,

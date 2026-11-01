@@ -43,6 +43,7 @@ from dataclasses import dataclass, field
 from datetime import date, timedelta
 
 import edgar_client
+from surprise import rev_period_mismatch
 from config import ANTHROPIC_API_KEY
 
 logger = logging.getLogger("earnings_agent")
@@ -476,6 +477,15 @@ def _marker(actual: float | None, est: float | None) -> str:
     return "\U0001f7e9" if actual >= est else "\U0001f7e5"
 
 
+def _rev_marker(actual: float | None, est: float | None) -> str:
+    return "⬜" if rev_period_mismatch(actual, est) else _marker(actual, est)
+
+
+def _rev_pct(actual: float | None, est: float | None) -> str:
+    """#661: a half-year actual against a quarterly estimate is not a surprise."""
+    return " (not compared: period mismatch)" if rev_period_mismatch(actual, est) else _pct(actual, est)
+
+
 def _money(v: float | None) -> str:
     if v is None:
         return "n/a"
@@ -524,7 +534,7 @@ def render_text(rows: list[SummaryRow], target: date) -> str:
 
         lines.append(
             f"{_marker(row.eps_actual, row.eps_estimate)} "
-            f"{_marker(row.rev_actual, row.rev_estimate)}  "
+            f"{_rev_marker(row.rev_actual, row.rev_estimate)}  "
             f"{row.ticker}  {row.company_name} - "
             f"{row.event_date} {_timing(row)}"
             + (f" - {row.quarter}" if row.quarter else "")
@@ -533,7 +543,7 @@ def render_text(rows: list[SummaryRow], target: date) -> str:
             f"     EPS {_eps(row.eps_actual)} vs {_eps(row.eps_estimate)} est"
             f"{_pct(row.eps_actual, row.eps_estimate)}"
             f"  |  Rev {_money(row.rev_actual)} vs {_money(row.rev_estimate)} est"
-            f"{_pct(row.rev_actual, row.rev_estimate)}"
+            f"{_rev_pct(row.rev_actual, row.rev_estimate)}"
         )
 
         if row.narrative and row.narrative.headline:
@@ -582,13 +592,13 @@ def build_slack_blocks(rows: list[SummaryRow], target: date) -> list[dict]:
 
         parts = [
             f"{_marker(row.eps_actual, row.eps_estimate)} "
-            f"{_marker(row.rev_actual, row.rev_estimate)}  "
+            f"{_rev_marker(row.rev_actual, row.rev_estimate)}  "
             f"`{row.ticker}` *{row.company_name}* · {row.event_date} {_timing(row)}"
             + (f" · {row.quarter}" if row.quarter else ""),
             f"EPS {_eps(row.eps_actual)} / {_eps(row.eps_estimate)} est"
             f"{_pct(row.eps_actual, row.eps_estimate)} · "
             f"Rev {_money(row.rev_actual)} / {_money(row.rev_estimate)} est"
-            f"{_pct(row.rev_actual, row.rev_estimate)}",
+            f"{_rev_pct(row.rev_actual, row.rev_estimate)}",
         ]
         if row.narrative and row.narrative.headline:
             parts.append(f"_{row.narrative.headline}_")
