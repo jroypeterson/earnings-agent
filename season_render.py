@@ -179,7 +179,7 @@ def _marker(row: SeasonRow) -> str:
 # ---------------------------------------------------------------------------
 
 _REPORTED_HEADERS = [
-    "", "TICKER", "COMPANY", "REPORTED", "EPS SURP", "MOVE", "SIGMA", "vs SPY", "LIST",
+    "FLAG", "TICKER", "COMPANY", "REPORTED", "EPS SURP", "MOVE", "SIGMA", "vs SPY", "LIST",
 ]
 
 
@@ -363,7 +363,9 @@ def _key_block() -> dict:
         "session's close to the report-day close; AMC prints from the report-day close to "
         "the NEXT session's close.",
         "`SIGMA` — that move in the stock's own trailing 252-day daily standard deviation, "
-        "the reaction day excluded. `!!` marks |sigma| >= 2.",
+        "the reaction day excluded.",
+        "`FLAG` — direction of the reaction: `+` up, `-` down; doubled (`++` / `--`) "
+        "when |sigma| >= 2. `.` = reaction not measurable yet.",
         "`vs SPY` — the same move net of SPY over the identical window. Separates a real "
         "reaction from a tape move.",
         "`EPS SURP` — surprise versus consensus, not growth. Blank when consensus is "

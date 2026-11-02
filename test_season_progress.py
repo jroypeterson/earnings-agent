@@ -964,3 +964,14 @@ def test_an_empty_ping_renders_nothing():
     conn = _db()
     p = collect_season(conn, _cov(RPD="Portfolio"), AS_OF)
     assert R.build_reported_ping([], p) == []
+
+
+def test_the_marker_column_is_labelled_and_its_key_names_every_glyph():
+    """The key once described a `!!` glyph the code never emitted, and the
+    marker column had no header at all, so nothing on the card explained it."""
+    assert R._REPORTED_HEADERS[0] == "FLAG"
+    key = R._key_block()["elements"][0]["text"]
+    assert "!!" not in key
+    flag_line = next(l for l in key.splitlines() if l.startswith("`FLAG`"))
+    for glyph in ("`+`", "`-`", "`++`", "`--`", "`.`"):
+        assert glyph in flag_line, glyph
