@@ -192,7 +192,7 @@
  "BKD": {
   "company": "Brookdale Senior Living Inc",
   "event_date": "2026-11-06",
-  "generated": "2026-11-03 01:46 UTC"
+  "generated": "2026-11-03 18:30 UTC"
  },
  "BLCO": {
   "company": "Bausch + Lomb Corporation",
@@ -407,7 +407,7 @@
  "ELAN": {
   "company": "Elanco Animal Health Incorporated",
   "event_date": "2026-11-06",
-  "generated": "2026-11-03 01:46 UTC"
+  "generated": "2026-11-03 18:30 UTC"
  },
  "ELV": {
   "company": "Elevance Health Inc",
@@ -537,7 +537,7 @@
  "HUM": {
   "company": "Humana Inc",
   "event_date": "2026-11-06",
-  "generated": "2026-11-03 01:46 UTC"
+  "generated": "2026-11-03 18:30 UTC"
  },
  "IART": {
   "company": "Integra LifeSciences Holdings Corporation",
@@ -747,7 +747,7 @@
  "MRNA": {
   "company": "Moderna Inc",
   "event_date": "2026-11-06",
-  "generated": "2026-11-03 01:46 UTC"
+  "generated": "2026-11-03 18:30 UTC"
  },
  "MRVI": {
   "company": "Maravai LifeSciences Holdings, Inc.",
@@ -1192,7 +1192,7 @@
  "VTRS": {
   "company": "Viatris Inc",
   "event_date": "2026-11-05",
-  "generated": "2026-11-03 01:46 UTC"
+  "generated": "2026-11-03 18:30 UTC"
  },
  "WAT": {
   "company": "Waters Corp",
@@ -1217,7 +1217,7 @@
  "XRAY": {
   "company": "DENTSPLY SIRONA Inc.",
   "event_date": "2026-11-05",
-  "generated": "2026-11-03 01:46 UTC"
+  "generated": "2026-11-03 18:30 UTC"
  },
  "XRN": {
   "company": "Chiron Real Estate Inc",
@@ -1232,6 +1232,6 @@
  "ZTS": {
   "company": "Zoetis Inc.",
   "event_date": "2026-11-05",
-  "generated": "2026-11-03 01:46 UTC"
+  "generated": "2026-11-03 18:30 UTC"
  }
 }

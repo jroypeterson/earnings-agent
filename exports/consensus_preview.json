@@ -1,93 +1,13 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-11-03T01:46:09Z",
+  "generated_at": "2026-11-03T18:30:37Z",
   "window": {
     "start": "2026-11-03",
     "end": "2026-11-06"
   },
   "counts": {
-    "previews": 1
+    "previews": 0
   },
-  "previews": [
-    {
-      "ticker": "NTRA",
-      "company_name": "Natera, Inc.",
-      "tier": 1,
-      "event_date": "2026-11-05",
-      "event_hour": "amc",
-      "call_datetime_utc": "2026-11-05T21:30:00+00:00",
-      "last_price": 414.29998779296875,
-      "day_change_pct": -4.9770670199612965,
-      "consensus": {
-        "eps": {
-          "mean": -0.2985,
-          "count": null,
-          "low": null,
-          "high": null
-        },
-        "revenue": {
-          "mean": 718998816.0,
-          "count": null,
-          "low": null,
-          "high": null
-        }
-      },
-      "qtd": {
-        "since": "2026-09-30",
-        "ticker_pct": 0.23952728949767346,
-        "spx_pct": -0.9060795058475717,
-        "sector_etf": "IHI",
-        "sector_etf_pct": 6.725314807602785
-      },
-      "implied_move": {
-        "pct": 14.5,
-        "expiry": "2026-11-20",
-        "method": "ATM straddle",
-        "notes": [
-          "(includes 14 extra days of time value)"
-        ]
-      },
-      "post_earnings_moves": [
-        {
-          "event_date": "2026-08-06",
-          "move_pct": 21.373125396447918,
-          "window_label": "next-day close vs earnings-day close"
-        },
-        {
-          "event_date": "2026-05-07",
-          "move_pct": -11.636794185583852,
-          "window_label": "next-day close vs earnings-day close"
-        },
-        {
-          "event_date": "2026-02-26",
-          "move_pct": -3.729760569058905,
-          "window_label": "next-day close vs earnings-day close"
-        },
-        {
-          "event_date": "2025-11-06",
-          "move_pct": 0.5491795748403719,
-          "window_label": "next-day close vs earnings-day close"
-        }
-      ],
-      "beat_rates": {
-        "eps": {
-          "beats": 12,
-          "total": 20,
-          "source": "yfinance"
-        },
-        "revenue": {
-          "beats": 19,
-          "total": 20,
-          "source": "fmp"
-        }
-      },
-      "na_fields": [
-        {
-          "field": "consensus.eps.range",
-          "reason": "estimate range not available on FMP Starter plan"
-        }
-      ]
-    }
-  ]
+  "previews": []
 }
