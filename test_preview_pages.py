@@ -28,6 +28,20 @@ def test_filename_cannot_escape_the_preview_dir():
     assert "/" not in pp._safe_name("../../etc") and not pp._safe_name("../x").startswith(".")
 
 
+def test_windows_reserved_stems_get_a_suffix_on_the_stem():
+    """CI committed docs/preview/CON.html and `git pull` broke on Windows."""
+    assert pp._safe_name("CON") == "CON_"
+    assert pp._safe_name("con") == "CON_"
+    assert pp._safe_name("CON.TO") == "CON_.TO"
+    assert pp._safe_name("NUL.SW") == "NUL_.SW"
+    for t in ("PRN", "AUX", "COM0", "COM9", "LPT1"):
+        assert pp._safe_name(t) == t + "_"
+    # Not reserved: the stem must match exactly, not just start with one.
+    for t in ("CONE", "COMP", "NULL", "AUXO", "COM10", "ROG.SW", "XCON"):
+        assert pp._safe_name(t) == t
+    assert pp.page_url("CON").endswith("/preview/CON_.html")
+
+
 def test_ticktick_link_and_page_writer_agree_on_the_url():
     for t in ("ISRG", "ROG.SW", "2715.HK", "BRK/B"):
         assert tt.preview_url(t) == pp.page_url(t)

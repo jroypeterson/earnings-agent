@@ -49,9 +49,28 @@ def page_url(ticker: str) -> str:
     return PAGES_BASE_URL + _safe_name(ticker) + ".html"
 
 
+# Windows device names. Windows reserves the stem before the FIRST dot, so
+# `CON.TO.html` is as unopenable as `CON.html`; git refuses to check either out
+# on Windows (core.protectNTFS), which broke `git pull` on the laptop on
+# 2026-11-02 when CI committed docs/preview/CON.html (Concentra).
+_RESERVED_STEMS = {"CON", "PRN", "AUX", "NUL",
+                   *(f"COM{i}" for i in range(10)), *(f"LPT{i}" for i in range(10))}
+
+
 def _safe_name(ticker: str) -> str:
-    """A filename that cannot escape docs/preview/ (tickers carry dots, e.g. ROG.SW)."""
-    return re.sub(r"[^A-Za-z0-9.\-]", "_", ticker.upper()).lstrip(".") or "_"
+    """A filename that cannot escape docs/preview/ (tickers carry dots, e.g. ROG.SW).
+
+    A reserved stem gets a trailing `_` on the stem itself (`CON` -> `CON_`,
+    `CON.TO` -> `CON_.TO`): a suffix after the last dot would leave the stem
+    reserved. `_`, not `-`, because `-` is a legal ticker character, and not a
+    leading `_`, which Jekyll would hide if `.nojekyll` ever went away.
+    docs/404.html redirects the old unsuffixed URLs.
+    """
+    name = re.sub(r"[^A-Za-z0-9.\-]", "_", ticker.upper()).lstrip(".") or "_"
+    stem, dot, rest = name.partition(".")
+    if stem in _RESERVED_STEMS:
+        name = stem + "_" + dot + rest
+    return name
 
 
 def mrkdwn_to_html(line: str) -> str:
