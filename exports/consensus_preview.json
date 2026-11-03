@@ -1,175 +1,15 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-11-02T20:56:45Z",
+  "generated_at": "2026-11-03T00:29:21Z",
   "window": {
-    "start": "2026-11-02",
-    "end": "2026-11-05"
+    "start": "2026-11-03",
+    "end": "2026-11-06"
   },
   "counts": {
-    "previews": 23
+    "previews": 21
   },
   "previews": [
-    {
-      "ticker": "AAPL",
-      "company_name": "Apple Inc.",
-      "tier": 1,
-      "event_date": "2026-11-02",
-      "event_hour": "amc",
-      "call_datetime_utc": "2026-11-02T22:00:00+00:00",
-      "last_price": 338.239990234375,
-      "day_change_pct": -1.8541666592873571,
-      "consensus": {
-        "eps": {
-          "mean": 2.0214,
-          "count": null,
-          "low": null,
-          "high": null
-        },
-        "revenue": {
-          "mean": 115327453620.0,
-          "count": null,
-          "low": null,
-          "high": null
-        }
-      },
-      "qtd": {
-        "since": "2026-09-30",
-        "ticker_pct": 1.5494576398828526,
-        "spx_pct": -1.3387910136351304,
-        "sector_etf": null,
-        "sector_etf_pct": null
-      },
-      "implied_move": {
-        "pct": 4.5,
-        "expiry": "2026-11-04",
-        "method": "ATM straddle",
-        "notes": []
-      },
-      "post_earnings_moves": [
-        {
-          "event_date": "2026-07-30",
-          "move_pct": -7.353858440208278,
-          "window_label": "next-day close vs earnings-day close"
-        },
-        {
-          "event_date": "2026-04-30",
-          "move_pct": 3.239362767664463,
-          "window_label": "next-day close vs earnings-day close"
-        },
-        {
-          "event_date": "2026-01-29",
-          "move_pct": 0.4646137095106894,
-          "window_label": "next-day close vs earnings-day close"
-        },
-        {
-          "event_date": "2025-10-30",
-          "move_pct": -0.37951561451632837,
-          "window_label": "next-day close vs earnings-day close"
-        }
-      ],
-      "beat_rates": {
-        "eps": {
-          "beats": 19,
-          "total": 20,
-          "source": "yfinance"
-        },
-        "revenue": {
-          "beats": 18,
-          "total": 20,
-          "source": "fmp"
-        }
-      },
-      "na_fields": [
-        {
-          "field": "qtd.sector_etf",
-          "reason": "no mapped ETF for sector 'Tech'"
-        },
-        {
-          "field": "consensus.eps.range",
-          "reason": "estimate range not available on FMP Starter plan"
-        }
-      ]
-    },
-    {
-      "ticker": "WAY",
-      "company_name": "Waystar Holding Corp",
-      "tier": 1,
-      "event_date": "2026-11-02",
-      "event_hour": "amc",
-      "call_datetime_utc": "2026-11-02T21:30:00+00:00",
-      "last_price": 28.084999084472656,
-      "day_change_pct": 0.3035681588309152,
-      "consensus": {
-        "eps": {
-          "mean": 0.4114,
-          "count": null,
-          "low": null,
-          "high": null
-        },
-        "revenue": {
-          "mean": 326634808.0,
-          "count": null,
-          "low": null,
-          "high": null
-        }
-      },
-      "qtd": {
-        "since": "2026-09-30",
-        "ticker_pct": 10.812942993760547,
-        "spx_pct": -1.3387910136351304,
-        "sector_etf": "XLV",
-        "sector_etf_pct": 9.906779325491211
-      },
-      "implied_move": {
-        "pct": 12.2,
-        "expiry": "2026-11-20",
-        "method": "ATM straddle",
-        "notes": [
-          "(includes 17 extra days of time value)"
-        ]
-      },
-      "post_earnings_moves": [
-        {
-          "event_date": "2026-07-29",
-          "move_pct": -14.600325680550846,
-          "window_label": "next-day close vs earnings-day close"
-        },
-        {
-          "event_date": "2026-04-29",
-          "move_pct": -15.413535366862313,
-          "window_label": "next-day close vs earnings-day close"
-        },
-        {
-          "event_date": "2026-02-17",
-          "move_pct": 8.478356231446757,
-          "window_label": "earnings-day close vs prior close"
-        },
-        {
-          "event_date": "2025-10-29",
-          "move_pct": -6.461377151965431,
-          "window_label": "next-day close vs earnings-day close"
-        }
-      ],
-      "beat_rates": {
-        "eps": {
-          "beats": 8,
-          "total": 9,
-          "source": "yfinance"
-        },
-        "revenue": {
-          "beats": 8,
-          "total": 10,
-          "source": "fmp"
-        }
-      },
-      "na_fields": [
-        {
-          "field": "consensus.eps.range",
-          "reason": "estimate range not available on FMP Starter plan"
-        }
-      ]
-    },
     {
       "ticker": "ALMR",
       "company_name": "Alamar Biosciences, Inc.",
@@ -177,8 +17,8 @@
       "event_date": "2026-11-03",
       "event_hour": "amc",
       "call_datetime_utc": "2026-11-03T20:00:00+00:00",
-      "last_price": 28.989999771118164,
-      "day_change_pct": -5.261439837518831,
+      "last_price": 28.940000534057617,
+      "day_change_pct": -5.424836035026151,
       "consensus": {
         "eps": {
           "mean": -0.2183,
@@ -196,9 +36,9 @@
       "qtd": {
         "since": "2026-09-30",
         "ticker_pct": -15.057232775807542,
-        "spx_pct": -1.3387910136351304,
+        "spx_pct": -1.3807520330245948,
         "sector_etf": "IHI",
-        "sector_etf_pct": 10.498531322951887
+        "sector_etf_pct": 10.478976805000586
       },
       "implied_move": {
         "pct": null,
@@ -245,8 +85,8 @@
       "event_date": "2026-11-03",
       "event_hour": null,
       "call_datetime_utc": null,
-      "last_price": 22.625,
-      "day_change_pct": 0.6898117106456116,
+      "last_price": 22.610000610351562,
+      "day_change_pct": 0.6230587506687817,
       "consensus": {
         "eps": {
           "mean": 0.618,
@@ -263,10 +103,10 @@
       },
       "qtd": {
         "since": "2026-09-30",
-        "ticker_pct": 1.0053636725070343,
-        "spx_pct": -1.3387910136351304,
+        "ticker_pct": 1.0277098222066354,
+        "spx_pct": -1.3807520330245948,
         "sector_etf": "XLV",
-        "sector_etf_pct": 9.906779325491211
+        "sector_etf_pct": 9.606939858970808
       },
       "implied_move": {
         "pct": 11.8,
@@ -330,8 +170,8 @@
       "event_date": "2026-11-03",
       "event_hour": "amc",
       "call_datetime_utc": "2026-11-04T16:30:00+00:00",
-      "last_price": 45.844200134277344,
-      "day_change_pct": -4.111694588053001,
+      "last_price": 45.58000183105469,
+      "day_change_pct": -4.664295080907724,
       "consensus": {
         "eps": {
           "mean": 0.5998,
@@ -348,13 +188,13 @@
       },
       "qtd": {
         "since": "2026-09-30",
-        "ticker_pct": 10.204577030858102,
-        "spx_pct": -1.3387910136351304,
+        "ticker_pct": 9.699164062558099,
+        "spx_pct": -1.3807520330245948,
         "sector_etf": "XLV",
-        "sector_etf_pct": 9.906779325491211
+        "sector_etf_pct": 9.606939858970808
       },
       "implied_move": {
-        "pct": 16.4,
+        "pct": 16.5,
         "expiry": "2026-11-20",
         "method": "ATM straddle",
         "notes": [
@@ -409,8 +249,8 @@
       "event_date": "2026-11-03",
       "event_hour": "bmo",
       "call_datetime_utc": "2026-11-03T20:00:00+00:00",
-      "last_price": 74.88999938964844,
-      "day_change_pct": 0.1738861017968979,
+      "last_price": 75.13999938964844,
+      "day_change_pct": 0.5082895165325485,
       "consensus": {
         "eps": {
           "mean": 0.6208,
@@ -427,16 +267,17 @@
       },
       "qtd": {
         "since": "2026-09-30",
-        "ticker_pct": 14.15726992789746,
-        "spx_pct": -1.3387910136351304,
+        "ticker_pct": 14.507766297773095,
+        "spx_pct": -1.3807520330245948,
         "sector_etf": null,
         "sector_etf_pct": null
       },
       "implied_move": {
-        "pct": 10.2,
+        "pct": 10.5,
         "expiry": "2026-11-20",
         "method": "ATM straddle",
         "notes": [
+          "wide market",
           "(includes 17 extra days of time value)"
         ]
       },
@@ -453,7 +294,7 @@
         },
         {
           "event_date": "2026-02-19",
-          "move_pct": 15.9859679893816,
+          "move_pct": 15.98596970996038,
           "window_label": "earnings-day close vs prior close"
         },
         {
@@ -492,8 +333,8 @@
       "event_date": "2026-11-04",
       "event_hour": "bmo",
       "call_datetime_utc": "2026-11-04T16:00:00+00:00",
-      "last_price": 104.52999877929688,
-      "day_change_pct": 8.153126879473488,
+      "last_price": 104.3499984741211,
+      "day_change_pct": 7.966887559934952,
       "consensus": {
         "eps": {
           "mean": 1.93,
@@ -510,8 +351,8 @@
       },
       "qtd": {
         "since": "2026-09-30",
-        "ticker_pct": 16.08017184998198,
-        "spx_pct": -1.3387910136351304,
+        "ticker_pct": 16.202666957569186,
+        "spx_pct": -1.3807520330245948,
         "sector_etf": null,
         "sector_etf_pct": null
       },
@@ -520,6 +361,7 @@
         "expiry": "2026-11-20",
         "method": "ATM straddle",
         "notes": [
+          "wide market",
           "(includes 16 extra days of time value)"
         ]
       },
@@ -579,8 +421,8 @@
       "event_date": "2026-11-04",
       "event_hour": "amc",
       "call_datetime_utc": "2026-11-04T22:00:00+00:00",
-      "last_price": 719.0800170898438,
-      "day_change_pct": 1.1037269008148434,
+      "last_price": 724.1900024414062,
+      "day_change_pct": 1.8221984911427236,
       "consensus": {
         "eps": {
           "mean": 11.0964,
@@ -597,13 +439,13 @@
       },
       "qtd": {
         "since": "2026-09-30",
-        "ticker_pct": 21.227238656363205,
-        "spx_pct": -1.3387910136351304,
+        "ticker_pct": 22.232355773569417,
+        "spx_pct": -1.3807520330245948,
         "sector_etf": null,
         "sector_etf_pct": null
       },
       "implied_move": {
-        "pct": 9.3,
+        "pct": 9.5,
         "expiry": "2026-11-06",
         "method": "ATM straddle",
         "notes": []
@@ -660,8 +502,8 @@
       "event_date": "2026-11-04",
       "event_hour": "amc",
       "call_datetime_utc": "2026-11-04T21:30:00+00:00",
-      "last_price": 135.4199981689453,
-      "day_change_pct": -5.584602186337877,
+      "last_price": 133.75999450683594,
+      "day_change_pct": -6.741963789124653,
       "consensus": {
         "eps": {
           "mean": -2.6531,
@@ -678,13 +520,13 @@
       },
       "qtd": {
         "since": "2026-09-30",
-        "ticker_pct": -3.5219795393701165,
-        "spx_pct": -1.3387910136351304,
+        "ticker_pct": -4.538967193820168,
+        "spx_pct": -1.3807520330245948,
         "sector_etf": "IHI",
-        "sector_etf_pct": 10.498531322951887
+        "sector_etf_pct": 10.478976805000586
       },
       "implied_move": {
-        "pct": 19.2,
+        "pct": 19.3,
         "expiry": "2026-11-20",
         "method": "ATM straddle",
         "notes": [
@@ -739,8 +581,8 @@
       "event_date": "2026-11-04",
       "event_hour": null,
       "call_datetime_utc": null,
-      "last_price": 12.234999656677246,
-      "day_change_pct": -4.860031233947069,
+      "last_price": 12.149999618530273,
+      "day_change_pct": -5.520995778396636,
       "consensus": {
         "eps": {
           "mean": -1.0424,
@@ -757,13 +599,13 @@
       },
       "qtd": {
         "since": "2026-09-30",
-        "ticker_pct": 6.830120208057997,
-        "spx_pct": -1.3387910136351304,
+        "ticker_pct": 6.392290169521872,
+        "spx_pct": -1.3807520330245948,
         "sector_etf": "XBI",
-        "sector_etf_pct": -3.069505684112085
+        "sector_etf_pct": -3.570516162820809
       },
       "implied_move": {
-        "pct": 30.6,
+        "pct": 30.9,
         "expiry": "2026-11-20",
         "method": "ATM straddle",
         "notes": [
@@ -813,8 +655,8 @@
       "event_date": "2026-11-04",
       "event_hour": "bmo",
       "call_datetime_utc": null,
-      "last_price": 31.704999923706055,
-      "day_change_pct": -0.3927112796092206,
+      "last_price": 31.690000534057617,
+      "day_change_pct": -0.4398347156267821,
       "consensus": {
         "eps": {
           "mean": 0.4905,
@@ -831,10 +673,10 @@
       },
       "qtd": {
         "since": "2026-09-30",
-        "ticker_pct": 40.97376721373678,
-        "spx_pct": -1.3387910136351304,
+        "ticker_pct": 40.907073617466935,
+        "spx_pct": -1.3807520330245948,
         "sector_etf": "XLV",
-        "sector_etf_pct": 9.906779325491211
+        "sector_etf_pct": 9.606939858970808
       },
       "implied_move": {
         "pct": 3.3,
@@ -893,8 +735,8 @@
       "event_date": "2026-11-04",
       "event_hour": "bmo",
       "call_datetime_utc": "2026-11-04T13:00:00+00:00",
-      "last_price": 116.02999877929688,
-      "day_change_pct": -0.5485552410155,
+      "last_price": 115.37000274658203,
+      "day_change_pct": -1.1142499723714816,
       "consensus": {
         "eps": {
           "mean": 1.2273,
@@ -911,13 +753,13 @@
       },
       "qtd": {
         "since": "2026-09-30",
-        "ticker_pct": -7.829649584827808,
-        "spx_pct": -1.3387910136351304,
+        "ticker_pct": -8.247172970706316,
+        "spx_pct": -1.3807520330245948,
         "sector_etf": null,
         "sector_etf_pct": null
       },
       "implied_move": {
-        "pct": 13.9,
+        "pct": 13.3,
         "expiry": "2026-11-20",
         "method": "ATM straddle",
         "notes": [
@@ -937,12 +779,12 @@
         },
         {
           "event_date": "2026-02-26",
-          "move_pct": 4.104795618534694,
+          "move_pct": 4.10478260320607,
           "window_label": "earnings-day close vs prior close"
         },
         {
           "event_date": "2025-11-18",
-          "move_pct": 0.8103223857006717,
+          "move_pct": 0.8103320704429413,
           "window_label": "next-day close vs earnings-day close"
         }
       ],
@@ -976,8 +818,8 @@
       "event_date": "2026-11-04",
       "event_hour": "amc",
       "call_datetime_utc": "2026-11-05T15:30:00+00:00",
-      "last_price": 328.55999755859375,
-      "day_change_pct": -0.9406642505076602,
+      "last_price": 329.95001220703125,
+      "day_change_pct": -0.5215811948117908,
       "consensus": {
         "eps": {
           "mean": 2.3483,
@@ -994,13 +836,13 @@
       },
       "qtd": {
         "since": "2026-09-30",
-        "ticker_pct": 1.0757158724662461,
-        "spx_pct": -1.3387910136351304,
+        "ticker_pct": 1.2644709831984255,
+        "spx_pct": -1.3807520330245948,
         "sector_etf": null,
         "sector_etf_pct": null
       },
       "implied_move": {
-        "pct": 10.3,
+        "pct": 10.4,
         "expiry": "2026-11-20",
         "method": "ATM straddle",
         "notes": [
@@ -1025,7 +867,7 @@
         },
         {
           "event_date": "2025-11-05",
-          "move_pct": 10.019043552604808,
+          "move_pct": 10.01904455680587,
           "window_label": "next-day close vs earnings-day close"
         }
       ],
@@ -1059,8 +901,8 @@
       "event_date": "2026-11-04",
       "event_hour": "bmo",
       "call_datetime_utc": null,
-      "last_price": 66.5199966430664,
-      "day_change_pct": 1.946355008530891,
+      "last_price": 66.70999908447266,
+      "day_change_pct": 2.2375464896132664,
       "consensus": {
         "eps": {
           "mean": 0.9745,
@@ -1077,13 +919,13 @@
       },
       "qtd": {
         "since": "2026-09-30",
-        "ticker_pct": -2.926587097203116,
-        "spx_pct": -1.3387910136351304,
+        "ticker_pct": -2.627358043543117,
+        "spx_pct": -1.3807520330245948,
         "sector_etf": null,
         "sector_etf_pct": null
       },
       "implied_move": {
-        "pct": 7.7,
+        "pct": 7.6,
         "expiry": "2026-11-06",
         "method": "ATM straddle",
         "notes": []
@@ -1112,7 +954,7 @@
       ],
       "beat_rates": {
         "eps": {
-          "beats": 12,
+          "beats": 14,
           "total": 20,
           "source": "yfinance"
         },
@@ -1140,8 +982,8 @@
       "event_date": "2026-11-05",
       "event_hour": "amc",
       "call_datetime_utc": "2026-11-05T20:00:00+00:00",
-      "last_price": 73.86000061035156,
-      "day_change_pct": 0.5308280701900131,
+      "last_price": 73.58000183105469,
+      "day_change_pct": 0.14972180280917896,
       "consensus": {
         "eps": {
           "mean": 0.381,
@@ -1158,13 +1000,13 @@
       },
       "qtd": {
         "since": "2026-09-30",
-        "ticker_pct": 6.608402031492878,
-        "spx_pct": -1.3387910136351304,
+        "ticker_pct": 6.283400640172624,
+        "spx_pct": -1.3807520330245948,
         "sector_etf": null,
         "sector_etf_pct": null
       },
       "implied_move": {
-        "pct": 11.5,
+        "pct": 11.8,
         "expiry": "2026-11-06",
         "method": "ATM straddle",
         "notes": []
@@ -1225,8 +1067,8 @@
       "event_date": "2026-11-05",
       "event_hour": "bmo",
       "call_datetime_utc": "2026-11-05T13:30:00+00:00",
-      "last_price": 295.8949890136719,
-      "day_change_pct": -0.7829600934304681,
+      "last_price": 295.19000244140625,
+      "day_change_pct": -1.019350311146667,
       "consensus": {
         "eps": {
           "mean": 7.7256,
@@ -1243,10 +1085,10 @@
       },
       "qtd": {
         "since": "2026-09-30",
-        "ticker_pct": 8.965171923108228,
-        "spx_pct": -1.3387910136351304,
+        "ticker_pct": 8.593612560448845,
+        "spx_pct": -1.3807520330245948,
         "sector_etf": "XLV",
-        "sector_etf_pct": 9.906779325491211
+        "sector_etf_pct": 9.606939858970808
       },
       "implied_move": {
         "pct": 6.3,
@@ -1272,7 +1114,7 @@
         },
         {
           "event_date": "2025-10-30",
-          "move_pct": -17.39101129738484,
+          "move_pct": -17.391006080542617,
           "window_label": "earnings-day close vs prior close"
         }
       ],
@@ -1302,8 +1144,8 @@
       "event_date": "2026-11-05",
       "event_hour": "amc",
       "call_datetime_utc": "2026-11-05T20:00:00+00:00",
-      "last_price": 35.60499954223633,
-      "day_change_pct": -1.7793116076239224,
+      "last_price": 35.63999938964844,
+      "day_change_pct": -1.6827603044181034,
       "consensus": {
         "eps": {
           "mean": 0.7354,
@@ -1320,13 +1162,13 @@
       },
       "qtd": {
         "since": "2026-09-30",
-        "ticker_pct": 5.317586803242977,
-        "spx_pct": -1.3387910136351304,
+        "ticker_pct": 5.288038393549206,
+        "spx_pct": -1.3807520330245948,
         "sector_etf": null,
         "sector_etf_pct": null
       },
       "implied_move": {
-        "pct": 7.7,
+        "pct": 7.6,
         "expiry": "2026-11-06",
         "method": "ATM straddle",
         "notes": []
@@ -1383,8 +1225,8 @@
       "event_date": "2026-11-05",
       "event_hour": "amc",
       "call_datetime_utc": "2026-11-05T22:00:00+00:00",
-      "last_price": 32.875,
-      "day_change_pct": 0.35104299254864757,
+      "last_price": 32.869998931884766,
+      "day_change_pct": 0.33577721607897304,
       "consensus": {
         "eps": {
           "mean": 0.358,
@@ -1401,13 +1243,13 @@
       },
       "qtd": {
         "since": "2026-09-30",
-        "ticker_pct": 15.808043465473423,
-        "spx_pct": -1.3387910136351304,
+        "ticker_pct": 15.984469847941106,
+        "spx_pct": -1.3807520330245948,
         "sector_etf": "XLV",
-        "sector_etf_pct": 9.906779325491211
+        "sector_etf_pct": 9.606939858970808
       },
       "implied_move": {
-        "pct": 20.4,
+        "pct": 20.6,
         "expiry": "2026-11-20",
         "method": "ATM straddle",
         "notes": [
@@ -1462,8 +1304,8 @@
       "event_date": "2026-11-05",
       "event_hour": "bmo",
       "call_datetime_utc": "2026-11-05T13:30:00+00:00",
-      "last_price": 23.149999618530273,
-      "day_change_pct": -0.04317888146684664,
+      "last_price": 23.260000228881836,
+      "day_change_pct": 0.4317805791389095,
       "consensus": {
         "eps": {
           "mean": 0.31,
@@ -1480,8 +1322,8 @@
       },
       "qtd": {
         "since": "2026-09-30",
-        "ticker_pct": -5.650411688790489,
-        "spx_pct": -1.3387910136351304,
+        "ticker_pct": -5.447155007352208,
+        "spx_pct": -1.3807520330245948,
         "sector_etf": null,
         "sector_etf_pct": null
       },
@@ -1490,7 +1332,7 @@
         "expiry": "2026-11-20",
         "method": "ATM straddle",
         "notes": [
-          "n/a (nearest common strike 25 is >5% from spot 23.15)"
+          "n/a (nearest common strike 25 is >5% from spot 23.26)"
         ]
       },
       "post_earnings_moves": [
@@ -1519,7 +1361,7 @@
         },
         {
           "field": "implied_move",
-          "reason": "n/a (nearest common strike 25 is >5% from spot 23.15)"
+          "reason": "n/a (nearest common strike 25 is >5% from spot 23.26)"
         },
         {
           "field": "consensus.eps.range",
@@ -1534,8 +1376,8 @@
       "event_date": "2026-11-05",
       "event_hour": null,
       "call_datetime_utc": null,
-      "last_price": 26.280000686645508,
-      "day_change_pct": -3.382353126796466,
+      "last_price": 26.200000762939453,
+      "day_change_pct": -3.6764704851130743,
       "consensus": {
         "eps": {
           "mean": 0.2,
@@ -1552,13 +1394,13 @@
       },
       "qtd": {
         "since": "2026-09-30",
-        "ticker_pct": -11.06985782044826,
-        "spx_pct": -1.3387910136351304,
+        "ticker_pct": -11.57610021929682,
+        "spx_pct": -1.3807520330245948,
         "sector_etf": null,
         "sector_etf_pct": null
       },
       "implied_move": {
-        "pct": 16.0,
+        "pct": 15.7,
         "expiry": "2026-11-20",
         "method": "ATM straddle",
         "notes": [
@@ -1612,8 +1454,8 @@
       "event_date": "2026-11-05",
       "event_hour": "amc",
       "call_datetime_utc": null,
-      "last_price": 3.634999990463257,
-      "day_change_pct": 3.857142584664481,
+      "last_price": 3.6500000953674316,
+      "day_change_pct": 4.285717010498047,
       "consensus": {
         "eps": {
           "mean": -0.0574,
@@ -1630,13 +1472,13 @@
       },
       "qtd": {
         "since": "2026-09-30",
-        "ticker_pct": -6.923076264721889,
-        "spx_pct": -1.3387910136351304,
+        "ticker_pct": -6.410256253505212,
+        "spx_pct": -1.3807520330245948,
         "sector_etf": "XBI",
-        "sector_etf_pct": -3.069505684112085
+        "sector_etf_pct": -3.570516162820809
       },
       "implied_move": {
-        "pct": 11.6,
+        "pct": 11.5,
         "expiry": "2026-11-06",
         "method": "ATM straddle",
         "notes": [
@@ -1691,8 +1533,8 @@
       "event_date": "2026-11-05",
       "event_hour": "amc",
       "call_datetime_utc": "2026-11-05T21:30:00+00:00",
-      "last_price": 379.5,
-      "day_change_pct": -8.399707655883102,
+      "last_price": 378.9200134277344,
+      "day_change_pct": -8.53969959152261,
       "consensus": {
         "eps": {
           "mean": -0.2985,
@@ -1709,13 +1551,13 @@
       },
       "qtd": {
         "since": "2026-09-30",
-        "ticker_pct": -8.107718168824208,
-        "spx_pct": -1.3387910136351304,
+        "ticker_pct": -8.320627212987755,
+        "spx_pct": -1.3807520330245948,
         "sector_etf": "IHI",
-        "sector_etf_pct": 10.498531322951887
+        "sector_etf_pct": 10.478976805000586
       },
       "implied_move": {
-        "pct": 13.9,
+        "pct": 14.1,
         "expiry": "2026-11-20",
         "method": "ATM straddle",
         "notes": [
@@ -1788,13 +1630,13 @@
       },
       "qtd": {
         "since": "2026-09-30",
-        "ticker_pct": 32.06335434682783,
-        "spx_pct": -1.3387910136351304,
+        "ticker_pct": 31.635270533228038,
+        "spx_pct": -1.3807520330245948,
         "sector_etf": null,
         "sector_etf_pct": null
       },
       "implied_move": {
-        "pct": 14.1,
+        "pct": 14.8,
         "expiry": "2026-11-20",
         "method": "ATM straddle",
         "notes": [
