@@ -4,6 +4,12 @@ from datetime import date
 import preview_pages as pp
 import ticktick as tt
 from consensus_preview import PreviewRow
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def _no_price_download(monkeypatch):
+    monkeypatch.setattr(pp, "_fetch_ytd", lambda tickers, today: {})
 
 
 def _row(ticker="ISRG", name="Intuitive Surgical"):
@@ -97,3 +103,45 @@ def test_links_block_caps_and_links_index():
     rows = [_row(f"T{i}") for i in range(40)]
     txt = pp.links_context_block(rows)["elements"][0]["text"]
     assert "+10 more" in txt and "index.html|all previews" in txt and len(txt) < 3000
+
+
+def _h(q, eps_est, eps_act, rev_est=100.0, rev_act=101.0):
+    return (q, "2026-01-01", eps_est, eps_act, rev_est, rev_act)
+
+
+def test_actionable_notes_flag_a_big_gap_to_the_market_and_repeated_recent_misses():
+    # JP 2026-11-04: note previews that may be more actionable.
+    quiet = [_h("Q2", 1.0, 1.1), _h("Q1", 1.0, 1.1), _h("Q4", 1.0, 0.9), _h("Q3", 1.0, 1.2)]
+    assert pp.actionable_notes(quiet, 55.0, 10.0) == []                  # 45pp gap, 1 old miss: nothing
+    assert pp.actionable_notes(quiet, 60.0, 10.0) == ["Strong this year: +60% vs S&P 500 +10%"]
+    assert pp.actionable_notes(quiet, -40.0, 10.0) == ["Weak this year: -40% vs S&P 500 +10%"]
+    assert pp.actionable_notes(quiet, None, 10.0) == []                  # no price: no claim
+    last = [_h("Q2", 1.0, 0.9)] + quiet[1:]
+    assert pp.actionable_notes(last, 0, 0) == [
+        "Missed EPS consensus by more than 2% in 2 of the last 4 reported, the latest included"]
+    assert pp.actionable_notes([_h("Q2", 1.0, 0.9)] + [_h("Q1", 1.0, 1.1)] * 3, 0, 0) == []   # one miss: no pattern
+    assert pp.actionable_notes([_h("Q2", 1.0, 0.99), _h("Q1", 1.0, 0.9)], 0, 0) == []        # -1% is noise
+    old = [_h("Q2", 1.0, 1.1), _h("Q1", 1.0, 0.9), _h("Q4", 1.0, 0.9)]
+    assert pp.actionable_notes(old, 0, 0) == []                          # beat the latest: not "recently"
+    rev = [_h("Q2", 1.0, 1.1, 100, 97), _h("Q1", 1.0, 1.1, 100, 97), _h("Q4", 1.0, 1.1), _h("Q3", 1.0, 1.1),
+           _h("Q2old", 1.0, 1.1, 100, 50)]                              # a 5th quarter is out of the window
+    assert pp.actionable_notes(rev, 0, 0) == [
+        "Missed revenue consensus by more than 2% in 2 of the last 4 reported, the latest included"]
+    loss = [_h("Q2", -0.17, -0.79), _h("Q1", -0.17, -0.79)]              # a deepening loss is a miss
+    assert pp.actionable_notes(loss, 0, 0)[0].startswith("Missed EPS consensus")
+
+
+def test_the_index_carries_the_note_and_says_what_a_blank_means(tmp_path):
+    import sqlite3
+    conn = sqlite3.connect(":memory:")
+    conn.execute("CREATE TABLE events (ticker TEXT, quarter TEXT, event_date TEXT, "
+                 "eps_estimate REAL, eps_actual REAL, rev_estimate REAL, rev_actual REAL)")
+    conn.execute("INSERT INTO events VALUES ('AAA','Q2','2026-07-20',1.0,0.8,100,101)")
+    conn.execute("INSERT INTO events VALUES ('AAA','Q1','2026-04-20',1.0,0.8,100,101)")
+    (tmp_path / "manifest.json").write_text('{"OLD": {"event_date": "2026-10-01", "company": "Old Co"}}')
+    pp.write_preview_pages([_row("AAA"), _row("BBB")], conn, tmp_path, ytd={"AAA": 70.0, "BBB": 5.0, "SPY": 10.0})
+    idx = (tmp_path / "index.html").read_text(encoding="utf-8")
+    assert "Strong this year: +70% vs S&amp;P 500 +10%<br>Missed EPS consensus by more than 2% in 2 of the last 2" in idx
+    assert "(built before notes)" in idx and "Not yet included: catalysts" in idx
+    m = __import__("json").loads((tmp_path / "manifest.json").read_text())
+    assert m["BBB"]["notes"] == [] and "notes" not in m["OLD"]
