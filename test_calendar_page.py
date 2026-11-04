@@ -2,6 +2,7 @@
 
 The load-bearing invariant: an ESTIMATED date must never be presented as confirmed.
 """
+import re
 import sqlite3
 import sys
 from pathlib import Path
@@ -298,3 +299,17 @@ def test_detail_from_a_different_tier_does_not_relabel_the_event(tmp_path):
     page = out.read_text(encoding="utf-8")
     assert ">Portfolio<" not in page
     assert ">Rest of coverage<" in page
+
+
+def test_each_hc_category_can_be_shown_on_its_own(tmp_path):
+    # JP 2026-11-04: see Healthcare Services, MedTech or Core Biopharma separately, keeping the combined view.
+    db = _mkdb(tmp_path, [_row("SVC", 2), _row("MTC", 2), _row("BIO", 2), _row("UNK", 2), _row("POS", 1)])
+    out = tmp_path / "docs" / "index.html"
+    bcp.build(db, out, details={"SVC": (2, "Healthcare Services"), "MTC": (2, "MedTech"),
+                                "BIO": (2, "Core Biopharma"), "POS": (1, "Portfolio")})
+    page = out.read_text(encoding="utf-8")
+    for sub in bcp.SUBGROUPS:
+        assert f'<option value="2:{sub}">' in page
+    assert '<option value="2">Healthcare Services, MedTech &amp; Core Biopharma</option>' in page
+    tags = dict(re.findall(r'data-sub="([^"]+)" data-q="(\w+)', page))
+    assert tags == {"Healthcare Services": "svc", "MedTech": "mtc", "Core Biopharma": "bio"}  # UNK, POS: no slice

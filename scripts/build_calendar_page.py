@@ -247,6 +247,17 @@ def _session_cell(hour: str) -> str:
     return '<span class="dim">TBD</span>'
 
 
+# JP 2026-11-04: "I want to be able to see each category separately" -- the HC group,
+# one sector at a time. Each option is a slice of the combined group-2 view, so the
+# three add up to it; a group-2 row whose sector Coverage Manager did not give has no
+# slice and shows only under the combined option.
+SUBGROUPS = ("Healthcare Services", "MedTech", "Core Biopharma")
+
+
+def _sub_attr(r: Row) -> str:
+    return f' data-sub="{html.escape(r.detail, quote=True)}"' if r.tier == 2 and r.detail in SUBGROUPS else ""
+
+
 def _row_html(r: Row) -> str:
     name = html.escape(r.company)
     ticker = html.escape(r.ticker)
@@ -255,7 +266,7 @@ def _row_html(r: Row) -> str:
     group_text = r.detail or GROUP_LABEL.get(r.tier, "Unknown")
     group_title = GROUP_TITLE.get(r.tier, "Group unknown")
     return (
-        f'<tr data-status="{r.status}" data-tier="{r.tier}" '
+        f'<tr data-status="{r.status}" data-tier="{r.tier}"{_sub_attr(r)} '
         f'data-q="{html.escape((r.ticker + " " + r.company).lower(), quote=True)}">'
         # _fmt_date returns the raw string when the date doesn't parse, so this
         # is the one cell that can carry unmodified DB content into the public
@@ -348,7 +359,10 @@ JS = """
     document.querySelectorAll('tbody tr').forEach(function (tr) {
       var ok = true;
       if (!est && tr.dataset.status === 'estimated') ok = false;
-      if (ok && t !== 'all' && tr.dataset.tier !== t) ok = false;
+      if (ok && t.indexOf(':') !== -1) {
+        var parts = t.split(':');
+        if (tr.dataset.tier !== parts[0] || tr.dataset.sub !== parts[1]) ok = false;
+      } else if (ok && t !== 'all' && tr.dataset.tier !== t) ok = false;
       if (ok && term && tr.dataset.q.indexOf(term) === -1) ok = false;
       tr.style.display = ok ? '' : 'none';
     });
@@ -423,6 +437,9 @@ def render(rows: list[Row], *, today: str, generated_at: str, db_asof: Optional[
       <option value="all">All companies</option>
       <option value="1">Positions &mdash; Portfolio, Researching (Core), Ready to Buy / Short</option>
       <option value="2">Healthcare Services, MedTech &amp; Core Biopharma</option>
+      <option value="2:Healthcare Services">&nbsp;&nbsp;&ndash; Healthcare Services only</option>
+      <option value="2:MedTech">&nbsp;&nbsp;&ndash; MedTech only</option>
+      <option value="2:Core Biopharma">&nbsp;&nbsp;&ndash; Core Biopharma only</option>
       <option value="3">Rest of the coverage universe</option>
     </select>
   </label>
