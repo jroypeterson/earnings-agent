@@ -17,7 +17,11 @@
  "ACH": {
   "company": "Accendra Health (fma Owens and Minor)",
   "event_date": "2026-11-05",
-  "generated": "2026-11-04 00:12 UTC"
+  "generated": "2026-11-05 00:33 UTC",
+  "notes": [
+   "Weak this year: -88% vs S&P 500 +13%",
+   "Missed revenue consensus by more than 2% in 2 of the last 2 reported, the latest included"
+  ]
  },
  "ACHC": {
   "company": "Acadia Healthcare Company Inc",
@@ -37,7 +41,8 @@
  "AFRM": {
   "company": "Affirm Holdings Inc",
   "event_date": "2026-11-05",
-  "generated": "2026-11-04 00:12 UTC"
+  "generated": "2026-11-05 00:33 UTC",
+  "notes": []
  },
  "AGL": {
   "company": "Agilon Health Inc",
@@ -52,7 +57,8 @@
  "AHR": {
   "company": "American Healthcare REIT Inc",
   "event_date": "2026-11-05",
-  "generated": "2026-11-04 00:12 UTC"
+  "generated": "2026-11-05 00:33 UTC",
+  "notes": []
  },
  "ALGN": {
   "company": "Align Technology, Inc.",
@@ -82,7 +88,10 @@
  "AMN": {
   "company": "AMN Healthcare Services Inc",
   "event_date": "2026-11-05",
-  "generated": "2026-11-04 00:12 UTC"
+  "generated": "2026-11-05 00:33 UTC",
+  "notes": [
+   "Strong this year: +216% vs S&P 500 +13%"
+  ]
  },
  "AMWL": {
   "company": "American Well Corp",
@@ -97,7 +106,10 @@
  "AORT": {
   "company": "Artivion Inc",
   "event_date": "2026-11-05",
-  "generated": "2026-11-04 00:12 UTC"
+  "generated": "2026-11-05 00:33 UTC",
+  "notes": [
+   "Weak this year: -41% vs S&P 500 +13%"
+  ]
  },
  "ARDT": {
   "company": "Ardent Health Inc",
@@ -167,7 +179,8 @@
  "BDX": {
   "company": "Becton Dickinson and Co",
   "event_date": "2026-11-05",
-  "generated": "2026-11-04 00:12 UTC"
+  "generated": "2026-11-05 00:33 UTC",
+  "notes": []
  },
  "BE": {
   "company": "Bloom Energy Corporation",
@@ -192,7 +205,8 @@
  "BKD": {
   "company": "Brookdale Senior Living Inc",
   "event_date": "2026-11-06",
-  "generated": "2026-11-04 00:12 UTC"
+  "generated": "2026-11-05 00:33 UTC",
+  "notes": []
  },
  "BLCO": {
   "company": "Bausch + Lomb Corporation",
@@ -237,12 +251,16 @@
  "CAH": {
   "company": "Cardinal Health Inc",
   "event_date": "2026-11-05",
-  "generated": "2026-11-04 00:12 UTC"
+  "generated": "2026-11-05 00:33 UTC",
+  "notes": [
+   "Missed revenue consensus by more than 2% in 2 of the last 2 reported, the latest included"
+  ]
  },
  "CERT": {
   "company": "Certara, Inc.",
   "event_date": "2026-11-05",
-  "generated": "2026-11-04 00:12 UTC"
+  "generated": "2026-11-05 00:33 UTC",
+  "notes": []
  },
  "CHCT": {
   "company": "Community Healthcare Trust Inc",
@@ -257,7 +275,8 @@
  "CI": {
   "company": "Cigna Group",
   "event_date": "2026-11-05",
-  "generated": "2026-11-04 00:12 UTC"
+  "generated": "2026-11-05 00:33 UTC",
+  "notes": []
  },
  "CIGI": {
   "company": "Colliers International Group Inc",
@@ -292,7 +311,10 @@
  "CON": {
   "company": "Concentra Group Holdings Parent Inc",
   "event_date": "2026-11-05",
-  "generated": "2026-11-04 00:12 UTC"
+  "generated": "2026-11-05 00:33 UTC",
+  "notes": [
+   "Strong this year: +126% vs S&P 500 +13%"
+  ]
  },
  "COR": {
   "company": "Cencora Inc",
@@ -332,12 +354,14 @@
  "CSTL": {
   "company": "Castle Biosciences, Inc.",
   "event_date": "2026-11-05",
-  "generated": "2026-11-04 00:12 UTC"
+  "generated": "2026-11-05 00:33 UTC",
+  "notes": []
  },
  "CTRE": {
   "company": "Caretrust REIT Inc",
   "event_date": "2026-11-05",
-  "generated": "2026-11-04 00:12 UTC"
+  "generated": "2026-11-05 00:33 UTC",
+  "notes": []
  },
  "CVS": {
   "company": "CVS Health Corp",
@@ -357,7 +381,8 @@
  "DBX": {
   "company": "Dropbox, Inc.",
   "event_date": "2026-11-05",
-  "generated": "2026-11-04 00:12 UTC"
+  "generated": "2026-11-05 00:33 UTC",
+  "notes": []
  },
  "DGX": {
   "company": "Quest Diagnostics Inc",
@@ -367,7 +392,11 @@
  "DH": {
   "company": "Definitive Healthcare Corp",
   "event_date": "2026-11-05",
-  "generated": "2026-11-04 00:12 UTC"
+  "generated": "2026-11-05 00:33 UTC",
+  "notes": [
+   "Weak this year: -48% vs S&P 500 +13%",
+   "Missed revenue consensus by more than 2% in 2 of the last 2 reported, the latest included"
+  ]
  },
  "DHC": {
   "company": "Diversified Healthcare Trust",
@@ -387,7 +416,10 @@
  "DOCS": {
   "company": "Doximity, Inc.",
   "event_date": "2026-11-05",
-  "generated": "2026-11-04 00:12 UTC"
+  "generated": "2026-11-05 00:33 UTC",
+  "notes": [
+   "Missed EPS consensus by more than 2% in 2 of the last 2 reported, the latest included"
+  ]
  },
  "DVA": {
   "company": "Davita Inc",
@@ -407,7 +439,8 @@
  "ELAN": {
   "company": "Elanco Animal Health Incorporated",
   "event_date": "2026-11-06",
-  "generated": "2026-11-04 00:12 UTC"
+  "generated": "2026-11-05 00:33 UTC",
+  "notes": []
  },
  "ELV": {
   "company": "Elevance Health Inc",
@@ -417,7 +450,8 @@
  "ENOV": {
   "company": "Enovis Corporation",
   "event_date": "2026-11-05",
-  "generated": "2026-11-04 00:12 UTC"
+  "generated": "2026-11-05 00:33 UTC",
+  "notes": []
  },
  "ENSG": {
   "company": "Ensign Group Inc",
@@ -432,7 +466,8 @@
  "EVH": {
   "company": "Evolent Health Inc",
   "event_date": "2026-11-05",
-  "generated": "2026-11-04 00:12 UTC"
+  "generated": "2026-11-05 00:33 UTC",
+  "notes": []
  },
  "EW": {
   "company": "Edwards Lifesciences Corp",
@@ -447,7 +482,10 @@
  "FLGT": {
   "company": "Fulgent Genetics, Inc.",
   "event_date": "2026-11-05",
-  "generated": "2026-11-04 00:12 UTC"
+  "generated": "2026-11-05 00:33 UTC",
+  "notes": [
+   "Missed EPS consensus by more than 2% in 2 of the last 2 reported, the latest included"
+  ]
  },
  "FMS": {
   "company": "Fresenius Medical Care AG",
@@ -467,7 +505,10 @@
  "GH": {
   "company": "Guardant Health, Inc.",
   "event_date": "2026-11-05",
-  "generated": "2026-11-04 00:12 UTC"
+  "generated": "2026-11-05 00:33 UTC",
+  "notes": [
+   "Strong this year: +66% vs S&P 500 +13%"
+  ]
  },
  "GILD": {
   "company": "Gilead Sciences Inc",
@@ -482,7 +523,8 @@
  "GMED": {
   "company": "Globus Medical Inc",
   "event_date": "2026-11-05",
-  "generated": "2026-11-04 00:12 UTC"
+  "generated": "2026-11-05 00:33 UTC",
+  "notes": []
  },
  "GRAL": {
   "company": "GRAIL, Inc.",
@@ -507,7 +549,8 @@
  "HCAT": {
   "company": "Health Catalyst Inc",
   "event_date": "2026-11-05",
-  "generated": "2026-11-04 00:12 UTC"
+  "generated": "2026-11-05 00:33 UTC",
+  "notes": []
  },
  "HCSG": {
   "company": "Healthcare Services Group Inc",
@@ -537,7 +580,8 @@
  "HUM": {
   "company": "Humana Inc",
   "event_date": "2026-11-06",
-  "generated": "2026-11-04 00:12 UTC"
+  "generated": "2026-11-05 00:33 UTC",
+  "notes": []
  },
  "IART": {
   "company": "Integra LifeSciences Holdings Corporation",
@@ -552,7 +596,8 @@
  "ICUI": {
   "company": "ICU Medical, Inc.",
   "event_date": "2026-11-05",
-  "generated": "2026-11-04 00:12 UTC"
+  "generated": "2026-11-05 00:33 UTC",
+  "notes": []
  },
  "IDXX": {
   "company": "IDEXX Laboratories Inc",
@@ -592,7 +637,8 @@
  "IRTC": {
   "company": "iRhythm Holdings, Inc",
   "event_date": "2026-11-05",
-  "generated": "2026-11-04 00:12 UTC"
+  "generated": "2026-11-05 00:33 UTC",
+  "notes": []
  },
  "ISRG": {
   "company": "Intuitive Surgical Inc",
@@ -632,7 +678,10 @@
  "LFST": {
   "company": "Lifestance Health Group Inc",
   "event_date": "2026-11-05",
-  "generated": "2026-11-04 00:12 UTC"
+  "generated": "2026-11-05 00:33 UTC",
+  "notes": [
+   "Strong this year: +104% vs S&P 500 +13%"
+  ]
  },
  "LH": {
   "company": "Labcorp Holdings Inc",
@@ -672,7 +721,8 @@
  "MAIR": {
   "company": "Madison Air Solutions Corporation",
   "event_date": "2026-11-05",
-  "generated": "2026-11-04 00:12 UTC"
+  "generated": "2026-11-05 00:33 UTC",
+  "notes": []
  },
  "MCK": {
   "company": "McKesson Corp",
@@ -692,7 +742,8 @@
  "MDA": {
   "company": "MDA Space Ltd",
   "event_date": "2026-11-05",
-  "generated": "2026-11-04 00:12 UTC"
+  "generated": "2026-11-05 00:33 UTC",
+  "notes": []
  },
  "MDGL": {
   "company": "Madrigal Pharmaceuticals Inc",
@@ -722,12 +773,16 @@
  "MNKD": {
   "company": "MannKind Corp",
   "event_date": "2026-11-05",
-  "generated": "2026-11-04 00:12 UTC"
+  "generated": "2026-11-05 00:33 UTC",
+  "notes": []
  },
  "MOBI": {
   "company": "Mobia Medical, Inc.",
   "event_date": "2026-11-05",
-  "generated": "2026-11-04 00:12 UTC"
+  "generated": "2026-11-05 00:33 UTC",
+  "notes": [
+   "Missed EPS consensus by more than 2% in 2 of the last 2 reported, the latest included"
+  ]
  },
  "MOH": {
   "company": "Molina Healthcare Inc",
@@ -747,7 +802,10 @@
  "MRNA": {
   "company": "Moderna Inc",
   "event_date": "2026-11-06",
-  "generated": "2026-11-04 00:12 UTC"
+  "generated": "2026-11-05 00:33 UTC",
+  "notes": [
+   "Strong this year: +737% vs S&P 500 +13%"
+  ]
  },
  "MRVI": {
   "company": "Maravai LifeSciences Holdings, Inc.",
@@ -762,7 +820,8 @@
  "MTD": {
   "company": "Mettler-Toledo International Inc",
   "event_date": "2026-11-05",
-  "generated": "2026-11-04 00:12 UTC"
+  "generated": "2026-11-05 00:33 UTC",
+  "notes": []
  },
  "MYGN": {
   "company": "Myriad Genetics, Inc.",
@@ -782,7 +841,10 @@
  "NTRA": {
   "company": "Natera, Inc.",
   "event_date": "2026-11-05",
-  "generated": "2026-11-04 00:12 UTC"
+  "generated": "2026-11-05 00:33 UTC",
+  "notes": [
+   "Strong this year: +71% vs S&P 500 +13%"
+  ]
  },
  "NVCR": {
   "company": "Novocure Limited",
@@ -817,12 +879,14 @@
  "OMDA": {
   "company": "Omada Health, Inc.",
   "event_date": "2026-11-05",
-  "generated": "2026-11-04 00:12 UTC"
+  "generated": "2026-11-05 00:33 UTC",
+  "notes": []
  },
  "ONC": {
   "company": "BeOne Medicines AG",
   "event_date": "2026-11-05",
-  "generated": "2026-11-04 00:12 UTC"
+  "generated": "2026-11-05 00:33 UTC",
+  "notes": []
  },
  "OPCH": {
   "company": "Option Care Health Inc",
@@ -832,7 +896,10 @@
  "OSCR": {
   "company": "Oscar Health Inc",
   "event_date": "2026-11-05",
-  "generated": "2026-11-04 00:12 UTC"
+  "generated": "2026-11-05 00:33 UTC",
+  "notes": [
+   "Strong this year: +135% vs S&P 500 +13%"
+  ]
  },
  "OSSFF": {
   "company": "Embla Medical hf.",
@@ -872,7 +939,10 @@
  "PLSE": {
   "company": "Pulse Biosciences Inc",
   "event_date": "2026-11-05",
-  "generated": "2026-11-04 00:12 UTC"
+  "generated": "2026-11-05 00:33 UTC",
+  "notes": [
+   "Strong this year: +326% vs S&P 500 +13%"
+  ]
  },
  "PNTG": {
   "company": "Pennant Group Inc",
@@ -892,7 +962,8 @@
  "PRVA": {
   "company": "Privia Health Group Inc",
   "event_date": "2026-11-05",
-  "generated": "2026-11-04 00:12 UTC"
+  "generated": "2026-11-05 00:33 UTC",
+  "notes": []
  },
  "Q": {
   "company": "Qnity Electronics Inc.",
@@ -903,6 +974,12 @@
   "company": "QuidelOrtho Corporation",
   "event_date": "2026-11-03",
   "generated": "2026-11-03 00:29 UTC"
+ },
+ "RDNT": {
+  "company": "Radnet Inc",
+  "event_date": "2026-11-08",
+  "generated": "2026-11-05 00:33 UTC",
+  "notes": []
  },
  "REGN": {
   "company": "Regeneron Pharmaceuticals Inc",
@@ -977,7 +1054,10 @@
  "SHMZF": {
   "company": "Shimadzu",
   "event_date": "2026-11-06",
-  "generated": "2026-11-04 00:12 UTC"
+  "generated": "2026-11-05 00:33 UTC",
+  "notes": [
+   "Strong this year: +971% vs S&P 500 +13%"
+  ]
  },
  "SIBN": {
   "company": "SI-BONE, Inc.",
@@ -992,7 +1072,8 @@
  "SOLV": {
   "company": "Solventum Corporation",
   "event_date": "2026-11-05",
-  "generated": "2026-11-04 00:12 UTC"
+  "generated": "2026-11-05 00:33 UTC",
+  "notes": []
  },
  "SPCX": {
   "company": "Space Exploration Technologies Corp.",
@@ -1027,7 +1108,10 @@
  "STRW": {
   "company": "Strawberry Fields Reit Inc",
   "event_date": "2026-11-05",
-  "generated": "2026-11-04 00:12 UTC"
+  "generated": "2026-11-05 00:33 UTC",
+  "notes": [
+   "Missed revenue consensus by more than 2% in 2 of the last 2 reported, the latest included"
+  ]
  },
  "STVN": {
   "company": "Stevanato Group S.p.A.",
@@ -1077,7 +1161,8 @@
  "TFX": {
   "company": "Teleflex Incorporated",
   "event_date": "2026-11-05",
-  "generated": "2026-11-04 00:12 UTC"
+  "generated": "2026-11-05 00:33 UTC",
+  "notes": []
  },
  "THC": {
   "company": "Tenet Healthcare Corp",
@@ -1087,7 +1172,11 @@
  "TMDX": {
   "company": "TransMedics Group Inc",
   "event_date": "2026-11-05",
-  "generated": "2026-11-04 00:12 UTC"
+  "generated": "2026-11-05 00:33 UTC",
+  "notes": [
+   "Weak this year: -41% vs S&P 500 +13%",
+   "Missed EPS consensus by more than 2% in 2 of the last 2 reported, the latest included"
+  ]
  },
  "TMO": {
   "company": "Thermo Fisher Scientific Inc",
@@ -1097,7 +1186,8 @@
  "TNDM": {
   "company": "Tandem Diabetes Care, Inc.",
   "event_date": "2026-11-05",
-  "generated": "2026-11-04 00:12 UTC"
+  "generated": "2026-11-05 00:33 UTC",
+  "notes": []
  },
  "TPL": {
   "company": "Texas Pacific Land Corp",
@@ -1107,7 +1197,8 @@
  "TRUP": {
   "company": "Trupanion, Inc.",
   "event_date": "2026-11-05",
-  "generated": "2026-11-04 00:12 UTC"
+  "generated": "2026-11-05 00:33 UTC",
+  "notes": []
  },
  "TSLA": {
   "company": "Tesla, Inc.",
@@ -1117,7 +1208,10 @@
  "TXG": {
   "company": "10x Genomics, Inc.",
   "event_date": "2026-11-05",
-  "generated": "2026-11-04 00:12 UTC"
+  "generated": "2026-11-05 00:33 UTC",
+  "notes": [
+   "Strong this year: +306% vs S&P 500 +13%"
+  ]
  },
  "UBER": {
   "company": "Uber Technologies, Inc.",
@@ -1167,7 +1261,8 @@
  "VCEL": {
   "company": "Vericel Corporation",
   "event_date": "2026-11-05",
-  "generated": "2026-11-04 00:12 UTC"
+  "generated": "2026-11-05 00:33 UTC",
+  "notes": []
  },
  "VCYT": {
   "company": "Veracyte, Inc.",
@@ -1197,7 +1292,8 @@
  "VTRS": {
   "company": "Viatris Inc",
   "event_date": "2026-11-05",
-  "generated": "2026-11-04 00:12 UTC"
+  "generated": "2026-11-05 00:33 UTC",
+  "notes": []
  },
  "WAT": {
   "company": "Waters Corp",
@@ -1222,7 +1318,8 @@
  "XRAY": {
   "company": "DENTSPLY SIRONA Inc.",
   "event_date": "2026-11-05",
-  "generated": "2026-11-04 00:12 UTC"
+  "generated": "2026-11-05 00:33 UTC",
+  "notes": []
  },
  "XRN": {
   "company": "Chiron Real Estate Inc",
@@ -1237,6 +1334,9 @@
  "ZTS": {
   "company": "Zoetis Inc.",
   "event_date": "2026-11-05",
-  "generated": "2026-11-04 00:12 UTC"
+  "generated": "2026-11-05 00:33 UTC",
+  "notes": [
+   "Missed revenue consensus by more than 2% in 2 of the last 2 reported, the latest included"
+  ]
  }
 }
