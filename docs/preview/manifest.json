@@ -111,6 +111,12 @@
    "Weak this year: -41% vs S&P 500 +13%"
   ]
  },
+ "APGE": {
+  "company": "Apogee Therapeutics Inc",
+  "event_date": "2026-11-09",
+  "generated": "2026-11-06 00:30 UTC",
+  "notes": []
+ },
  "ARDT": {
   "company": "Ardent Health Inc",
   "event_date": "2026-11-04",
@@ -205,7 +211,7 @@
  "BKD": {
   "company": "Brookdale Senior Living Inc",
   "event_date": "2026-11-06",
-  "generated": "2026-11-05 00:33 UTC",
+  "generated": "2026-11-06 00:30 UTC",
   "notes": []
  },
  "BLCO": {
@@ -384,6 +390,14 @@
   "generated": "2026-11-05 00:33 UTC",
   "notes": []
  },
+ "DCGO": {
+  "company": "DocGo Inc",
+  "event_date": "2026-11-09",
+  "generated": "2026-11-06 00:30 UTC",
+  "notes": [
+   "Weak this year: -73% vs S&P 500 +8%"
+  ]
+ },
  "DGX": {
   "company": "Quest Diagnostics Inc",
   "event_date": "2026-10-22",
@@ -439,7 +453,7 @@
  "ELAN": {
   "company": "Elanco Animal Health Incorporated",
   "event_date": "2026-11-06",
-  "generated": "2026-11-05 00:33 UTC",
+  "generated": "2026-11-06 00:30 UTC",
   "notes": []
  },
  "ELV": {
@@ -526,6 +540,12 @@
   "generated": "2026-11-05 00:33 UTC",
   "notes": []
  },
+ "GMRS": {
+  "company": "GMR Solutions Inc.",
+  "event_date": "2026-11-09",
+  "generated": "2026-11-06 00:30 UTC",
+  "notes": []
+ },
  "GRAL": {
   "company": "GRAIL, Inc.",
   "event_date": "2026-11-04",
@@ -557,6 +577,12 @@
   "event_date": "2026-10-21",
   "generated": "2026-10-20 15:45 UTC"
  },
+ "HIMS": {
+  "company": "Hims & Hers Health Inc",
+  "event_date": "2026-11-09",
+  "generated": "2026-11-06 00:30 UTC",
+  "notes": []
+ },
  "HNGE": {
   "company": "Hinge Health Inc",
   "event_date": "2026-11-02",
@@ -580,8 +606,16 @@
  "HUM": {
   "company": "Humana Inc",
   "event_date": "2026-11-06",
-  "generated": "2026-11-05 00:33 UTC",
+  "generated": "2026-11-06 00:30 UTC",
   "notes": []
+ },
+ "HYPR": {
+  "company": "Hyperfine Inc",
+  "event_date": "2026-11-09",
+  "generated": "2026-11-06 00:30 UTC",
+  "notes": [
+   "Missed revenue consensus by more than 2% in 2 of the last 2 reported, the latest included"
+  ]
  },
  "IART": {
   "company": "Integra LifeSciences Holdings Corporation",
@@ -608,6 +642,14 @@
   "company": "Illumina, Inc.",
   "event_date": "2026-10-29",
   "generated": "2026-10-29 17:33 UTC"
+ },
+ "IMVT": {
+  "company": "Immunovant Inc",
+  "event_date": "2026-11-09",
+  "generated": "2026-11-06 00:30 UTC",
+  "notes": [
+   "Missed EPS consensus by more than 2% in 2 of the last 2 reported, the latest included"
+  ]
  },
  "INCY": {
   "company": "Incyte Corp",
@@ -659,6 +701,14 @@
   "company": "OrthoPediatrics Corp.",
   "event_date": "2026-10-27",
   "generated": "2026-10-27 16:44 UTC"
+ },
+ "KKR": {
+  "company": "KKR & Co Inc",
+  "event_date": "2026-11-09",
+  "generated": "2026-11-06 00:30 UTC",
+  "notes": [
+   "Missed revenue consensus by more than 2% in 2 of the last 2 reported, the latest included"
+  ]
  },
  "KLRA": {
   "company": "Kailera Therapeutics, Inc.",
@@ -802,9 +852,9 @@
  "MRNA": {
   "company": "Moderna Inc",
   "event_date": "2026-11-06",
-  "generated": "2026-11-05 00:33 UTC",
+  "generated": "2026-11-06 00:30 UTC",
   "notes": [
-   "Strong this year: +737% vs S&P 500 +13%"
+   "Strong this year: +682% vs S&P 500 +8%"
   ]
  },
  "MRVI": {
@@ -838,6 +888,18 @@
   "event_date": "2026-10-20",
   "generated": "2026-10-20 15:45 UTC"
  },
+ "NHI": {
+  "company": "National Health Investors Inc",
+  "event_date": "2026-11-09",
+  "generated": "2026-11-06 00:30 UTC",
+  "notes": []
+ },
+ "NOVT": {
+  "company": "Novanta Inc.",
+  "event_date": "2026-11-09",
+  "generated": "2026-11-06 00:30 UTC",
+  "notes": []
+ },
  "NTRA": {
   "company": "Natera, Inc.",
   "event_date": "2026-11-05",
@@ -865,6 +927,12 @@
   "company": "Envista Holdings Corporation",
   "event_date": "2026-11-04",
   "generated": "2026-11-04 00:12 UTC"
+ },
+ "OFIX": {
+  "company": "Orthofix Medical Inc.",
+  "event_date": "2026-11-09",
+  "generated": "2026-11-06 00:30 UTC",
+  "notes": []
  },
  "OHI": {
   "company": "Omega Healthcare Investors Inc",
@@ -978,7 +1046,7 @@
  "RDNT": {
   "company": "Radnet Inc",
   "event_date": "2026-11-08",
-  "generated": "2026-11-05 00:33 UTC",
+  "generated": "2026-11-06 00:30 UTC",
   "notes": []
  },
  "REGN": {
@@ -1000,6 +1068,15 @@
   "company": "Rogers Corporation",
   "event_date": "2026-10-27",
   "generated": "2026-10-27 16:44 UTC"
+ },
+ "ROIV": {
+  "company": "Roivant Sciences Ltd",
+  "event_date": "2026-11-09",
+  "generated": "2026-11-06 00:30 UTC",
+  "notes": [
+   "Strong this year: +67% vs S&P 500 +8%",
+   "Missed revenue consensus by more than 2% in 2 of the last 2 reported, the latest included"
+  ]
  },
  "RPRX": {
   "company": "Royalty Pharma plc",
@@ -1054,9 +1131,9 @@
  "SHMZF": {
   "company": "Shimadzu",
   "event_date": "2026-11-06",
-  "generated": "2026-11-05 00:33 UTC",
+  "generated": "2026-11-06 00:30 UTC",
   "notes": [
-   "Strong this year: +971% vs S&P 500 +13%"
+   "Strong this year: +971% vs S&P 500 +8%"
   ]
  },
  "SIBN": {
