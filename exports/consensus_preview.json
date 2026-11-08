@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-11-07T16:53:54Z",
+  "generated_at": "2026-11-08T17:05:55Z",
   "window": {
-    "start": "2026-11-07",
-    "end": "2026-11-10"
+    "start": "2026-11-08",
+    "end": "2026-11-11"
   },
   "counts": {
     "previews": 2
@@ -54,7 +54,7 @@
         },
         {
           "event_date": "2026-05-05",
-          "move_pct": -1.2871355818786159,
+          "move_pct": -1.2871429939484895,
           "window_label": "earnings-day close vs prior close"
         },
         {
@@ -64,7 +64,7 @@
         },
         {
           "event_date": "2025-11-07",
-          "move_pct": 1.6846956453297004,
+          "move_pct": 1.6846890958667506,
           "window_label": "earnings-day close vs prior close"
         }
       ],
@@ -95,20 +95,20 @@
       "ticker": "SGRY",
       "company_name": "Surgery Partners Inc",
       "tier": 1,
-      "event_date": "2026-11-10",
+      "event_date": "2026-11-09",
       "event_hour": "bmo",
       "call_datetime_utc": null,
       "last_price": 23.200000762939453,
       "day_change_pct": 0.12948073606699115,
       "consensus": {
         "eps": {
-          "mean": 0.1329,
+          "mean": 0.1228,
           "count": null,
           "low": null,
           "high": null
         },
         "revenue": {
-          "mean": 863271594.0,
+          "mean": 842161347.0,
           "count": null,
           "low": null,
           "high": null
@@ -128,7 +128,7 @@
         "notes": [
           "stale quote",
           "wide market",
-          "(includes 10 extra days of time value)"
+          "(includes 11 extra days of time value)"
         ]
       },
       "post_earnings_moves": [
