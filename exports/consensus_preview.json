@@ -1,33 +1,33 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-11-08T17:05:55Z",
+  "generated_at": "2026-11-09T21:30:02Z",
   "window": {
-    "start": "2026-11-08",
-    "end": "2026-11-11"
+    "start": "2026-11-09",
+    "end": "2026-11-12"
   },
   "counts": {
     "previews": 2
   },
   "previews": [
     {
-      "ticker": "KKR",
-      "company_name": "KKR & Co Inc",
+      "ticker": "MWH",
+      "company_name": "SOLV Energy, Inc.",
       "tier": 1,
-      "event_date": "2026-11-09",
+      "event_date": "2026-11-12",
       "event_hour": "bmo",
-      "call_datetime_utc": "2026-11-09T15:00:00+00:00",
-      "last_price": 96.4800033569336,
-      "day_change_pct": -1.8514747083638805,
+      "call_datetime_utc": "2026-11-12T13:30:00+00:00",
+      "last_price": 27.399999618530273,
+      "day_change_pct": 6.864275627059476,
       "consensus": {
         "eps": {
-          "mean": 1.6303,
+          "mean": 0.5898,
           "count": null,
           "low": null,
           "high": null
         },
         "revenue": {
-          "mean": 2669752947.0,
+          "mean": 1201741288.0,
           "count": null,
           "low": null,
           "high": null
@@ -35,55 +35,46 @@
       },
       "qtd": {
         "since": "2026-09-30",
-        "ticker_pct": 5.673603649541225,
-        "spx_pct": -3.5849660622348423,
+        "ticker_pct": 14.07160323210622,
+        "spx_pct": -1.303384652815182,
         "sector_etf": null,
         "sector_etf_pct": null
       },
       "implied_move": {
-        "pct": 6.0,
-        "expiry": "2026-11-13",
+        "pct": null,
+        "expiry": "2026-11-20",
         "method": "ATM straddle",
-        "notes": []
+        "notes": [
+          "n/a (nearest common strike 25 is >5% from spot 27.40)"
+        ]
       },
       "post_earnings_moves": [
         {
-          "event_date": "2026-07-30",
-          "move_pct": 1.7123304810147282,
-          "window_label": "earnings-day close vs prior close"
-        },
-        {
-          "event_date": "2026-05-05",
-          "move_pct": -1.2871429939484895,
-          "window_label": "earnings-day close vs prior close"
-        },
-        {
-          "event_date": "2026-02-05",
-          "move_pct": -5.345037480646699,
-          "window_label": "earnings-day close vs prior close"
-        },
-        {
-          "event_date": "2025-11-07",
-          "move_pct": 1.6846890958667506,
+          "event_date": "2026-08-13",
+          "move_pct": 8.773676890198967,
           "window_label": "earnings-day close vs prior close"
         }
       ],
       "beat_rates": {
         "eps": {
-          "beats": 19,
-          "total": 20,
+          "beats": 1,
+          "total": 1,
           "source": "yfinance"
         },
         "revenue": {
-          "beats": 17,
-          "total": 20,
+          "beats": 3,
+          "total": 3,
           "source": "fmp"
         }
       },
       "na_fields": [
         {
           "field": "qtd.sector_etf",
-          "reason": "no mapped ETF for sector 'Financials'"
+          "reason": "no mapped ETF for sector 'Energy'"
+        },
+        {
+          "field": "implied_move",
+          "reason": "n/a (nearest common strike 25 is >5% from spot 27.40)"
         },
         {
           "field": "consensus.eps.range",
@@ -92,23 +83,23 @@
       ]
     },
     {
-      "ticker": "SGRY",
-      "company_name": "Surgery Partners Inc",
+      "ticker": "XE",
+      "company_name": "X-Energy, Inc.",
       "tier": 1,
-      "event_date": "2026-11-09",
+      "event_date": "2026-11-12",
       "event_hour": "bmo",
-      "call_datetime_utc": null,
-      "last_price": 23.200000762939453,
-      "day_change_pct": 0.12948073606699115,
+      "call_datetime_utc": "2026-11-12T13:00:00+00:00",
+      "last_price": 11.15999984741211,
+      "day_change_pct": 6.999036633527933,
       "consensus": {
         "eps": {
-          "mean": 0.1228,
+          "mean": -0.1033,
           "count": null,
           "low": null,
           "high": null
         },
         "revenue": {
-          "mean": 842161347.0,
+          "mean": 63226992.0,
           "count": null,
           "low": null,
           "high": null
@@ -116,56 +107,48 @@
       },
       "qtd": {
         "since": "2026-09-30",
-        "ticker_pct": 67.26749065870155,
-        "spx_pct": -3.5849660622348423,
-        "sector_etf": "XLV",
-        "sector_etf_pct": 9.725688790461454
+        "ticker_pct": -21.29760502657644,
+        "spx_pct": -1.303384652815182,
+        "sector_etf": null,
+        "sector_etf_pct": null
       },
       "implied_move": {
-        "pct": 2.1,
-        "expiry": "2026-11-20",
+        "pct": 7.4,
+        "expiry": "2026-11-13",
         "method": "ATM straddle",
         "notes": [
-          "stale quote",
-          "wide market",
-          "(includes 11 extra days of time value)"
+          "wide market"
         ]
       },
       "post_earnings_moves": [
         {
-          "event_date": "2026-08-10",
-          "move_pct": 2.7044435512916207,
+          "event_date": "2026-08-13",
+          "move_pct": 11.695327352100582,
           "window_label": "earnings-day close vs prior close"
         },
         {
-          "event_date": "2026-05-05",
-          "move_pct": 0.4225381719903298,
-          "window_label": "earnings-day close vs prior close"
-        },
-        {
-          "event_date": "2026-03-02",
-          "move_pct": -12.342569420793595,
-          "window_label": "next-day close vs earnings-day close"
-        },
-        {
-          "event_date": "2025-11-10",
-          "move_pct": -25.418605360873908,
+          "event_date": "2026-06-04",
+          "move_pct": -9.973356656181936,
           "window_label": "earnings-day close vs prior close"
         }
       ],
       "beat_rates": {
         "eps": {
-          "beats": 13,
-          "total": 20,
+          "beats": 0,
+          "total": 1,
           "source": "yfinance"
         },
         "revenue": {
-          "beats": 12,
-          "total": 20,
+          "beats": 1,
+          "total": 2,
           "source": "fmp"
         }
       },
       "na_fields": [
+        {
+          "field": "qtd.sector_etf",
+          "reason": "no mapped ETF for sector 'Energy'"
+        },
         {
           "field": "consensus.eps.range",
           "reason": "estimate range not available on FMP Starter plan"
