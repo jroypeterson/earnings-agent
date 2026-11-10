@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-11-09T21:30:02Z",
+  "generated_at": "2026-11-10T02:21:55Z",
   "window": {
-    "start": "2026-11-09",
-    "end": "2026-11-12"
+    "start": "2026-11-10",
+    "end": "2026-11-13"
   },
   "counts": {
     "previews": 2
@@ -17,8 +17,8 @@
       "event_date": "2026-11-12",
       "event_hour": "bmo",
       "call_datetime_utc": "2026-11-12T13:30:00+00:00",
-      "last_price": 27.399999618530273,
-      "day_change_pct": 6.864275627059476,
+      "last_price": 25.639999389648438,
+      "day_change_pct": 7.640636935942872,
       "consensus": {
         "eps": {
           "mean": 0.5898,
@@ -35,17 +35,17 @@
       },
       "qtd": {
         "since": "2026-09-30",
-        "ticker_pct": 14.07160323210622,
-        "spx_pct": -1.303384652815182,
+        "ticker_pct": 6.744375108290868,
+        "spx_pct": -3.5849660622348423,
         "sector_etf": null,
         "sector_etf_pct": null
       },
       "implied_move": {
-        "pct": null,
+        "pct": 15.7,
         "expiry": "2026-11-20",
         "method": "ATM straddle",
         "notes": [
-          "n/a (nearest common strike 25 is >5% from spot 27.40)"
+          "(includes 8 extra days of time value)"
         ]
       },
       "post_earnings_moves": [
@@ -73,10 +73,6 @@
           "reason": "no mapped ETF for sector 'Energy'"
         },
         {
-          "field": "implied_move",
-          "reason": "n/a (nearest common strike 25 is >5% from spot 27.40)"
-        },
-        {
           "field": "consensus.eps.range",
           "reason": "estimate range not available on FMP Starter plan"
         }
@@ -89,8 +85,8 @@
       "event_date": "2026-11-12",
       "event_hour": "bmo",
       "call_datetime_utc": "2026-11-12T13:00:00+00:00",
-      "last_price": 11.15999984741211,
-      "day_change_pct": 6.999036633527933,
+      "last_price": 10.430000305175781,
+      "day_change_pct": 15.888892279730904,
       "consensus": {
         "eps": {
           "mean": -0.1033,
@@ -107,16 +103,17 @@
       },
       "qtd": {
         "since": "2026-09-30",
-        "ticker_pct": -21.29760502657644,
-        "spx_pct": -1.303384652815182,
+        "ticker_pct": -26.445697597278812,
+        "spx_pct": -3.5849660622348423,
         "sector_etf": null,
         "sector_etf_pct": null
       },
       "implied_move": {
-        "pct": 7.4,
+        "pct": 11.9,
         "expiry": "2026-11-13",
         "method": "ATM straddle",
         "notes": [
+          "stale quote",
           "wide market"
         ]
       },

@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-11-09T21:30:22Z",
+  "generated_at": "2026-11-10T02:21:59Z",
   "window": {
-    "start": "2026-11-07",
-    "end": "2026-11-23"
+    "start": "2026-11-08",
+    "end": "2026-11-24"
   },
   "counts": {
-    "events": 337
+    "events": 347
   },
   "events": [
     {
@@ -29,13 +29,13 @@
       "company_name": "Addex Therapeutics Ltd - ADR"
     },
     {
-      "ticker": "APGE",
+      "ticker": "ARTV",
       "event_date": "2026-11-09",
       "event_hour": "",
-      "tier": 2,
+      "tier": 3,
       "date_confirmed": false,
       "call_datetime_utc": null,
-      "company_name": "Apogee Therapeutics Inc"
+      "company_name": "Artiva Biotherapeutics Inc"
     },
     {
       "ticker": "ASMB",
@@ -173,6 +173,15 @@
       "company_name": "GMR Solutions Inc."
     },
     {
+      "ticker": "GPCR",
+      "event_date": "2026-11-09",
+      "event_hour": "amc",
+      "tier": 3,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Structure Therapeutics Inc"
+    },
+    {
       "ticker": "HEPA",
       "event_date": "2026-11-09",
       "event_hour": "",
@@ -220,9 +229,9 @@
     {
       "ticker": "IBO",
       "event_date": "2026-11-09",
-      "event_hour": "",
+      "event_hour": "amc",
       "tier": 3,
-      "date_confirmed": false,
+      "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "Impact BioMedical Inc."
     },
@@ -281,15 +290,6 @@
       "company_name": "LifeMD, Inc."
     },
     {
-      "ticker": "LPSN",
-      "event_date": "2026-11-09",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "LivePerson Inc"
-    },
-    {
       "ticker": "LXEO",
       "event_date": "2026-11-09",
       "event_hour": "",
@@ -297,6 +297,15 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Lexeo Therapeutics Inc"
+    },
+    {
+      "ticker": "MAIA",
+      "event_date": "2026-11-09",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Maia Biotechnology Inc"
     },
     {
       "ticker": "MTNB",
@@ -425,6 +434,15 @@
       "company_name": "Senti Biosciences Inc"
     },
     {
+      "ticker": "SRZN",
+      "event_date": "2026-11-09",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Surrozen, Inc."
+    },
+    {
       "ticker": "TBPH",
       "event_date": "2026-11-09",
       "event_hour": "",
@@ -459,6 +477,15 @@
       "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "Zeta Global Holdings Corp"
+    },
+    {
+      "ticker": "ZNTL",
+      "event_date": "2026-11-09",
+      "event_hour": "amc",
+      "tier": 3,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Zentalis Pharmaceuticals Inc"
     },
     {
       "ticker": "ZYME",
@@ -900,15 +927,6 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "XBiotech Inc"
-    },
-    {
-      "ticker": "ZNTL",
-      "event_date": "2026-11-10",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Zentalis Pharmaceuticals Inc"
     },
     {
       "ticker": "AADX",
@@ -2792,15 +2810,6 @@
       "company_name": "Armata Pharmaceuticals Inc"
     },
     {
-      "ticker": "ARTV",
-      "event_date": "2026-11-18",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Artiva Biotherapeutics Inc"
-    },
-    {
       "ticker": "BBOT",
       "event_date": "2026-11-18",
       "event_hour": "",
@@ -3042,6 +3051,87 @@
       "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "Zoom Communications, Inc."
+    },
+    {
+      "ticker": "ADI",
+      "event_date": "2026-11-24",
+      "event_hour": "amc",
+      "tier": 1,
+      "date_confirmed": true,
+      "call_datetime_utc": "2026-11-24T15:00:00+00:00",
+      "company_name": "Analog Devices Inc"
+    },
+    {
+      "ticker": "ADSK",
+      "event_date": "2026-11-24",
+      "event_hour": "",
+      "tier": 1,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Autodesk Inc"
+    },
+    {
+      "ticker": "CLGN",
+      "event_date": "2026-11-24",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "CollPlant Biotechnologies Ltd."
+    },
+    {
+      "ticker": "HIND",
+      "event_date": "2026-11-24",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Vyome Holdings, Inc."
+    },
+    {
+      "ticker": "MDT",
+      "event_date": "2026-11-24",
+      "event_hour": "",
+      "tier": 2,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Medtronic plc"
+    },
+    {
+      "ticker": "MMED",
+      "event_date": "2026-11-24",
+      "event_hour": "",
+      "tier": 1,
+      "date_confirmed": false,
+      "call_datetime_utc": "2026-11-24T13:30:00+00:00",
+      "company_name": "MiniMed Group Inc"
+    },
+    {
+      "ticker": "VALN",
+      "event_date": "2026-11-24",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Valneva SE"
+    },
+    {
+      "ticker": "VREX",
+      "event_date": "2026-11-24",
+      "event_hour": "amc",
+      "tier": 2,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Varex Imaging Corporation"
+    },
+    {
+      "ticker": "WDAY",
+      "event_date": "2026-11-24",
+      "event_hour": "amc",
+      "tier": 3,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Workday, Inc."
     }
   ]
 }

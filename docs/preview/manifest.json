@@ -63,7 +63,7 @@
  "ALC": {
   "company": "Alcon Inc.",
   "event_date": "2026-11-10",
-  "generated": "2026-11-09 21:30 UTC",
+  "generated": "2026-11-10 02:21 UTC",
   "notes": []
  },
  "ALGN": {
@@ -141,7 +141,7 @@
  "ARWR": {
   "company": "Arrowhead Pharmaceuticals Inc",
   "event_date": "2026-11-12",
-  "generated": "2026-11-09 21:30 UTC",
+  "generated": "2026-11-10 02:21 UTC",
   "notes": []
  },
  "ARXS": {
@@ -172,9 +172,9 @@
  "AVAH": {
   "company": "Aveanna Healthcare Holdings Inc",
   "event_date": "2026-11-12",
-  "generated": "2026-11-09 21:30 UTC",
+  "generated": "2026-11-10 02:21 UTC",
   "notes": [
-   "Strong this year: +63% vs S&P 500 +11%"
+   "Strong this year: +64% vs S&P 500 +8%"
   ]
  },
  "AVTR": {
@@ -190,7 +190,7 @@
  "AZTA": {
   "company": "Azenta, Inc.",
   "event_date": "2026-11-10",
-  "generated": "2026-11-09 21:30 UTC",
+  "generated": "2026-11-10 02:21 UTC",
   "notes": []
  },
  "BAX": {
@@ -540,7 +540,7 @@
  "GDRX": {
   "company": "Goodrx Holdings Inc",
   "event_date": "2026-11-10",
-  "generated": "2026-11-09 21:30 UTC",
+  "generated": "2026-11-10 02:21 UTC",
   "notes": []
  },
  "GEHC": {
@@ -638,9 +638,9 @@
  "HTFL": {
   "company": "HeartFlow, Inc.",
   "event_date": "2026-11-12",
-  "generated": "2026-11-09 21:30 UTC",
+  "generated": "2026-11-10 02:21 UTC",
   "notes": [
-   "Strong this year: +96% vs S&P 500 +11%"
+   "Strong this year: +81% vs S&P 500 +8%"
   ]
  },
  "HUM": {
@@ -699,7 +699,7 @@
  "INMD": {
   "company": "InMode Ltd.",
   "event_date": "2026-11-11",
-  "generated": "2026-11-09 21:30 UTC",
+  "generated": "2026-11-10 02:21 UTC",
   "notes": []
  },
  "INSM": {
@@ -746,7 +746,7 @@
  "KARD": {
   "company": "Kardigan, Inc.",
   "event_date": "2026-11-10",
-  "generated": "2026-11-09 21:30 UTC",
+  "generated": "2026-11-10 02:21 UTC",
   "notes": []
  },
  "KIDS": {
@@ -808,7 +808,7 @@
  "LMRI": {
   "company": "Lumexa Imaging Holdings Inc",
   "event_date": "2026-11-10",
-  "generated": "2026-11-09 21:30 UTC",
+  "generated": "2026-11-10 02:21 UTC",
   "notes": []
  },
  "LNTH": {
@@ -934,7 +934,7 @@
  "MWH": {
   "company": "SOLV Energy, Inc.",
   "event_date": "2026-11-12",
-  "generated": "2026-11-09 21:30 UTC",
+  "generated": "2026-11-10 02:21 UTC",
   "notes": []
  },
  "MYGN": {
@@ -1058,7 +1058,7 @@
  "PBLS": {
   "company": "Parabilis Medicines, Inc.",
   "event_date": "2026-11-12",
-  "generated": "2026-11-09 21:30 UTC",
+  "generated": "2026-11-10 02:21 UTC",
   "notes": []
  },
  "PFE": {
@@ -1248,7 +1248,7 @@
  "SRRK": {
   "company": "Scholar Rock Holding Corp",
   "event_date": "2026-11-10",
-  "generated": "2026-11-09 21:30 UTC",
+  "generated": "2026-11-10 02:21 UTC",
   "notes": []
  },
  "SRTA": {
@@ -1369,9 +1369,9 @@
  "TWST": {
   "company": "Twist Bioscience Corporation",
   "event_date": "2026-11-12",
-  "generated": "2026-11-09 21:30 UTC",
+  "generated": "2026-11-10 02:21 UTC",
   "notes": [
-   "Strong this year: +318% vs S&P 500 +11%",
+   "Strong this year: +273% vs S&P 500 +8%",
    "Missed EPS consensus by more than 2% in 2 of the last 2 reported, the latest included"
   ]
  },
@@ -1488,9 +1488,9 @@
  "XE": {
   "company": "X-Energy, Inc.",
   "event_date": "2026-11-12",
-  "generated": "2026-11-09 21:30 UTC",
+  "generated": "2026-11-10 02:21 UTC",
   "notes": [
-   "Weak this year: -62% vs S&P 500 +11%"
+   "Weak this year: -64% vs S&P 500 +8%"
   ]
  },
  "XRAY": {
