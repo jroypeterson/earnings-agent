@@ -141,7 +141,7 @@
  "ARWR": {
   "company": "Arrowhead Pharmaceuticals Inc",
   "event_date": "2026-11-12",
-  "generated": "2026-11-10 02:21 UTC",
+  "generated": "2026-11-11 00:10 UTC",
   "notes": []
  },
  "ARXS": {
@@ -172,9 +172,9 @@
  "AVAH": {
   "company": "Aveanna Healthcare Holdings Inc",
   "event_date": "2026-11-12",
-  "generated": "2026-11-10 02:21 UTC",
+  "generated": "2026-11-11 00:10 UTC",
   "notes": [
-   "Strong this year: +64% vs S&P 500 +8%"
+   "Strong this year: +63% vs S&P 500 +11%"
   ]
  },
  "AVTR": {
@@ -638,9 +638,9 @@
  "HTFL": {
   "company": "HeartFlow, Inc.",
   "event_date": "2026-11-12",
-  "generated": "2026-11-10 02:21 UTC",
+  "generated": "2026-11-11 00:10 UTC",
   "notes": [
-   "Strong this year: +81% vs S&P 500 +8%"
+   "Strong this year: +93% vs S&P 500 +11%"
   ]
  },
  "HUM": {
@@ -699,7 +699,7 @@
  "INMD": {
   "company": "InMode Ltd.",
   "event_date": "2026-11-11",
-  "generated": "2026-11-10 02:21 UTC",
+  "generated": "2026-11-11 00:10 UTC",
   "notes": []
  },
  "INSM": {
@@ -934,7 +934,7 @@
  "MWH": {
   "company": "SOLV Energy, Inc.",
   "event_date": "2026-11-12",
-  "generated": "2026-11-10 02:21 UTC",
+  "generated": "2026-11-11 00:10 UTC",
   "notes": []
  },
  "MYGN": {
@@ -1058,7 +1058,7 @@
  "PBLS": {
   "company": "Parabilis Medicines, Inc.",
   "event_date": "2026-11-12",
-  "generated": "2026-11-10 02:21 UTC",
+  "generated": "2026-11-11 00:10 UTC",
   "notes": []
  },
  "PFE": {
@@ -1369,9 +1369,9 @@
  "TWST": {
   "company": "Twist Bioscience Corporation",
   "event_date": "2026-11-12",
-  "generated": "2026-11-10 02:21 UTC",
+  "generated": "2026-11-11 00:10 UTC",
   "notes": [
-   "Strong this year: +273% vs S&P 500 +8%",
+   "Strong this year: +308% vs S&P 500 +11%",
    "Missed EPS consensus by more than 2% in 2 of the last 2 reported, the latest included"
   ]
  },
@@ -1488,9 +1488,9 @@
  "XE": {
   "company": "X-Energy, Inc.",
   "event_date": "2026-11-12",
-  "generated": "2026-11-10 02:21 UTC",
+  "generated": "2026-11-11 00:10 UTC",
   "notes": [
-   "Weak this year: -64% vs S&P 500 +8%"
+   "Weak this year: -62% vs S&P 500 +11%"
   ]
  },
  "XRAY": {
