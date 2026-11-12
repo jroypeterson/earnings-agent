@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-11-12T18:56:20Z",
+  "generated_at": "2026-11-12T21:04:23Z",
   "window": {
     "start": "2026-11-10",
     "end": "2026-11-26"
   },
   "counts": {
-    "events": 227
+    "events": 225
   },
   "events": [
     {
@@ -396,15 +396,6 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Sutro Biopharma Inc"
-    },
-    {
-      "ticker": "SYBX",
-      "event_date": "2026-11-11",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Synlogic Inc"
     },
     {
       "ticker": "TRAW",
@@ -963,15 +954,6 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Jaguar Health Inc"
-    },
-    {
-      "ticker": "KOD",
-      "event_date": "2026-11-12",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Kodiak Sciences Inc"
     },
     {
       "ticker": "KTTA",
