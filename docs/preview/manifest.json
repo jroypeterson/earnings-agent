@@ -141,7 +141,7 @@
  "ARWR": {
   "company": "Arrowhead Pharmaceuticals Inc",
   "event_date": "2026-11-12",
-  "generated": "2026-11-11 00:10 UTC",
+  "generated": "2026-11-12 01:38 UTC",
   "notes": []
  },
  "ARXS": {
@@ -172,7 +172,7 @@
  "AVAH": {
   "company": "Aveanna Healthcare Holdings Inc",
   "event_date": "2026-11-12",
-  "generated": "2026-11-11 00:10 UTC",
+  "generated": "2026-11-12 01:38 UTC",
   "notes": [
    "Strong this year: +63% vs S&P 500 +11%"
   ]
@@ -638,7 +638,7 @@
  "HTFL": {
   "company": "HeartFlow, Inc.",
   "event_date": "2026-11-12",
-  "generated": "2026-11-11 00:10 UTC",
+  "generated": "2026-11-12 01:38 UTC",
   "notes": [
    "Strong this year: +93% vs S&P 500 +11%"
   ]
@@ -934,7 +934,7 @@
  "MWH": {
   "company": "SOLV Energy, Inc.",
   "event_date": "2026-11-12",
-  "generated": "2026-11-11 00:10 UTC",
+  "generated": "2026-11-12 01:38 UTC",
   "notes": []
  },
  "MYGN": {
@@ -1058,7 +1058,7 @@
  "PBLS": {
   "company": "Parabilis Medicines, Inc.",
   "event_date": "2026-11-12",
-  "generated": "2026-11-11 00:10 UTC",
+  "generated": "2026-11-12 01:38 UTC",
   "notes": []
  },
  "PFE": {
@@ -1369,7 +1369,7 @@
  "TWST": {
   "company": "Twist Bioscience Corporation",
   "event_date": "2026-11-12",
-  "generated": "2026-11-11 00:10 UTC",
+  "generated": "2026-11-12 01:38 UTC",
   "notes": [
    "Strong this year: +308% vs S&P 500 +11%",
    "Missed EPS consensus by more than 2% in 2 of the last 2 reported, the latest included"
@@ -1488,7 +1488,7 @@
  "XE": {
   "company": "X-Energy, Inc.",
   "event_date": "2026-11-12",
-  "generated": "2026-11-11 00:10 UTC",
+  "generated": "2026-11-12 01:38 UTC",
   "notes": [
    "Weak this year: -62% vs S&P 500 +11%"
   ]
