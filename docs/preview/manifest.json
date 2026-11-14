@@ -169,6 +169,14 @@
   "event_date": "2026-11-03",
   "generated": "2026-11-03 00:29 UTC"
  },
+ "AUNA": {
+  "company": "Auna SA",
+  "event_date": "2026-11-17",
+  "generated": "2026-11-14 00:25 UTC",
+  "notes": [
+   "Missed EPS consensus by more than 2% in 2 of the last 2 reported, the latest included"
+  ]
+ },
  "AVAH": {
   "company": "Aveanna Healthcare Holdings Inc",
   "event_date": "2026-11-12",
@@ -976,6 +984,12 @@
   "company": "Novocure Limited",
   "event_date": "2026-10-29",
   "generated": "2026-10-28 17:19 UTC"
+ },
+ "NVDA": {
+  "company": "NVIDIA Corporation",
+  "event_date": "2026-11-17",
+  "generated": "2026-11-14 00:25 UTC",
+  "notes": []
  },
  "NVO": {
   "company": "Novo Nordisk A/S",
