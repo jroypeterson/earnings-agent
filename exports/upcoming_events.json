@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-11-14T00:25:49Z",
+  "generated_at": "2026-11-14T17:04:11Z",
   "window": {
     "start": "2026-11-12",
     "end": "2026-11-28"
@@ -162,15 +162,6 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Greenwich Lifesciences Inc"
-    },
-    {
-      "ticker": "GNPX",
-      "event_date": "2026-11-12",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Genprex Inc"
     },
     {
       "ticker": "GTBP",
@@ -371,15 +362,6 @@
       "company_name": "Actuate Therapeutics Inc"
     },
     {
-      "ticker": "ADAPY",
-      "event_date": "2026-11-13",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Adaptimmune Therapeutics PLC"
-    },
-    {
       "ticker": "AEON",
       "event_date": "2026-11-13",
       "event_hour": "",
@@ -387,15 +369,6 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Aeon Biopharma Inc"
-    },
-    {
-      "ticker": "AMPE",
-      "event_date": "2026-11-13",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Ampio Pharmaceuticals Inc"
     },
     {
       "ticker": "ASBP",
@@ -407,15 +380,6 @@
       "company_name": "Aspire Biopharma Holdings, Inc."
     },
     {
-      "ticker": "EGRX",
-      "event_date": "2026-11-13",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Eagle Pharmaceuticals Inc"
-    },
-    {
       "ticker": "GDTC",
       "event_date": "2026-11-13",
       "event_hour": "",
@@ -423,24 +387,6 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "CytoMed Therapeutics Ltd"
-    },
-    {
-      "ticker": "HCWB",
-      "event_date": "2026-11-13",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "HCW Biologics Inc."
-    },
-    {
-      "ticker": "HEPA",
-      "event_date": "2026-11-13",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Hepion Pharmaceuticals Inc"
     },
     {
       "ticker": "INBX",
@@ -459,15 +405,6 @@
       "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "Jade Biosciences, Inc."
-    },
-    {
-      "ticker": "MENS",
-      "event_date": "2026-11-13",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Jyong Biotech Ltd. Ordinary Shares"
     },
     {
       "ticker": "NORD",
@@ -506,15 +443,6 @@
       "company_name": "Purple Biotech Ltd."
     },
     {
-      "ticker": "SYRS",
-      "event_date": "2026-11-13",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Syros Pharmaceuticals Inc"
-    },
-    {
       "ticker": "TPST",
       "event_date": "2026-11-13",
       "event_hour": "amc",
@@ -524,22 +452,22 @@
       "company_name": "Tempest Therapeutics Inc"
     },
     {
-      "ticker": "TRVN",
-      "event_date": "2026-11-13",
+      "ticker": "ADAPY",
+      "event_date": "2026-11-16",
       "event_hour": "",
       "tier": 3,
       "date_confirmed": false,
       "call_datetime_utc": null,
-      "company_name": "Trevena Inc"
+      "company_name": "Adaptimmune Therapeutics PLC"
     },
     {
-      "ticker": "VAXX",
-      "event_date": "2026-11-13",
+      "ticker": "AMPE",
+      "event_date": "2026-11-16",
       "event_hour": "",
       "tier": 3,
       "date_confirmed": false,
       "call_datetime_utc": null,
-      "company_name": "Vaxxinity Inc"
+      "company_name": "Ampio Pharmaceuticals Inc"
     },
     {
       "ticker": "AYTU",
@@ -587,6 +515,15 @@
       "company_name": "Dare Bioscience Inc"
     },
     {
+      "ticker": "EGRX",
+      "event_date": "2026-11-16",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Eagle Pharmaceuticals Inc"
+    },
+    {
       "ticker": "ENTA",
       "event_date": "2026-11-16",
       "event_hour": "amc",
@@ -614,6 +551,33 @@
       "company_name": "Gelteq Ltd"
     },
     {
+      "ticker": "HCWB",
+      "event_date": "2026-11-16",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "HCW Biologics Inc."
+    },
+    {
+      "ticker": "HEPA",
+      "event_date": "2026-11-16",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Hepion Pharmaceuticals Inc"
+    },
+    {
+      "ticker": "KYNB",
+      "event_date": "2026-11-16",
+      "event_hour": "amc",
+      "tier": 3,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Kyntra Bio, Inc."
+    },
+    {
       "ticker": "NRXP",
       "event_date": "2026-11-16",
       "event_hour": "",
@@ -632,6 +596,15 @@
       "company_name": "Omeros Corp"
     },
     {
+      "ticker": "SYRS",
+      "event_date": "2026-11-16",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Syros Pharmaceuticals Inc"
+    },
+    {
       "ticker": "TRAK",
       "event_date": "2026-11-16",
       "event_hour": "amc",
@@ -639,6 +612,24 @@
       "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "Repositrak Inc"
+    },
+    {
+      "ticker": "TRVN",
+      "event_date": "2026-11-16",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Trevena Inc"
+    },
+    {
+      "ticker": "VAXX",
+      "event_date": "2026-11-16",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Vaxxinity Inc"
     },
     {
       "ticker": "VCNX",
@@ -729,6 +720,15 @@
       "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "KALA BIO Inc"
+    },
+    {
+      "ticker": "MENS",
+      "event_date": "2026-11-17",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Jyong Biotech Ltd. Ordinary Shares"
     },
     {
       "ticker": "NVDA",

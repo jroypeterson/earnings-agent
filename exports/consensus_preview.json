@@ -1,95 +1,13 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-11-14T00:25:44Z",
+  "generated_at": "2026-11-14T17:04:10Z",
   "window": {
     "start": "2026-11-14",
     "end": "2026-11-17"
   },
   "counts": {
-    "previews": 1
+    "previews": 0
   },
-  "previews": [
-    {
-      "ticker": "NVDA",
-      "company_name": "NVIDIA Corporation",
-      "tier": 1,
-      "event_date": "2026-11-17",
-      "event_hour": "amc",
-      "call_datetime_utc": null,
-      "last_price": 162.85000610351562,
-      "day_change_pct": -2.009745645841849,
-      "consensus": {
-        "eps": {
-          "mean": 2.5263,
-          "count": null,
-          "low": null,
-          "high": null
-        },
-        "revenue": {
-          "mean": 111356225808.0,
-          "count": null,
-          "low": null,
-          "high": null
-        }
-      },
-      "qtd": {
-        "since": "2026-09-30",
-        "ticker_pct": -28.693404579320315,
-        "spx_pct": -1.0830953034550814,
-        "sector_etf": null,
-        "sector_etf_pct": null
-      },
-      "implied_move": {
-        "pct": 8.6,
-        "expiry": "2026-11-18",
-        "method": "ATM straddle",
-        "notes": []
-      },
-      "post_earnings_moves": [
-        {
-          "event_date": "2026-08-26",
-          "move_pct": 8.737952570943948,
-          "window_label": "next-day close vs earnings-day close"
-        },
-        {
-          "event_date": "2026-05-20",
-          "move_pct": -1.7720518937572316,
-          "window_label": "next-day close vs earnings-day close"
-        },
-        {
-          "event_date": "2026-02-25",
-          "move_pct": -5.456121004512642,
-          "window_label": "next-day close vs earnings-day close"
-        },
-        {
-          "event_date": "2025-11-19",
-          "move_pct": -3.1524717829051285,
-          "window_label": "next-day close vs earnings-day close"
-        }
-      ],
-      "beat_rates": {
-        "eps": {
-          "beats": 18,
-          "total": 20,
-          "source": "yfinance"
-        },
-        "revenue": {
-          "beats": 19,
-          "total": 20,
-          "source": "fmp"
-        }
-      },
-      "na_fields": [
-        {
-          "field": "qtd.sector_etf",
-          "reason": "no mapped ETF for sector 'Tech'"
-        },
-        {
-          "field": "consensus.eps.range",
-          "reason": "estimate range not available on FMP Starter plan"
-        }
-      ]
-    }
-  ]
+  "previews": []
 }
