@@ -172,7 +172,7 @@
  "AUNA": {
   "company": "Auna SA",
   "event_date": "2026-11-17",
-  "generated": "2026-11-14 00:25 UTC",
+  "generated": "2026-11-15 17:44 UTC",
   "notes": [
    "Missed EPS consensus by more than 2% in 2 of the last 2 reported, the latest included"
   ]
@@ -366,6 +366,12 @@
   "event_date": "2026-10-28",
   "generated": "2026-10-28 17:19 UTC"
  },
+ "CPRT": {
+  "company": "Copart Inc.",
+  "event_date": "2026-11-18",
+  "generated": "2026-11-15 17:44 UTC",
+  "notes": []
+ },
  "CRL": {
   "company": "Charles River Lbrtrs ntrntl Inc",
   "event_date": "2026-11-04",
@@ -547,8 +553,8 @@
  },
  "GDRX": {
   "company": "Goodrx Holdings Inc",
-  "event_date": "2026-11-10",
-  "generated": "2026-11-10 02:21 UTC",
+  "event_date": "2026-11-18",
+  "generated": "2026-11-15 17:44 UTC",
   "notes": []
  },
  "GEHC": {
@@ -988,7 +994,7 @@
  "NVDA": {
   "company": "NVIDIA Corporation",
   "event_date": "2026-11-17",
-  "generated": "2026-11-14 00:25 UTC",
+  "generated": "2026-11-15 17:44 UTC",
   "notes": []
  },
  "NVO": {
