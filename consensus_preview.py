@@ -1463,7 +1463,7 @@ def build_preview_fallback(rows: list[PreviewRow], as_of: date) -> str:
 
 
 def build_preview_blocks(
-    rows: list[PreviewRow], as_of: date
+    rows: list[PreviewRow], as_of: date, *, quote: bool = False
 ) -> tuple[list[dict], int]:
     """Build the Block Kit payload and return (blocks, n_included).
 
@@ -1480,6 +1480,11 @@ def build_preview_blocks(
     body_budget = SLACK_MAX_BLOCKS - 3
     for row in rows:
         header, *rest = _render_row_lines(row)
+        if quote:
+            # #earnings-core-coverage only (JP 2026-11-16): each company's detail behind Slack's
+            # grey quote bar, name flush left, matching earnings_review's short cards in that
+            # channel. A quote ends at the newline, so every line carries its own marker.
+            rest = [f"> {ln}" for ln in rest]
         row_blocks: list[dict] = [{
             "type": "section",
             "text": {"type": "mrkdwn", "text": f"{header}\n{chr(10).join(rest)}"[:2900]},

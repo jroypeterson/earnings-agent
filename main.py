@@ -2701,7 +2701,7 @@ def run_consensus_preview(
             logger.info("Consensus preview: %s is up to date; nothing to post.", dest)
             continue
 
-        d_blocks, d_included = build_preview_blocks(owed, as_of)
+        d_blocks, d_included = build_preview_blocks(owed, as_of, quote=dest == PREVIEW_DEST_CORE)
         d_fallback = build_preview_fallback(owed, as_of)
         if dest == PREVIEW_DEST_CORE:
             d_blocks.append(preview_pages.links_context_block(owed[:d_included]))
