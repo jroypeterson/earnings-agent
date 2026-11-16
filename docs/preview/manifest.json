@@ -172,7 +172,7 @@
  "AUNA": {
   "company": "Auna SA",
   "event_date": "2026-11-17",
-  "generated": "2026-11-15 17:44 UTC",
+  "generated": "2026-11-16 21:02 UTC",
   "notes": [
    "Missed EPS consensus by more than 2% in 2 of the last 2 reported, the latest included"
   ]
@@ -369,7 +369,7 @@
  "CPRT": {
   "company": "Copart Inc.",
   "event_date": "2026-11-18",
-  "generated": "2026-11-15 17:44 UTC",
+  "generated": "2026-11-16 21:02 UTC",
   "notes": []
  },
  "CRL": {
@@ -554,7 +554,7 @@
  "GDRX": {
   "company": "Goodrx Holdings Inc",
   "event_date": "2026-11-18",
-  "generated": "2026-11-15 17:44 UTC",
+  "generated": "2026-11-16 21:02 UTC",
   "notes": []
  },
  "GEHC": {
@@ -972,6 +972,15 @@
   "generated": "2026-11-09 21:30 UTC",
   "notes": []
  },
+ "NNOX": {
+  "company": "Nano-X Imaging Ltd.",
+  "event_date": "2026-11-19",
+  "generated": "2026-11-16 21:02 UTC",
+  "notes": [
+   "Weak this year: -89% vs S&P 500 +9%",
+   "Missed revenue consensus by more than 2% in 2 of the last 2 reported, the latest included"
+  ]
+ },
  "NOVT": {
   "company": "Novanta Inc.",
   "event_date": "2026-11-09",
@@ -994,7 +1003,7 @@
  "NVDA": {
   "company": "NVIDIA Corporation",
   "event_date": "2026-11-17",
-  "generated": "2026-11-15 17:44 UTC",
+  "generated": "2026-11-16 21:02 UTC",
   "notes": []
  },
  "NVO": {
