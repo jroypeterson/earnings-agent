@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-11-16T21:02:52Z",
+  "generated_at": "2026-11-17T02:33:57Z",
   "window": {
-    "start": "2026-11-16",
-    "end": "2026-11-19"
+    "start": "2026-11-17",
+    "end": "2026-11-20"
   },
   "counts": {
     "previews": 2
@@ -17,8 +17,8 @@
       "event_date": "2026-11-17",
       "event_hour": "amc",
       "call_datetime_utc": null,
-      "last_price": 156.13999938964844,
-      "day_change_pct": -4.120360124274095,
+      "last_price": 162.85000610351562,
+      "day_change_pct": -2.009745645841849,
       "consensus": {
         "eps": {
           "mean": 2.5263,
@@ -35,16 +35,18 @@
       },
       "qtd": {
         "since": "2026-09-30",
-        "ticker_pct": -31.631493103011454,
-        "spx_pct": -2.9726056888674046,
+        "ticker_pct": -28.693404579320315,
+        "spx_pct": -1.0830953034550814,
         "sector_etf": null,
         "sector_etf_pct": null
       },
       "implied_move": {
-        "pct": 8.5,
+        "pct": 8.6,
         "expiry": "2026-11-18",
         "method": "ATM straddle",
-        "notes": []
+        "notes": [
+          "stale quote"
+        ]
       },
       "post_earnings_moves": [
         {
@@ -64,7 +66,7 @@
         },
         {
           "event_date": "2025-11-19",
-          "move_pct": -3.1524717829051285,
+          "move_pct": -3.1524879251476006,
           "window_label": "next-day close vs earnings-day close"
         }
       ],
@@ -98,8 +100,8 @@
       "event_date": "2026-11-18",
       "event_hour": null,
       "call_datetime_utc": null,
-      "last_price": 32.08000183105469,
-      "day_change_pct": 0.7854285515170194,
+      "last_price": 31.829999923706055,
+      "day_change_pct": -0.5312502384185791,
       "consensus": {
         "eps": {
           "mean": 0.4145,
@@ -116,16 +118,18 @@
       },
       "qtd": {
         "since": "2026-09-30",
-        "ticker_pct": 17.595311670057782,
-        "spx_pct": -2.9726056888674046,
+        "ticker_pct": 16.678882413987353,
+        "spx_pct": -1.0830953034550814,
         "sector_etf": null,
         "sector_etf_pct": null
       },
       "implied_move": {
-        "pct": 4.4,
+        "pct": 4.9,
         "expiry": "2026-11-20",
         "method": "ATM straddle",
-        "notes": []
+        "notes": [
+          "wide market"
+        ]
       },
       "post_earnings_moves": [
         {
