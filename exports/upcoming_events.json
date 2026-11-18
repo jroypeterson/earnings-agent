@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-11-18T01:44:58Z",
+  "generated_at": "2026-11-18T19:26:01Z",
   "window": {
     "start": "2026-11-16",
     "end": "2026-12-02"
   },
   "counts": {
-    "events": 71
+    "events": 68
   },
   "events": [
     {
@@ -20,15 +20,6 @@
       "company_name": "Gelteq Ltd"
     },
     {
-      "ticker": "ADAPY",
-      "event_date": "2026-11-17",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Adaptimmune Therapeutics PLC"
-    },
-    {
       "ticker": "AIXC",
       "event_date": "2026-11-17",
       "event_hour": "",
@@ -38,24 +29,6 @@
       "company_name": "AIxCrypto Holdings, Inc."
     },
     {
-      "ticker": "AMPE",
-      "event_date": "2026-11-17",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Ampio Pharmaceuticals Inc"
-    },
-    {
-      "ticker": "AUNA",
-      "event_date": "2026-11-17",
-      "event_hour": "amc",
-      "tier": 2,
-      "date_confirmed": true,
-      "call_datetime_utc": "2026-11-18T20:00:00+00:00",
-      "company_name": "Auna SA"
-    },
-    {
       "ticker": "BRTX",
       "event_date": "2026-11-17",
       "event_hour": "",
@@ -63,33 +36,6 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "BioRestorative Therapies, Inc."
-    },
-    {
-      "ticker": "CALA",
-      "event_date": "2026-11-17",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Calithera Biosciences Inc"
-    },
-    {
-      "ticker": "EFTR",
-      "event_date": "2026-11-17",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "eFFECTOR Therapeutics Inc"
-    },
-    {
-      "ticker": "EGRX",
-      "event_date": "2026-11-17",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Eagle Pharmaceuticals Inc"
     },
     {
       "ticker": "KALA",
@@ -110,67 +56,31 @@
       "company_name": "Karyopharm Therapeutics Inc"
     },
     {
-      "ticker": "LTRN",
-      "event_date": "2026-11-17",
-      "event_hour": "amc",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Lantern Pharma Inc"
-    },
-    {
-      "ticker": "MENS",
-      "event_date": "2026-11-17",
+      "ticker": "ADAPY",
+      "event_date": "2026-11-18",
       "event_hour": "",
       "tier": 3,
       "date_confirmed": false,
       "call_datetime_utc": null,
-      "company_name": "Jyong Biotech Ltd. Ordinary Shares"
+      "company_name": "Adaptimmune Therapeutics PLC"
     },
     {
-      "ticker": "NVDA",
-      "event_date": "2026-11-17",
-      "event_hour": "amc",
-      "tier": 1,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "NVIDIA Corporation"
-    },
-    {
-      "ticker": "SYRS",
-      "event_date": "2026-11-17",
+      "ticker": "AMPE",
+      "event_date": "2026-11-18",
       "event_hour": "",
       "tier": 3,
       "date_confirmed": false,
       "call_datetime_utc": null,
-      "company_name": "Syros Pharmaceuticals Inc"
+      "company_name": "Ampio Pharmaceuticals Inc"
     },
     {
-      "ticker": "TRVN",
-      "event_date": "2026-11-17",
+      "ticker": "CALA",
+      "event_date": "2026-11-18",
       "event_hour": "",
       "tier": 3,
       "date_confirmed": false,
       "call_datetime_utc": null,
-      "company_name": "Trevena Inc"
-    },
-    {
-      "ticker": "VAXX",
-      "event_date": "2026-11-17",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Vaxxinity Inc"
-    },
-    {
-      "ticker": "VCNX",
-      "event_date": "2026-11-17",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Vaccinex Inc"
+      "company_name": "Calithera Biosciences Inc"
     },
     {
       "ticker": "CMMB",
@@ -180,6 +90,24 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Chemomab Therapeutics Ltd."
+    },
+    {
+      "ticker": "EFTR",
+      "event_date": "2026-11-18",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "eFFECTOR Therapeutics Inc"
+    },
+    {
+      "ticker": "EGRX",
+      "event_date": "2026-11-18",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Eagle Pharmaceuticals Inc"
     },
     {
       "ticker": "EVGN",
@@ -200,6 +128,15 @@
       "company_name": "Goodrx Holdings Inc"
     },
     {
+      "ticker": "MENS",
+      "event_date": "2026-11-18",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Jyong Biotech Ltd. Ordinary Shares"
+    },
+    {
       "ticker": "NEUP",
       "event_date": "2026-11-18",
       "event_hour": "",
@@ -216,6 +153,42 @@
       "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "Palo Alto Networks Inc"
+    },
+    {
+      "ticker": "SYRS",
+      "event_date": "2026-11-18",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Syros Pharmaceuticals Inc"
+    },
+    {
+      "ticker": "TRVN",
+      "event_date": "2026-11-18",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Trevena Inc"
+    },
+    {
+      "ticker": "VAXX",
+      "event_date": "2026-11-18",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Vaxxinity Inc"
+    },
+    {
+      "ticker": "VCNX",
+      "event_date": "2026-11-18",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Vaccinex Inc"
     },
     {
       "ticker": "EVAX",
@@ -497,6 +470,15 @@
       "company_name": "Five Below Inc"
     },
     {
+      "ticker": "GTLB",
+      "event_date": "2026-12-01",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "GitLab Inc."
+    },
+    {
       "ticker": "MDB",
       "event_date": "2026-12-01",
       "event_hour": "",
@@ -612,15 +594,6 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Petros Pharmaceuticals Inc"
-    },
-    {
-      "ticker": "RTSN",
-      "event_date": "2026-12-02",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Retension Pharmaceuticals, Inc."
     },
     {
       "ticker": "SNOW",
