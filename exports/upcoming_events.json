@@ -1,51 +1,15 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-11-19T19:31:18Z",
+  "generated_at": "2026-11-20T01:23:13Z",
   "window": {
-    "start": "2026-11-17",
-    "end": "2026-12-03"
+    "start": "2026-11-18",
+    "end": "2026-12-04"
   },
   "counts": {
-    "events": 68
+    "events": 65
   },
   "events": [
-    {
-      "ticker": "AIXC",
-      "event_date": "2026-11-17",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "AIxCrypto Holdings, Inc."
-    },
-    {
-      "ticker": "BRTX",
-      "event_date": "2026-11-17",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "BioRestorative Therapies, Inc."
-    },
-    {
-      "ticker": "KALA",
-      "event_date": "2026-11-17",
-      "event_hour": "amc",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "KALA BIO Inc"
-    },
-    {
-      "ticker": "KPTI",
-      "event_date": "2026-11-17",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Karyopharm Therapeutics Inc"
-    },
     {
       "ticker": "GDRX",
       "event_date": "2026-11-18",
@@ -72,6 +36,15 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Ampio Pharmaceuticals Inc"
+    },
+    {
+      "ticker": "BSP",
+      "event_date": "2026-11-19",
+      "event_hour": "bmo",
+      "tier": 3,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Bending Spoons S.p.A."
     },
     {
       "ticker": "CALA",
@@ -146,13 +119,13 @@
       "company_name": "Vaccinex Inc"
     },
     {
-      "ticker": "BSP",
-      "event_date": "2026-11-20",
-      "event_hour": "bmo",
+      "ticker": "XCUR",
+      "event_date": "2026-11-19",
+      "event_hour": "",
       "tier": 3,
-      "date_confirmed": true,
+      "date_confirmed": false,
       "call_datetime_utc": null,
-      "company_name": "Bending Spoons S.p.A."
+      "company_name": "Exicure, Inc."
     },
     {
       "ticker": "COSM",
