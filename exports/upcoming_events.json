@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-11-20T01:23:13Z",
+  "generated_at": "2026-11-20T19:07:41Z",
   "window": {
     "start": "2026-11-18",
     "end": "2026-12-04"
   },
   "counts": {
-    "events": 65
+    "events": 64
   },
   "events": [
     {
@@ -20,8 +20,17 @@
       "company_name": "Goodrx Holdings Inc"
     },
     {
-      "ticker": "ADAPY",
+      "ticker": "SHPH",
       "event_date": "2026-11-19",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Shuttle Pharmaceuticals Holdings, Inc."
+    },
+    {
+      "ticker": "ADAPY",
+      "event_date": "2026-11-20",
       "event_hour": "",
       "tier": 3,
       "date_confirmed": false,
@@ -30,7 +39,7 @@
     },
     {
       "ticker": "AMPE",
-      "event_date": "2026-11-19",
+      "event_date": "2026-11-20",
       "event_hour": "",
       "tier": 3,
       "date_confirmed": false,
@@ -38,17 +47,8 @@
       "company_name": "Ampio Pharmaceuticals Inc"
     },
     {
-      "ticker": "BSP",
-      "event_date": "2026-11-19",
-      "event_hour": "bmo",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Bending Spoons S.p.A."
-    },
-    {
       "ticker": "CALA",
-      "event_date": "2026-11-19",
+      "event_date": "2026-11-20",
       "event_hour": "",
       "tier": 3,
       "date_confirmed": false,
@@ -57,7 +57,7 @@
     },
     {
       "ticker": "EFTR",
-      "event_date": "2026-11-19",
+      "event_date": "2026-11-20",
       "event_hour": "",
       "tier": 3,
       "date_confirmed": false,
@@ -66,7 +66,7 @@
     },
     {
       "ticker": "EGRX",
-      "event_date": "2026-11-19",
+      "event_date": "2026-11-20",
       "event_hour": "",
       "tier": 3,
       "date_confirmed": false,
@@ -74,17 +74,8 @@
       "company_name": "Eagle Pharmaceuticals Inc"
     },
     {
-      "ticker": "MENS",
-      "event_date": "2026-11-19",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Jyong Biotech Ltd. Ordinary Shares"
-    },
-    {
       "ticker": "SYRS",
-      "event_date": "2026-11-19",
+      "event_date": "2026-11-20",
       "event_hour": "",
       "tier": 3,
       "date_confirmed": false,
@@ -93,7 +84,7 @@
     },
     {
       "ticker": "TRVN",
-      "event_date": "2026-11-19",
+      "event_date": "2026-11-20",
       "event_hour": "",
       "tier": 3,
       "date_confirmed": false,
@@ -102,7 +93,7 @@
     },
     {
       "ticker": "VAXX",
-      "event_date": "2026-11-19",
+      "event_date": "2026-11-20",
       "event_hour": "",
       "tier": 3,
       "date_confirmed": false,
@@ -111,7 +102,7 @@
     },
     {
       "ticker": "VCNX",
-      "event_date": "2026-11-19",
+      "event_date": "2026-11-20",
       "event_hour": "",
       "tier": 3,
       "date_confirmed": false,
@@ -120,21 +111,12 @@
     },
     {
       "ticker": "XCUR",
-      "event_date": "2026-11-19",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Exicure, Inc."
-    },
-    {
-      "ticker": "COSM",
       "event_date": "2026-11-20",
       "event_hour": "",
       "tier": 3,
       "date_confirmed": false,
       "call_datetime_utc": null,
-      "company_name": "Cosmos Health Inc."
+      "company_name": "Exicure, Inc."
     },
     {
       "ticker": "A",
@@ -180,6 +162,15 @@
       "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "Compass Minerals International, Inc."
+    },
+    {
+      "ticker": "MENS",
+      "event_date": "2026-11-23",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Jyong Biotech Ltd. Ordinary Shares"
     },
     {
       "ticker": "WOOF",
@@ -299,33 +290,6 @@
       "company_name": "Lexaria Bioscience Corp."
     },
     {
-      "ticker": "MRVL",
-      "event_date": "2026-11-26",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Marvell Technology, Inc."
-    },
-    {
-      "ticker": "PD",
-      "event_date": "2026-11-26",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Pagerduty Inc"
-    },
-    {
-      "ticker": "YEXT",
-      "event_date": "2026-11-26",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Yext Inc"
-    },
-    {
       "ticker": "ASAN",
       "event_date": "2026-12-01",
       "event_hour": "",
@@ -405,6 +369,15 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Mongodb Inc"
+    },
+    {
+      "ticker": "MRVL",
+      "event_date": "2026-12-01",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Marvell Technology, Inc."
     },
     {
       "ticker": "NCNO",
@@ -569,6 +542,15 @@
       "company_name": "Paranovus Entertainment Technology Ltd."
     },
     {
+      "ticker": "PD",
+      "event_date": "2026-12-03",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Pagerduty Inc"
+    },
+    {
       "ticker": "S",
       "event_date": "2026-12-03",
       "event_hour": "",
@@ -594,6 +576,15 @@
       "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "Veeva Systems Inc."
+    },
+    {
+      "ticker": "YEXT",
+      "event_date": "2026-12-03",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Yext Inc"
     }
   ]
 }
