@@ -1,13 +1,253 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-11-20T19:07:41Z",
+  "generated_at": "2026-11-21T00:54:20Z",
   "window": {
-    "start": "2026-11-20",
-    "end": "2026-11-23"
+    "start": "2026-11-21",
+    "end": "2026-11-24"
   },
   "counts": {
-    "previews": 0
+    "previews": 3
   },
-  "previews": []
+  "previews": [
+    {
+      "ticker": "ADI",
+      "company_name": "Analog Devices Inc",
+      "tier": 1,
+      "event_date": "2026-11-24",
+      "event_hour": "bmo",
+      "call_datetime_utc": "2026-11-24T15:00:00+00:00",
+      "last_price": 345.9200134277344,
+      "day_change_pct": -8.350993220058871,
+      "consensus": {
+        "eps": {
+          "mean": 3.9221,
+          "count": null,
+          "low": null,
+          "high": null
+        },
+        "revenue": {
+          "mean": 4354565227.0,
+          "count": null,
+          "low": null,
+          "high": null
+        }
+      },
+      "qtd": {
+        "since": "2026-09-30",
+        "ticker_pct": -12.802797792173834,
+        "spx_pct": -9.54853688656119,
+        "sector_etf": null,
+        "sector_etf_pct": null
+      },
+      "implied_move": {
+        "pct": 9.7,
+        "expiry": "2026-11-27",
+        "method": "ATM straddle",
+        "notes": []
+      },
+      "post_earnings_moves": [
+        {
+          "event_date": "2026-08-19",
+          "move_pct": -0.8947795114160726,
+          "window_label": "earnings-day close vs prior close"
+        },
+        {
+          "event_date": "2026-05-20",
+          "move_pct": -3.9245956778461837,
+          "window_label": "earnings-day close vs prior close"
+        },
+        {
+          "event_date": "2026-02-18",
+          "move_pct": 2.625107729394162,
+          "window_label": "earnings-day close vs prior close"
+        },
+        {
+          "event_date": "2025-11-25",
+          "move_pct": 5.271525341364905,
+          "window_label": "earnings-day close vs prior close"
+        }
+      ],
+      "beat_rates": {
+        "eps": {
+          "beats": 18,
+          "total": 20,
+          "source": "yfinance"
+        },
+        "revenue": {
+          "beats": 18,
+          "total": 20,
+          "source": "fmp"
+        }
+      },
+      "na_fields": [
+        {
+          "field": "qtd.sector_etf",
+          "reason": "no mapped ETF for sector 'Tech'"
+        },
+        {
+          "field": "consensus.eps.range",
+          "reason": "estimate range not available on FMP Starter plan"
+        }
+      ]
+    },
+    {
+      "ticker": "ADSK",
+      "company_name": "Autodesk Inc",
+      "tier": 1,
+      "event_date": "2026-11-24",
+      "event_hour": "amc",
+      "call_datetime_utc": "2026-11-24T22:00:00+00:00",
+      "last_price": 244.47999572753906,
+      "day_change_pct": 0.42308432623059516,
+      "consensus": {
+        "eps": {
+          "mean": 3.1292,
+          "count": null,
+          "low": null,
+          "high": null
+        },
+        "revenue": {
+          "mean": 2176492207.0,
+          "count": null,
+          "low": null,
+          "high": null
+        }
+      },
+      "qtd": {
+        "since": "2026-09-30",
+        "ticker_pct": 16.97607451078424,
+        "spx_pct": -9.54853688656119,
+        "sector_etf": null,
+        "sector_etf_pct": null
+      },
+      "implied_move": {
+        "pct": 9.2,
+        "expiry": "2026-11-27",
+        "method": "ATM straddle",
+        "notes": [
+          "wide market"
+        ]
+      },
+      "post_earnings_moves": [
+        {
+          "event_date": "2026-08-27",
+          "move_pct": -3.666192402410683,
+          "window_label": "next-day close vs earnings-day close"
+        },
+        {
+          "event_date": "2026-05-28",
+          "move_pct": -4.000829845089884,
+          "window_label": "next-day close vs earnings-day close"
+        },
+        {
+          "event_date": "2026-02-26",
+          "move_pct": 5.320196329537296,
+          "window_label": "next-day close vs earnings-day close"
+        },
+        {
+          "event_date": "2025-11-25",
+          "move_pct": 2.3604973609751863,
+          "window_label": "next-day close vs earnings-day close"
+        }
+      ],
+      "beat_rates": {
+        "eps": {
+          "beats": 18,
+          "total": 20,
+          "source": "yfinance"
+        },
+        "revenue": {
+          "beats": 18,
+          "total": 20,
+          "source": "fmp"
+        }
+      },
+      "na_fields": [
+        {
+          "field": "qtd.sector_etf",
+          "reason": "no mapped ETF for sector 'Tech'"
+        },
+        {
+          "field": "consensus.eps.range",
+          "reason": "estimate range not available on FMP Starter plan"
+        }
+      ]
+    },
+    {
+      "ticker": "MMED",
+      "company_name": "MiniMed Group Inc",
+      "tier": 1,
+      "event_date": "2026-11-24",
+      "event_hour": "bmo",
+      "call_datetime_utc": "2026-11-24T13:30:00+00:00",
+      "last_price": 16.010000228881836,
+      "day_change_pct": -1.5375153535111108,
+      "consensus": {
+        "eps": {
+          "mean": 0.114,
+          "count": null,
+          "low": null,
+          "high": null
+        },
+        "revenue": {
+          "mean": 842188418.0,
+          "count": null,
+          "low": null,
+          "high": null
+        }
+      },
+      "qtd": {
+        "since": "2026-09-30",
+        "ticker_pct": -17.77092555981468,
+        "spx_pct": -9.54853688656119,
+        "sector_etf": "IHI",
+        "sector_etf_pct": 8.269793579764013
+      },
+      "implied_move": {
+        "pct": 16.2,
+        "expiry": "2026-12-18",
+        "method": "ATM straddle",
+        "notes": [
+          "wide market",
+          "(includes 24 extra days of time value)"
+        ]
+      },
+      "post_earnings_moves": [
+        {
+          "event_date": "2026-09-01",
+          "move_pct": 10.661400903307499,
+          "window_label": "earnings-day close vs prior close"
+        },
+        {
+          "event_date": "2026-06-03",
+          "move_pct": 15.93495941262967,
+          "window_label": "earnings-day close vs prior close"
+        },
+        {
+          "event_date": "2026-04-17",
+          "move_pct": -4.362875201343175,
+          "window_label": "next-day close vs earnings-day close"
+        }
+      ],
+      "beat_rates": {
+        "eps": {
+          "beats": 1,
+          "total": 3,
+          "source": "yfinance"
+        },
+        "revenue": {
+          "beats": 3,
+          "total": 3,
+          "source": "fmp"
+        }
+      },
+      "na_fields": [
+        {
+          "field": "consensus.eps.range",
+          "reason": "estimate range not available on FMP Starter plan"
+        }
+      ]
+    }
+  ]
 }

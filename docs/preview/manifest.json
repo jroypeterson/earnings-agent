@@ -2,7 +2,7 @@
  "A": {
   "company": "Agilent Technologies, Inc.",
   "event_date": "2026-11-23",
-  "generated": "2026-11-20 01:23 UTC",
+  "generated": "2026-11-21 00:54 UTC",
   "notes": []
  },
  "AAPL": {
@@ -34,10 +34,22 @@
   "event_date": "2026-11-04",
   "generated": "2026-11-04 00:12 UTC"
  },
+ "ADI": {
+  "company": "Analog Devices Inc",
+  "event_date": "2026-11-24",
+  "generated": "2026-11-21 00:54 UTC",
+  "notes": []
+ },
  "ADPT": {
   "company": "Adaptive Biotechnologies Corporation",
   "event_date": "2026-11-04",
   "generated": "2026-11-04 00:12 UTC"
+ },
+ "ADSK": {
+  "company": "Autodesk Inc",
+  "event_date": "2026-11-24",
+  "generated": "2026-11-21 00:54 UTC",
+  "notes": []
  },
  "ADUS": {
   "company": "Addus Homecare Corporation",
@@ -883,6 +895,12 @@
   "event_date": "2026-11-04",
   "generated": "2026-11-04 00:12 UTC"
  },
+ "MDT": {
+  "company": "Medtronic plc",
+  "event_date": "2026-11-24",
+  "generated": "2026-11-21 00:54 UTC",
+  "notes": []
+ },
  "MED": {
   "company": "Medartis Holding AG",
   "event_date": "2026-10-26",
@@ -892,6 +910,12 @@
   "company": "Medpace Holdings, Inc.",
   "event_date": "2026-10-21",
   "generated": "2026-10-21 16:00 UTC"
+ },
+ "MMED": {
+  "company": "MiniMed Group Inc",
+  "event_date": "2026-11-24",
+  "generated": "2026-11-21 00:54 UTC",
+  "notes": []
  },
  "MMSI": {
   "company": "Merit Medical Systems, Inc.",
@@ -1483,6 +1507,15 @@
   "company": "Viemed Healthcare Inc",
   "event_date": "2026-11-04",
   "generated": "2026-11-04 00:12 UTC"
+ },
+ "VREX": {
+  "company": "Varex Imaging Corporation",
+  "event_date": "2026-11-24",
+  "generated": "2026-11-21 00:54 UTC",
+  "notes": [
+   "Strong this year: +55% vs S&P 500 +2%",
+   "Missed revenue consensus by more than 2% in 2 of the last 2 reported, the latest included"
+  ]
  },
  "VRTX": {
   "company": "Vertex Pharmaceuticals Inc",
