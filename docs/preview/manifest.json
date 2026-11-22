@@ -2,7 +2,7 @@
  "A": {
   "company": "Agilent Technologies, Inc.",
   "event_date": "2026-11-23",
-  "generated": "2026-11-21 00:54 UTC",
+  "generated": "2026-11-22 18:32 UTC",
   "notes": []
  },
  "AAPL": {
@@ -37,7 +37,7 @@
  "ADI": {
   "company": "Analog Devices Inc",
   "event_date": "2026-11-24",
-  "generated": "2026-11-21 00:54 UTC",
+  "generated": "2026-11-22 18:32 UTC",
   "notes": []
  },
  "ADPT": {
@@ -48,7 +48,7 @@
  "ADSK": {
   "company": "Autodesk Inc",
   "event_date": "2026-11-24",
-  "generated": "2026-11-21 00:54 UTC",
+  "generated": "2026-11-22 18:32 UTC",
   "notes": []
  },
  "ADUS": {
@@ -571,8 +571,8 @@
  },
  "GDRX": {
   "company": "Goodrx Holdings Inc",
-  "event_date": "2026-11-18",
-  "generated": "2026-11-18 01:44 UTC",
+  "event_date": "2026-11-23",
+  "generated": "2026-11-22 18:32 UTC",
   "notes": []
  },
  "GEHC": {
@@ -898,7 +898,7 @@
  "MDT": {
   "company": "Medtronic plc",
   "event_date": "2026-11-24",
-  "generated": "2026-11-21 00:54 UTC",
+  "generated": "2026-11-22 18:32 UTC",
   "notes": []
  },
  "MED": {
@@ -914,7 +914,7 @@
  "MMED": {
   "company": "MiniMed Group Inc",
   "event_date": "2026-11-24",
-  "generated": "2026-11-21 00:54 UTC",
+  "generated": "2026-11-22 18:32 UTC",
   "notes": []
  },
  "MMSI": {
@@ -1004,10 +1004,10 @@
  },
  "NNOX": {
   "company": "Nano-X Imaging Ltd.",
-  "event_date": "2026-11-19",
-  "generated": "2026-11-16 21:02 UTC",
+  "event_date": "2026-11-25",
+  "generated": "2026-11-22 18:32 UTC",
   "notes": [
-   "Weak this year: -89% vs S&P 500 +9%",
+   "Weak this year: -92% vs S&P 500 +2%",
    "Missed revenue consensus by more than 2% in 2 of the last 2 reported, the latest included"
   ]
  },
@@ -1511,7 +1511,7 @@
  "VREX": {
   "company": "Varex Imaging Corporation",
   "event_date": "2026-11-24",
-  "generated": "2026-11-21 00:54 UTC",
+  "generated": "2026-11-22 18:32 UTC",
   "notes": [
    "Strong this year: +55% vs S&P 500 +2%",
    "Missed revenue consensus by more than 2% in 2 of the last 2 reported, the latest included"
