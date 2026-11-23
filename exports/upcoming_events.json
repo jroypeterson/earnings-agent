@@ -1,33 +1,15 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-11-22T18:32:12Z",
+  "generated_at": "2026-11-23T22:39:45Z",
   "window": {
-    "start": "2026-11-20",
-    "end": "2026-12-06"
+    "start": "2026-11-21",
+    "end": "2026-12-07"
   },
   "counts": {
-    "events": 69
+    "events": 63
   },
   "events": [
-    {
-      "ticker": "ASBP",
-      "event_date": "2026-11-20",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Aspire Biopharma Holdings, Inc."
-    },
-    {
-      "ticker": "NORD",
-      "event_date": "2026-11-20",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Nordicus Partners Corporation"
-    },
     {
       "ticker": "A",
       "event_date": "2026-11-23",
@@ -65,15 +47,6 @@
       "company_name": "Anavex Life Sciences Corp"
     },
     {
-      "ticker": "BLRX",
-      "event_date": "2026-11-23",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "BioLine RX Ltd - ADR"
-    },
-    {
       "ticker": "BRTX",
       "event_date": "2026-11-23",
       "event_hour": "",
@@ -99,15 +72,6 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Calithera Biosciences Inc"
-    },
-    {
-      "ticker": "CENTA",
-      "event_date": "2026-11-23",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Central Garden & Pet Company"
     },
     {
       "ticker": "CMP",
@@ -146,15 +110,6 @@
       "company_name": "Goodrx Holdings Inc"
     },
     {
-      "ticker": "LIMN",
-      "event_date": "2026-11-23",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Liminatus Pharma, Inc. Class A Common Stock"
-    },
-    {
       "ticker": "SYRS",
       "event_date": "2026-11-23",
       "event_hour": "",
@@ -191,6 +146,15 @@
       "company_name": "Vaccinex Inc"
     },
     {
+      "ticker": "VREX",
+      "event_date": "2026-11-23",
+      "event_hour": "amc",
+      "tier": 2,
+      "date_confirmed": true,
+      "call_datetime_utc": null,
+      "company_name": "Varex Imaging Corporation"
+    },
+    {
       "ticker": "ZM",
       "event_date": "2026-11-23",
       "event_hour": "amc",
@@ -216,15 +180,6 @@
       "date_confirmed": true,
       "call_datetime_utc": "2026-11-24T22:00:00+00:00",
       "company_name": "Autodesk Inc"
-    },
-    {
-      "ticker": "CIRC",
-      "event_date": "2026-11-24",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Circle8 Group, Inc."
     },
     {
       "ticker": "CLGN",
@@ -270,15 +225,6 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Valneva SE"
-    },
-    {
-      "ticker": "VREX",
-      "event_date": "2026-11-24",
-      "event_hour": "amc",
-      "tier": 2,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Varex Imaging Corporation"
     },
     {
       "ticker": "WDAY",
@@ -378,15 +324,6 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Credo Technology Group Holding Ltd"
-    },
-    {
-      "ticker": "CRWD",
-      "event_date": "2026-12-01",
-      "event_hour": "",
-      "tier": 1,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "CrowdStrike Holdings, Inc."
     },
     {
       "ticker": "GTLB",
@@ -551,15 +488,6 @@
       "company_name": "Virax Biolabs Group Limited"
     },
     {
-      "ticker": "ZS",
-      "event_date": "2026-12-02",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Zscaler, Inc."
-    },
-    {
       "ticker": "DOCU",
       "event_date": "2026-12-03",
       "event_hour": "",
@@ -630,6 +558,24 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Yext Inc"
+    },
+    {
+      "ticker": "ALZN",
+      "event_date": "2026-12-07",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Alzamend Neuro Inc"
+    },
+    {
+      "ticker": "CUPR",
+      "event_date": "2026-12-07",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Cuprina Holdings (Cayman) Limited Class A Ordinary Shares"
     }
   ]
 }
