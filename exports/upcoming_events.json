@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-11-25T03:07:56Z",
+  "generated_at": "2026-11-25T20:29:51Z",
   "window": {
     "start": "2026-11-23",
     "end": "2026-12-09"
   },
   "counts": {
-    "events": 62
+    "events": 57
   },
   "events": [
     {
@@ -38,42 +38,6 @@
       "company_name": "BioXcel Therapeutics Inc"
     },
     {
-      "ticker": "ADAPY",
-      "event_date": "2026-11-24",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Adaptimmune Therapeutics PLC"
-    },
-    {
-      "ticker": "ADSK",
-      "event_date": "2026-11-24",
-      "event_hour": "amc",
-      "tier": 1,
-      "date_confirmed": true,
-      "call_datetime_utc": "2026-11-24T22:00:00+00:00",
-      "company_name": "Autodesk Inc"
-    },
-    {
-      "ticker": "AMPE",
-      "event_date": "2026-11-24",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Ampio Pharmaceuticals Inc"
-    },
-    {
-      "ticker": "CALA",
-      "event_date": "2026-11-24",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Calithera Biosciences Inc"
-    },
-    {
       "ticker": "CLGN",
       "event_date": "2026-11-24",
       "event_hour": "",
@@ -83,8 +47,35 @@
       "company_name": "CollPlant Biotechnologies Ltd."
     },
     {
+      "ticker": "ADAPY",
+      "event_date": "2026-11-25",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Adaptimmune Therapeutics PLC"
+    },
+    {
+      "ticker": "AMPE",
+      "event_date": "2026-11-25",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Ampio Pharmaceuticals Inc"
+    },
+    {
+      "ticker": "CALA",
+      "event_date": "2026-11-25",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Calithera Biosciences Inc"
+    },
+    {
       "ticker": "EFTR",
-      "event_date": "2026-11-24",
+      "event_date": "2026-11-25",
       "event_hour": "",
       "tier": 3,
       "date_confirmed": false,
@@ -93,66 +84,12 @@
     },
     {
       "ticker": "EGRX",
-      "event_date": "2026-11-24",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Eagle Pharmaceuticals Inc"
-    },
-    {
-      "ticker": "SYRS",
-      "event_date": "2026-11-24",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Syros Pharmaceuticals Inc"
-    },
-    {
-      "ticker": "TRVN",
-      "event_date": "2026-11-24",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Trevena Inc"
-    },
-    {
-      "ticker": "VAXX",
-      "event_date": "2026-11-24",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Vaxxinity Inc"
-    },
-    {
-      "ticker": "VCNX",
-      "event_date": "2026-11-24",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Vaccinex Inc"
-    },
-    {
-      "ticker": "WDAY",
-      "event_date": "2026-11-24",
-      "event_hour": "amc",
-      "tier": 3,
-      "date_confirmed": true,
-      "call_datetime_utc": null,
-      "company_name": "Workday, Inc."
-    },
-    {
-      "ticker": "ADXN",
       "event_date": "2026-11-25",
       "event_hour": "",
       "tier": 3,
       "date_confirmed": false,
       "call_datetime_utc": null,
-      "company_name": "Addex Therapeutics Ltd - ADR"
+      "company_name": "Eagle Pharmaceuticals Inc"
     },
     {
       "ticker": "GLMD",
@@ -173,22 +110,40 @@
       "company_name": "Jyong Biotech Ltd. Ordinary Shares"
     },
     {
-      "ticker": "NNOX",
+      "ticker": "SYRS",
       "event_date": "2026-11-25",
-      "event_hour": "bmo",
-      "tier": 2,
-      "date_confirmed": true,
-      "call_datetime_utc": "2026-11-26T13:30:00+00:00",
-      "company_name": "Nano-X Imaging Ltd."
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Syros Pharmaceuticals Inc"
     },
     {
-      "ticker": "LEXX",
-      "event_date": "2026-11-26",
-      "event_hour": "amc",
+      "ticker": "TRVN",
+      "event_date": "2026-11-25",
+      "event_hour": "",
       "tier": 3,
-      "date_confirmed": true,
+      "date_confirmed": false,
       "call_datetime_utc": null,
-      "company_name": "Lexaria Bioscience Corp."
+      "company_name": "Trevena Inc"
+    },
+    {
+      "ticker": "VAXX",
+      "event_date": "2026-11-25",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Vaxxinity Inc"
+    },
+    {
+      "ticker": "VCNX",
+      "event_date": "2026-11-25",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Vaccinex Inc"
     },
     {
       "ticker": "SCLX",
