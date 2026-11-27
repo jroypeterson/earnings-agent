@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-11-27T02:20:17Z",
+  "generated_at": "2026-11-27T19:57:50Z",
   "window": {
     "start": "2026-11-25",
     "end": "2026-12-11"
   },
   "counts": {
-    "events": 58
+    "events": 59
   },
   "events": [
     {
@@ -20,8 +20,17 @@
       "company_name": "Galmed Pharmaceuticals Ltd"
     },
     {
-      "ticker": "ADAPY",
+      "ticker": "SHPH",
       "event_date": "2026-11-26",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Shuttle Pharmaceuticals Holdings, Inc."
+    },
+    {
+      "ticker": "ADAPY",
+      "event_date": "2026-11-27",
       "event_hour": "",
       "tier": 3,
       "date_confirmed": false,
@@ -30,7 +39,7 @@
     },
     {
       "ticker": "AMPE",
-      "event_date": "2026-11-26",
+      "event_date": "2026-11-27",
       "event_hour": "",
       "tier": 3,
       "date_confirmed": false,
@@ -39,7 +48,7 @@
     },
     {
       "ticker": "CALA",
-      "event_date": "2026-11-26",
+      "event_date": "2026-11-27",
       "event_hour": "",
       "tier": 3,
       "date_confirmed": false,
@@ -48,7 +57,7 @@
     },
     {
       "ticker": "EFTR",
-      "event_date": "2026-11-26",
+      "event_date": "2026-11-27",
       "event_hour": "",
       "tier": 3,
       "date_confirmed": false,
@@ -57,48 +66,12 @@
     },
     {
       "ticker": "EGRX",
-      "event_date": "2026-11-26",
+      "event_date": "2026-11-27",
       "event_hour": "",
       "tier": 3,
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Eagle Pharmaceuticals Inc"
-    },
-    {
-      "ticker": "SYRS",
-      "event_date": "2026-11-26",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Syros Pharmaceuticals Inc"
-    },
-    {
-      "ticker": "TRVN",
-      "event_date": "2026-11-26",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Trevena Inc"
-    },
-    {
-      "ticker": "VAXX",
-      "event_date": "2026-11-26",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Vaxxinity Inc"
-    },
-    {
-      "ticker": "VCNX",
-      "event_date": "2026-11-26",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Vaccinex Inc"
     },
     {
       "ticker": "SCLX",
@@ -108,6 +81,42 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Scilex Holding Co"
+    },
+    {
+      "ticker": "SYRS",
+      "event_date": "2026-11-27",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Syros Pharmaceuticals Inc"
+    },
+    {
+      "ticker": "TRVN",
+      "event_date": "2026-11-27",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Trevena Inc"
+    },
+    {
+      "ticker": "VAXX",
+      "event_date": "2026-11-27",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Vaxxinity Inc"
+    },
+    {
+      "ticker": "VCNX",
+      "event_date": "2026-11-27",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Vaccinex Inc"
     },
     {
       "ticker": "MENS",
