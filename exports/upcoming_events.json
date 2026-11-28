@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-11-28T02:05:54Z",
+  "generated_at": "2026-11-28T18:56:01Z",
   "window": {
     "start": "2026-11-26",
     "end": "2026-12-12"
   },
   "counts": {
-    "events": 59
+    "events": 60
   },
   "events": [
     {
@@ -65,13 +65,13 @@
       "company_name": "Eagle Pharmaceuticals Inc"
     },
     {
-      "ticker": "ENLV",
+      "ticker": "NORD",
       "event_date": "2026-11-27",
       "event_hour": "",
       "tier": 3,
       "date_confirmed": false,
       "call_datetime_utc": null,
-      "company_name": "Enlivex Therapeutics Ltd."
+      "company_name": "Nordicus Partners Corporation"
     },
     {
       "ticker": "SCLX",
@@ -414,6 +414,15 @@
       "date_confirmed": true,
       "call_datetime_utc": null,
       "company_name": "Veeva Systems Inc."
+    },
+    {
+      "ticker": "ENLV",
+      "event_date": "2026-12-04",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Enlivex Therapeutics Ltd."
     },
     {
       "ticker": "ALZN",
