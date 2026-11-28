@@ -1,24 +1,15 @@
 {
   "schema_version": 1,
   "source": "earnings-agent",
-  "generated_at": "2026-11-27T19:57:50Z",
+  "generated_at": "2026-11-28T02:05:54Z",
   "window": {
-    "start": "2026-11-25",
-    "end": "2026-12-11"
+    "start": "2026-11-26",
+    "end": "2026-12-12"
   },
   "counts": {
     "events": 59
   },
   "events": [
-    {
-      "ticker": "GLMD",
-      "event_date": "2026-11-25",
-      "event_hour": "",
-      "tier": 3,
-      "date_confirmed": false,
-      "call_datetime_utc": null,
-      "company_name": "Galmed Pharmaceuticals Ltd"
-    },
     {
       "ticker": "SHPH",
       "event_date": "2026-11-26",
@@ -72,6 +63,15 @@
       "date_confirmed": false,
       "call_datetime_utc": null,
       "company_name": "Eagle Pharmaceuticals Inc"
+    },
+    {
+      "ticker": "ENLV",
+      "event_date": "2026-11-27",
+      "event_hour": "",
+      "tier": 3,
+      "date_confirmed": false,
+      "call_datetime_utc": null,
+      "company_name": "Enlivex Therapeutics Ltd."
     },
     {
       "ticker": "SCLX",
